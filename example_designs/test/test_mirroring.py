@@ -1,6 +1,6 @@
 import sys
 from bist import *
-from misoclib.tools.litescope.software.driver.la import LiteScopeLADriver
+from litescope.software.driver.la import LiteScopeLADriver
 
 
 def main(wb):
