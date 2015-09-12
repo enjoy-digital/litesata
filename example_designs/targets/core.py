@@ -11,6 +11,7 @@ from litesata.common import *
 from litesata.phy import LiteSATAPHY
 from litesata.core import LiteSATACore
 from litesata.frontend.crossbar import LiteSATACrossbar
+from litesata.frontend.striping import LiteSATAStriping
 from litesata.frontend.bist import LiteSATABIST
 
 
@@ -21,13 +22,15 @@ _io = [
         Subsignal("refclk_p", Pins("X")),
         Subsignal("refclk_n", Pins("X"))
     ),
-    ("sata", 0,
-        Subsignal("txp", Pins("X")),
-        Subsignal("txn", Pins("X")),
-        Subsignal("rxp", Pins("X")),
-        Subsignal("rxn", Pins("X"))
-    ),
 ]
+for i in range(4):
+    _io.append(("sata", i,
+                   Subsignal("txp", Pins("X")),
+                   Subsignal("txn", Pins("X")),
+                   Subsignal("rxp", Pins("X")),
+                   Subsignal("rxn", Pins("X"))
+                )
+    )
 
 
 class CorePlatform(XilinxPlatform):
@@ -41,17 +44,42 @@ class CorePlatform(XilinxPlatform):
 
 class Core(Module):
     platform = CorePlatform()
-    def __init__(self, platform, clk_freq=200*1000000, with_bist=False, nports=1):
+    def __init__(self, platform, design="bist", clk_freq=200*1000000, nports=1):
         self.clk_freq = clk_freq
 
-        # SATA PHY/Core/Frontend
-        self.submodules.sata_phy = LiteSATAPHY(platform.device, platform.request("sata_clocks"), platform.request("sata"), "sata_gen2", clk_freq)
-        self.submodules.sata_core = LiteSATACore(self.sata_phy)
-        self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
+        if design == "bist":
+            # SATA PHY/Core/frontend
+            self.submodules.sata_phy = LiteSATAPHY(platform.device, platform.request("sata_clocks"), platform.request("sata"), "sata_gen2", clk_freq)
+            self.sata_phys = [self.sata_phy]
+            self.submodules.sata_core = LiteSATACore(self.sata_phy)
+            self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
 
-        # BIST
-        if with_bist:
+            # BIST
             self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar)
+
+        elif design == "striping":
+            self.nphys = 4
+            # SATA PHYs
+            sata_phy0 = LiteSATAPHY(platform.device, platform.request("sata_clocks"), platform.request("sata", 0), "sata_gen3", clk_freq)
+            sata_phy1 = LiteSATAPHY(platform.device, sata_phy0.crg.refclk, platform.request("sata", 1), "sata_gen3", clk_freq)
+            sata_phy2 = LiteSATAPHY(platform.device, sata_phy0.crg.refclk, platform.request("sata", 2), "sata_gen3", clk_freq)
+            sata_phy3 = LiteSATAPHY(platform.device, sata_phy0.crg.refclk, platform.request("sata", 3), "sata_gen3", clk_freq)
+            self.sata_phys = [sata_phy0, sata_phy1, sata_phy2, sata_phy3]
+            for i, sata_phy in enumerate(self.sata_phys):
+                sata_phy = RenameClockDomains(sata_phy, {"sata_rx": "sata_rx{}".format(str(i)),
+                                                         "sata_tx": "sata_tx{}".format(str(i))})
+                setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
+
+            # SATA Cores
+            self.submodules.sata_core0 = LiteSATACore(self.sata_phy0)
+            self.submodules.sata_core1 = LiteSATACore(self.sata_phy1)
+            self.submodules.sata_core2 = LiteSATACore(self.sata_phy2)
+            self.submodules.sata_core3 = LiteSATACore(self.sata_phy3)
+            sata_cores = [self.sata_core0, self.sata_core1, self.sata_core2, self.sata_core3]
+
+            # SATA Frontend
+            self.submodules.sata_striping = LiteSATAStriping(sata_cores)
+            self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_striping)
 
         # Get user ports from crossbar
         self.user_ports = self.sata_crossbar.get_ports(nports)
@@ -59,21 +87,22 @@ class Core(Module):
     def get_ios(self):
         ios = set()
 
-        # Transceiver
-        for e in dir(self.sata_phy.clock_pads):
-            obj = getattr(self.sata_phy.clock_pads, e)
-            if isinstance(obj, Signal):
-                ios = ios.union({obj})
-        for e in dir(self.sata_phy.pads):
-            obj = getattr(self.sata_phy.pads, e)
-            if isinstance(obj, Signal):
-                ios = ios.union({obj})
+        for sata_phy in self.sata_phys:
+            # Transceiver
+            for e in dir(sata_phy.clock_pads):
+                obj = getattr(sata_phy.clock_pads, e)
+                if isinstance(obj, Signal):
+                    ios = ios.union({obj})
+            for e in dir(sata_phy.pads):
+                obj = getattr(sata_phy.pads, e)
+                if isinstance(obj, Signal):
+                    ios = ios.union({obj})
 
-        # Status
-        ios = ios.union({
-            self.sata_phy.crg.ready,
-            self.sata_phy.ctrl.ready
-        })
+            # Status
+            ios = ios.union({
+                sata_phy.crg.ready,
+                sata_phy.ctrl.ready
+            })
 
         # BIST
         if hasattr(self, "sata_bist"):
