@@ -5,7 +5,7 @@ from migen.fhdl.decorators import ModuleTransformer
 from migen.genlib.resetsync import *
 from migen.genlib.fsm import *
 from migen.genlib.record import *
-from migen.genlib.misc import chooser, optree, Counter, WaitTimer
+from migen.genlib.misc import chooser, optree, WaitTimer
 from migen.genlib.cdc import *
 from migen.flow.actor import *
 from migen.flow.plumbing import Multiplexer, Demultiplexer
@@ -14,6 +14,16 @@ from migen.actorlib.structuring import Pipeline, Converter
 from migen.actorlib.packet import Buffer
 from migen.actorlib.misc import BufferizeEndpoints
 from migen.actorlib.packet import HeaderField, Header
+
+
+@ResetInserter()
+@CEInserter()
+class Counter(Module):
+    def __init__(self, *args, increment=1, **kwargs):
+        self.value = Signal(*args, **kwargs)
+        self.width = flen(self.value)
+        self.sync += self.value.eq(self.value+increment)
+
 
 bitrates = {
     "sata_gen3": 6.0,
@@ -44,7 +54,6 @@ primitives = {
     "HOLD":   0xD5D5AA7C,
     "HOLDA":  0X9595AA7C
 }
-
 
 def is_primitive(dword):
     for k, v in primitives.items():
