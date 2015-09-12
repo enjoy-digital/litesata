@@ -68,13 +68,17 @@ if __name__ == "__main__":
     else:
         top_class = target_module.default_subtarget
 
-    if args.platform is None:
-        platform_name = top_class.default_platform
+    if hasattr(top_class, "platform"):
+        platform = top_class.platform
+        platform_name = top_class.platform.name
     else:
-        platform_name = args.platform
-    platform_module = _import("platforms", platform_name)
-    platform_kwargs = dict((k, autotype(v)) for k, v in args.platform_option)
-    platform = platform_module.Platform(**platform_kwargs)
+        if args.platform is None:
+            platform_name = top_class.default_platform
+        else:
+            platform_name = args.platform
+        platform_module = _import("platforms", platform_name)
+        platform_kwargs = dict((k, autotype(v)) for k, v in args.platform_option)
+        platform = platform_module.Platform(**platform_kwargs)
 
     build_name = top_class.__name__.lower() + "-" + platform_name
     top_kwargs = dict((k, autotype(v)) for k, v in args.target_option)

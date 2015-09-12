@@ -1,5 +1,8 @@
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from mibuild.generic_platform import *
+from mibuild.xilinx.platform import XilinxPlatform
+
 from targets import *
 
 from misoclib.soc import SoC
@@ -11,9 +14,34 @@ from litesata.frontend.crossbar import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABIST
 
 
+_io = [
+    ("sys_clk", 0, Pins("X")),
+    ("sys_rst", 1, Pins("X")),
+    ("sata_clocks", 0,
+        Subsignal("refclk_p", Pins("X")),
+        Subsignal("refclk_n", Pins("X"))
+    ),
+    ("sata", 0,
+        Subsignal("txp", Pins("X")),
+        Subsignal("txn", Pins("X")),
+        Subsignal("rxp", Pins("X")),
+        Subsignal("rxn", Pins("X"))
+    ),
+]
+
+
+class CorePlatform(XilinxPlatform):
+    name = "core"
+    def __init__(self):
+        XilinxPlatform.__init__(self, "xc7", _io)
+
+    def do_finalize(self, *args, **kwargs):
+        pass
+
+
 class Core(Module):
-    default_platform = "verilog_backend"
-    def __init__(self, platform, clk_freq=166*1000000, with_bist=True, nports=4):
+    platform = CorePlatform()
+    def __init__(self, platform, clk_freq=200*1000000, with_bist=False, nports=1):
         self.clk_freq = clk_freq
 
         # SATA PHY/Core/Frontend
