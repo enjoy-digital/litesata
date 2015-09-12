@@ -17,7 +17,7 @@ from litesata.frontend.crossbar import LiteSATACrossbar
 from litesata.frontend.mirroring import LiteSATAMirroring
 from litesata.frontend.bist import LiteSATABIST
 
-from litesata.example_designs.targets.bist import CRG, StatusLeds
+from targets.bist import CRG, StatusLeds
 
 
 class MirroringSoC(SoC):
