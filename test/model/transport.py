@@ -1,7 +1,7 @@
 from litesata.common import *
-from litesata.test.common import *
 
-from litesata.test.model.link import LinkTXPacket
+from test.common import *
+from test.model.link import LinkTXPacket
 
 
 def print_transport(s, n=None):

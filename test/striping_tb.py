@@ -5,8 +5,8 @@ from litesata.frontend.crossbar import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABISTGenerator, LiteSATABISTChecker
 from litesata.frontend.striping import LiteSATAStriping
 
-from litesata.test.common import *
-from litesata.test.model.hdd import *
+from test.common import *
+from test.model.hdd import *
 
 
 class TB(Module):

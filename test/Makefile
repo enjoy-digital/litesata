@@ -1,7 +1,7 @@
-MSCDIR = ../../../../
+COREDIR = ../
 PYTHON = python3
 
-CMD = PYTHONPATH=$(PYTHONPATH):$(MSCDIR) $(PYTHON)
+CMD = PYTHONPATH=$(PYTHONPATH):$(COREDIR) $(PYTHON)
 
 CC=gcc
 CFLAGS =-Wall -O0
@@ -43,6 +43,8 @@ example_designs:
 	cd ../example_designs && $(PYTHON) make.py -t striping -p kc705 -Ob run False build-bitstream
 	cd ../example_designs && $(PYTHON) make.py -t core -Ot design bist build-core
 	cd ../example_designs && $(PYTHON) make.py -t core -Ot design striping build-core
+
+all: phy_datapath_tb crc_tb scrambler_tb cont_tb link_tb command_tb bist_tb striping_tb mirroring_tb
 
 clean:
 	rm -f crc scrambler *.vcd

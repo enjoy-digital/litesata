@@ -1,12 +1,12 @@
 import math
 
 from litesata.common import *
-from litesata.test.common import *
 
-from litesata.test.model.phy import *
-from litesata.test.model.link import *
-from litesata.test.model.transport import *
-from litesata.test.model.command import *
+from test.common import *
+from test.model.phy import *
+from test.model.link import *
+from test.model.transport import *
+from test.model.command import *
 
 
 def print_hdd(s, n=None):

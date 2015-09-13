@@ -2,7 +2,8 @@ import subprocess
 import math
 
 from litesata.common import *
-from litesata.test.common import *
+
+from test.common import *
 
 
 def print_link(s, n=None):

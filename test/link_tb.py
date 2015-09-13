@@ -1,8 +1,8 @@
 from litesata.common import *
 from litesata.core.link import LiteSATALink
 
-from litesata.test.model.hdd import *
-from litesata.test.common import *
+from test.model.hdd import *
+from test.common import *
 
 
 class LinkStreamer(PacketStreamer):
