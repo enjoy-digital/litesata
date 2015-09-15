@@ -3,11 +3,6 @@ from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from misoclib.soc import SoC
-
-from litescope.common import *
-from litescope.frontend.la import LiteScopeLA
-from litescope.core.port import LiteScopeTerm
-
 from misoclib.com.uart.bridge import UARTWishboneBridge
 
 from litesata.common import *
@@ -91,6 +86,8 @@ class StripingSoCDevel(StripingSoC):
     }
     csr_map.update(StripingSoC.csr_map)
     def __init__(self, platform):
+        from litescope.frontend.la import LiteScopeLA
+        from litescope.core.port import LiteScopeTerm
         StripingSoC.__init__(self, platform)
 
         self.sata_core0_link_tx_fsm_state = Signal(4)
@@ -181,7 +178,7 @@ class StripingSoCDevel(StripingSoC):
             self.sata_core2_link_rx_fsm_state.eq(self.sata_core2.link.rx.fsm.state),
             self.sata_core2_link_tx_fsm_state.eq(self.sata_core2.link.tx.fsm.state),
             self.sata_core3_link_rx_fsm_state.eq(self.sata_core3.link.rx.fsm.state),
-            self.sata_core3_link_tx_fsm_state.eq(self.sata_core3.link.tx.fsm.state),
+            self.sata_core3_link_tx_fsm_state.eq(self.sata_core3.link.tx.fsm.state)
         ]
 
     def do_exit(self, vns):

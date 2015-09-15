@@ -3,11 +3,6 @@ from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from misoclib.soc import SoC
-
-from litescope.common import *
-from litescope.frontend.la import LiteScopeLA
-from litescope.core.port import LiteScopeTerm
-
 from misoclib.com.uart.bridge import UARTWishboneBridge
 
 from litesata.common import *
@@ -127,6 +122,8 @@ class BISTSoCDevel(BISTSoC):
     }
     csr_map.update(BISTSoC.csr_map)
     def __init__(self, platform):
+        from litescope.frontend.la import LiteScopeLA
+        from litescope.core.port import LiteScopeTerm
         BISTSoC.__init__(self, platform)
 
         self.sata_core_link_rx_fsm_state = Signal(4)
@@ -147,23 +144,23 @@ class BISTSoCDevel(BISTSoC):
             self.sata_phy.sink.data,
             self.sata_phy.sink.charisk,
 
-            self.sata.core.command.sink.stb,
-            self.sata.core.command.sink.sop,
-            self.sata.core.command.sink.eop,
-            self.sata.core.command.sink.ack,
-            self.sata.core.command.sink.write,
-            self.sata.core.command.sink.read,
-            self.sata.core.command.sink.identify,
+            self.sata_core.command.sink.stb,
+            self.sata_core.command.sink.sop,
+            self.sata_core.command.sink.eop,
+            self.sata_core.command.sink.ack,
+            self.sata_core.command.sink.write,
+            self.sata_core.command.sink.read,
+            self.sata_core.command.sink.identify,
 
-            self.sata.core.command.source.stb,
-            self.sata.core.command.source.sop,
-            self.sata.core.command.source.eop,
-            self.sata.core.command.source.ack,
-            self.sata.core.command.source.write,
-            self.sata.core.command.source.read,
-            self.sata.core.command.source.identify,
-            self.sata.core.command.source.failed,
-            self.sata.core.command.source.data,
+            self.sata_core.command.source.stb,
+            self.sata_core.command.source.sop,
+            self.sata_core.command.source.eop,
+            self.sata_core.command.source.ack,
+            self.sata_core.command.source.write,
+            self.sata_core.command.source.read,
+            self.sata_core.command.source.identify,
+            self.sata_core.command.source.failed,
+            self.sata_core.command.source.data,
 
             self.sata_core_link_rx_fsm_state,
             self.sata_core_link_tx_fsm_state,
@@ -179,12 +176,12 @@ class BISTSoCDevel(BISTSoC):
     def do_finalize(self):
         BISTSoC.do_finalize(self)
         self.comb += [
-            self.sata_core_link_rx_fsm_state.eq(self.sata.core.link.rx.fsm.state),
-            self.sata_core_link_tx_fsm_state.eq(self.sata.core.link.tx.fsm.state),
-            self.sata_core_transport_rx_fsm_state.eq(self.sata.core.transport.rx.fsm.state),
-            self.sata_core_transport_tx_fsm_state.eq(self.sata.core.transport.tx.fsm.state),
-            self.sata_core_command_rx_fsm_state.eq(self.sata.core.command.rx.fsm.state),
-            self.sata_core_command_tx_fsm_state.eq(self.sata.core.command.tx.fsm.state)
+            self.sata_core_link_rx_fsm_state.eq(self.sata_core.link.rx.fsm.state),
+            self.sata_core_link_tx_fsm_state.eq(self.sata_core.link.tx.fsm.state),
+            self.sata_core_transport_rx_fsm_state.eq(self.sata_core.transport.rx.fsm.state),
+            self.sata_core_transport_tx_fsm_state.eq(self.sata_core.transport.tx.fsm.state),
+            self.sata_core_command_rx_fsm_state.eq(self.sata_core.command.rx.fsm.state),
+            self.sata_core_command_tx_fsm_state.eq(self.sata_core.command.tx.fsm.state)
         ]
 
     def do_exit(self, vns):

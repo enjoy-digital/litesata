@@ -3,11 +3,6 @@ from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from misoclib.soc import SoC
-
-from litescope.common import *
-from litescope.frontend.la import LiteScopeLA
-from litescope.core.port import LiteScopeTerm
-
 from misoclib.com.uart.bridge import UARTWishboneBridge
 
 from litesata.common import *
