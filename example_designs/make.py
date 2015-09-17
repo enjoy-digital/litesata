@@ -102,10 +102,12 @@ if __name__ == "__main__":
                 print("  "+a)
             sys.exit(1)
 
-    try:
-        revision = soc.sata_phy.revision
-    except:
-        revision = soc.sata_phy0.revision
+    if hasattr(soc, "sata_phy"):
+            revision = soc.sata_phy.revision
+    elif hasattr(soc, "sata_phy0"):
+            revision = soc.sata_phy0.revision
+    else:
+        revision = "unknown"
 
     print("""
        __   _ __      _______ _________
@@ -115,7 +117,9 @@ if __name__ == "__main__":
 
 A small footprint and configurable SATA core
              powered by Migen
-
+""")
+    if revision  != "unknown":
+        print("""
 ====== Building options: ======
 {} / {} Gbps
 System Clk: {} MHz (min: {} MHz)
@@ -151,7 +155,7 @@ System Clk: {} MHz (min: {} MHz)
             MultiReg:               XilinxMultiReg,
             AsyncResetSynchronizer: XilinxAsyncResetSynchronizer
         }
-        v_output = verilog.convert(soc, ios, special_overrides=so)
+        v_output = verilog.convert(soc, ios, name="litesata", special_overrides=so)
         v_output.write("build/litesata.v")
 
     if actions["build-bitstream"]:
