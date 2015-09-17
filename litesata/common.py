@@ -176,7 +176,7 @@ fis_data_header = Header(fis_data_header_fields,
 
 
 def transport_tx_description(dw):
-    layout = [
+    param_layout = [
         ("type", 8),
         ("pm_port", 4),
         ("c", 1),
@@ -186,14 +186,14 @@ def transport_tx_description(dw):
         ("device", 8),
         ("count", 16),
         ("icc", 8),
-        ("control", 8),
-        ("data", dw)
+        ("control", 8)
     ]
-    return EndpointDescription(layout, packetized=True)
+    payload_layout = [("data", dw)]
+    return EndpointDescription(payload_layout, param_layout, packetized=True)
 
 
 def transport_rx_description(dw):
-    layout = [
+    param_layout = [
         ("type", 8),
         ("pm_port", 4),
         ("r", 1),
@@ -205,10 +205,10 @@ def transport_rx_description(dw):
         ("device", 8),
         ("count", 16),
         ("transfer_count", 16),
-        ("data", dw),
         ("error", 1)
     ]
-    return EndpointDescription(layout, packetized=True)
+    payload_layout = [("data", dw)]
+    return EndpointDescription(payload_layout, param_layout, packetized=True)
 
 # Command Layer
 regs = {
@@ -232,45 +232,44 @@ reg_d2h_status = {
 
 
 def command_tx_description(dw):
-    layout = [
+    param_layout = [
         ("write", 1),
         ("read", 1),
         ("identify", 1),
         ("sector", 48),
-        ("count", 16),
-        ("data", dw)
+        ("count", 16)
     ]
-    return EndpointDescription(layout, packetized=True)
+    payload_layout = [("data", dw)]
+    return EndpointDescription(payload_layout, param_layout, packetized=True)
 
 
 def command_rx_description(dw):
-    layout = [
-        ("write", 1),
-        ("read", 1),
-        ("identify", 1),
-        ("last", 1),
-        ("failed", 1),
-        ("data", dw)
-    ]
-    return EndpointDescription(layout, packetized=True)
-
-
-def command_rx_cmd_description(dw):
-    layout = [
+    param_layout = [
         ("write", 1),
         ("read", 1),
         ("identify", 1),
         ("last", 1),
         ("failed", 1)
     ]
-    return EndpointDescription(layout, packetized=False)
+    payload_layout = [("data", dw)]
+    return EndpointDescription(payload_layout, param_layout, packetized=True)
+
+
+def command_rx_cmd_description(dw):
+    param_layout = [
+        ("write", 1),
+        ("read", 1),
+        ("identify", 1),
+        ("last", 1),
+        ("failed", 1)
+    ]
+    payload_layout = [("dummy", 1)]
+    return EndpointDescription(payload_layout, param_layout, packetized=False)
 
 
 def command_rx_data_description(dw):
-    layout = [
-        ("data", dw)
-    ]
-    return EndpointDescription(layout, packetized=True)
+    payload_layout = [("data", dw)]
+    return EndpointDescription(payload_layout, packetized=True)
 
 # HDD
 logical_sector_size = 512  # constant since all HDDs use this
