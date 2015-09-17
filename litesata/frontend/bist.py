@@ -17,7 +17,8 @@ class LiteSATABISTGenerator(Module):
 
         # # #
 
-        n = flen(user_port.sink.data)//32
+        n = user_port.dw//32
+        count_mult = user_port.dw//user_port.controller_dw
 
         source, sink = user_port.sink, user_port.source
 
@@ -45,7 +46,7 @@ class LiteSATABISTGenerator(Module):
             source.eop.eq(counter.value == (logical_sector_size//4*self.count)-1),
             source.write.eq(1),
             source.sector.eq(self.sector),
-            source.count.eq(self.count),
+            source.count.eq(self.count*count_mult),
             If(self.random,
                 source.data.eq(Replicate(scrambler.value, n))
             ).Else(
@@ -83,7 +84,8 @@ class LiteSATABISTChecker(Module):
 
         # # #
 
-        n = flen(user_port.sink.data)//32
+        n = user_port.dw//32
+        count_mult = user_port.dw//user_port.controller_dw
 
         source, sink = user_port.sink, user_port.source
 
@@ -114,7 +116,7 @@ class LiteSATABISTChecker(Module):
             source.eop.eq(1),
             source.read.eq(1),
             source.sector.eq(self.sector),
-            source.count.eq(self.count),
+            source.count.eq(self.count*count_mult),
         ]
         fsm.act("SEND_CMD",
             source.stb.eq(1),
@@ -225,7 +227,7 @@ class LiteSATABISTIdentify(Module):
     def __init__(self, user_port):
         self.start = Signal()
         self.done  = Signal()
-        self.data_width = flen(user_port.sink.data)
+        self.data_width = user_port.dw
 
         fifo = SyncFIFO([("data", 32)], 512, buffered=True)
         self.submodules += fifo
