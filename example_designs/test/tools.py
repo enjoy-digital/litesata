@@ -25,10 +25,10 @@ def decode_primitive(dword):
     return ""
 
 
-def link_trace(la, tx_data_name, rx_data_name):
+def link_trace(logic_analyzer, tx_data_name, rx_data_name):
     r = ""
     dump = Dump()
-    dump.add_from_layout(la.layout, la.data)
+    dump.add_from_layout(logic_analyzer.layout, logic_analyzer.data)
 
     for var in dump.vars:
         if var.name == tx_data_name:

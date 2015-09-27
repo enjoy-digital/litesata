@@ -38,9 +38,11 @@ scrambler: scrambler.c
 	$(CC) $(CFLAGS) $(INC) -o $@ $<
 
 example_designs:
-	cd ../example_designs && $(PYTHON) make.py -t bist -p kc705 -Ob run False build-bitstream
-	cd ../example_designs && $(PYTHON) make.py -t mirroring -p kc705 -Ob run False build-bitstream
-	cd ../example_designs && $(PYTHON) make.py -t striping -p kc705 -Ob run False build-bitstream
+	cd ../example_designs && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
+	cd ../example_designs && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
+	cd ../example_designs && $(PYTHON) make.py -t mirroring -s MirroringSoC -p kc705 -Ob run False build-bitstream
+	cd ../example_designs && $(PYTHON) make.py -t striping -s StripingSoC -p kc705 -Ob run False build-bitstream
+	cd ../example_designs && $(PYTHON) make.py -t striping -s StripingSoCDevel -p kc705 -Ob run False build-bitstream
 	cd ../example_designs && $(PYTHON) make.py -t core -Ot design bist build-core
 	cd ../example_designs && $(PYTHON) make.py -t core -Ot design striping build-core
 

@@ -82,11 +82,11 @@ set_false_path -from [get_clocks {sata_tx_clk}] -to [get_clocks sys_clk]
 
 class StripingSoCDevel(StripingSoC):
     csr_map = {
-        "la": 17
+        "logic_analyzer": 17
     }
     csr_map.update(StripingSoC.csr_map)
     def __init__(self, platform):
-        from litescope.frontend.la import LiteScopeLA
+        from litescope.frontend.logic_analyzer import LiteScopeLogicAnalyzer
         from litescope.core.port import LiteScopeTerm
         StripingSoC.__init__(self, platform)
 
@@ -165,8 +165,8 @@ class StripingSoCDevel(StripingSoC):
             self.sata_phy3.sink.charisk
         )
 
-        self.submodules.la = LiteScopeLA(debug, 2048)
-        self.la.trigger.add_port(LiteScopeTerm(self.la.dw))
+        self.submodules.logic_analyzer = LiteScopeLogicAnalyzer(debug, 2048)
+        self.logic_analyzer.trigger.add_port(LiteScopeTerm(self.logic_analyzer.dw))
 
     def do_finalize(self):
         StripingSoC.do_finalize(self)
@@ -182,7 +182,7 @@ class StripingSoCDevel(StripingSoC):
         ]
 
     def do_exit(self, vns):
-        self.la.export(vns, "test/la.csv")
+        self.logic_analyzer.export(vns, "test/logic_analyzer.csv")
 
 
 default_subtarget = StripingSoC
