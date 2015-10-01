@@ -53,7 +53,7 @@ class K7LiteSATAPHYCRG(Module):
                 i_DADDR=0, i_DI=0, #o_DO=,
 
                 # VCO
-                p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=6.666,
+                p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=6.66667,
                 p_CLKFBOUT_MULT_F=8.000, p_CLKFBOUT_PHASE=0.000, p_DIVCLK_DIVIDE=1,
                 i_CLKIN1=mmcm_clk_i, i_CLKFBIN=mmcm_fb, o_CLKFBOUT=mmcm_fb,
 
