@@ -2,7 +2,7 @@ from litesata.common import *
 from litesata.core import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABISTGenerator, LiteSATABISTChecker
-from litesata.frontend.striping import LiteSATAStriping
+from litesata.frontend.raid import LiteSATAStriping
 
 from test.common import *
 from test.model.hdd import *

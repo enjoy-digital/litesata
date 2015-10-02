@@ -11,7 +11,7 @@ from litesata.common import *
 from litesata.phy import LiteSATAPHY
 from litesata.core import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
-from litesata.frontend.striping import LiteSATAStriping
+from litesata.frontend.raid import LiteSATAStriping
 from litesata.frontend.bist import LiteSATABIST
 
 
