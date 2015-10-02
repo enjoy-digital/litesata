@@ -1,5 +1,5 @@
 from litesata.common import *
-from litesata.core.link.cont import LiteSATACONTInserter, LiteSATACONTRemover
+from litesata.core.link import LiteSATACONTInserter, LiteSATACONTRemover
 
 from test.common import *
 

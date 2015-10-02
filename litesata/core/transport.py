@@ -4,6 +4,7 @@ from litesata.common import *
 def test_type(name, signal):
     return signal == fis_types[name]
 
+# transport tx
 
 class LiteSATATransportTX(Module):
     def __init__(self, link):
@@ -101,6 +102,7 @@ class LiteSATATransportTX(Module):
             )
         ]
 
+# transport rx
 
 class LiteSATATransportRX(Module):
     def __init__(self, link):
@@ -231,6 +233,7 @@ class LiteSATATransportRX(Module):
             )
         self.comb += cmd_done.eq((counter.value == cmd_len) & link.source.ack)
 
+# transport
 
 class LiteSATATransport(Module):
     def __init__(self, link):

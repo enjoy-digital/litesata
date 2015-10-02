@@ -1,7 +1,7 @@
 import subprocess
 
 from litesata.common import *
-from litesata.core.link.scrambler import *
+from litesata.core.link import Scrambler
 
 from test.common import *
 

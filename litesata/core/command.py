@@ -12,6 +12,7 @@ rx_to_tx = [
     ("d2h_error", 1)
 ]
 
+# command tx
 
 class LiteSATACommandTX(Module):
     def __init__(self, transport):
@@ -118,6 +119,7 @@ class LiteSATACommandTX(Module):
             )
         ]
 
+# command rx
 
 class LiteSATACommandRX(Module):
     def __init__(self, transport):
@@ -271,6 +273,7 @@ class LiteSATACommandRX(Module):
             to_tx.d2h_error.eq(d2h_error)
         ]
 
+# command
 
 class LiteSATACommand(Module):
     def __init__(self, transport):

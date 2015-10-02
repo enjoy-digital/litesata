@@ -1,7 +1,7 @@
 import subprocess
 
 from litesata.common import *
-from litesata.core.link.crc import *
+from litesata.core.link import LiteSATACRC
 
 from test.common import *
 
