@@ -1,5 +1,4 @@
 from litesata.common import *
-from litesata.frontend.common import *
 
 
 class LiteSATAStripingTX(Module):

@@ -2,7 +2,7 @@ from migen.actorlib.packet import Arbiter, Dispatcher, Status
 from migen.flow.plumbing import Multiplexer
 
 from litesata.common import *
-from litesata.frontend.common import *
+from litesata.frontend.arbitration import LiteSATAUserPort
 from litesata.frontend.striping import LiteSATAStripingTX, LiteSATAStripingRX
 
 

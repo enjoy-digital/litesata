@@ -10,7 +10,7 @@ from misoclib.soc import SoC
 from litesata.common import *
 from litesata.phy import LiteSATAPHY
 from litesata.core import LiteSATACore
-from litesata.frontend.crossbar import LiteSATACrossbar
+from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.striping import LiteSATAStriping
 from litesata.frontend.bist import LiteSATABIST
 

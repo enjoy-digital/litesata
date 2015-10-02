@@ -1,6 +1,6 @@
 from litesata.common import *
 from litesata.core import LiteSATACore
-from litesata.frontend.crossbar import LiteSATACrossbar
+from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABISTGenerator, LiteSATABISTChecker
 
 from test.common import *
