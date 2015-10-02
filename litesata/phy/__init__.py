@@ -4,7 +4,7 @@ from litesata.phy.datapath import *
 
 
 class LiteSATAPHY(Module):
-    def __init__(self, device, clock_pads_or_refclk, pads, revision, clk_freq):
+    def __init__(self, device, clock_pads_or_refclk, pads, revision, clk_freq, trx_dw=16):
         self.clock_pads = clock_pads_or_refclk
         self.pads = pads
         self.revision = revision
@@ -13,7 +13,7 @@ class LiteSATAPHY(Module):
         if device[:3] == "xc7": # Kintex 7
             from litesata.phy.k7.trx import K7LiteSATAPHYTRX
             from litesata.phy.k7.crg import K7LiteSATAPHYCRG
-            self.submodules.trx = K7LiteSATAPHYTRX(pads, revision)
+            self.submodules.trx = K7LiteSATAPHYTRX(pads, revision, trx_dw)
             self.submodules.crg = K7LiteSATAPHYCRG(clock_pads_or_refclk, pads, self.trx, revision, clk_freq)
         else:
             raise NotImplementedError

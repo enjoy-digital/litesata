@@ -29,18 +29,18 @@ class K7LiteSATAPHYCRG(Module):
         self.comb += gtx.gtrefclk0.eq(self.refclk)
 
         # TX clocking
-        #   (sata_gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits)
-        #   (sata_gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits)
-        #   (sata_gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz (16-bits)
+        #   (sata_gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
+        #   (sata_gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
+        #   (sata_gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
         mmcm_reset = Signal()
         mmcm_locked = Signal()
         mmcm_fb = Signal()
         mmcm_clk_i = Signal()
         mmcm_clk0_o = Signal()
         mmcm_div_config = {
-            "sata_gen1":   16.0,
-            "sata_gen2":    8.0,
-            "sata_gen3":    4.0
+            "sata_gen1":   16.0*gtx.dw/16,
+            "sata_gen2":    8.0*gtx.dw/16,
+            "sata_gen3":    4.0*gtx.dw/16
             }
         mmcm_div = mmcm_div_config[revision]
         self.specials += [

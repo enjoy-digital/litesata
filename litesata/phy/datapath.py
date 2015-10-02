@@ -2,46 +2,56 @@ from litesata.common import *
 
 
 class LiteSATAPHYDatapathRX(Module):
-    def __init__(self):
-        self.sink = sink = Sink(phy_description(16))
+    def __init__(self, trx_dw):
+        self.sink = sink = Sink(phy_description(trx_dw))
         self.source = source = Source(phy_description(32))
 
         # # #
 
-        # width convertion (16 to 32) and byte alignment
-        byte_alignment = Signal()
-        last_charisk = Signal(2)
-        last_data = Signal(16)
+        # width convertion and byte alignment
+        byte_alignment = Signal(trx_dw//8)
+        last_charisk = Signal(trx_dw//8)
+        last_data = Signal(trx_dw)
+        sr_charisk = Signal(2*trx_dw//8)
+        sr_data = Signal(2*trx_dw)
         self.sync.sata_rx += \
             If(sink.stb & sink.ack,
                 If(sink.charisk != 0,
-                    byte_alignment.eq(sink.charisk[1])
+                    byte_alignment.eq(sink.charisk)
                 ),
                 last_charisk.eq(sink.charisk),
                 last_data.eq(sink.data)
             )
-        converter = Converter(phy_description(16),
-                              phy_description(32),
-                              reverse=False)
-        converter = InsertReset(RenameClockDomains(converter, "sata_rx"))
-        self.submodules += converter
         self.comb += [
-            converter.sink.stb.eq(sink.stb),
-            If(byte_alignment,
-                converter.sink.charisk.eq(Cat(last_charisk[1], sink.charisk[0])),
-                converter.sink.data.eq(Cat(last_data[8:], sink.data[:8]))
-            ).Else(
-                converter.sink.charisk.eq(sink.charisk),
-                converter.sink.data.eq(sink.data)
-            ),
-            sink.ack.eq(converter.sink.ack),
-            converter.reset.eq(converter.source.charisk[2:] != 0)
+            sr_charisk.eq(Cat(last_charisk, sink.charisk)),
+            sr_data.eq(Cat(last_data, sink.data)),
         ]
 
+
+        converter = Converter(phy_description(trx_dw),
+                              phy_description(32),
+                              reverse=False)
+        if trx_dw == 16: # when trx_dw=32, converter is just direct connection
+            converter = InsertReset(RenameClockDomains(converter, "sata_rx"))
+        self.submodules += converter
+        cases = {}
+        for i in range(trx_dw//8):
+            cases[2**i] = [
+                converter.sink.charisk.eq(sr_charisk[trx_dw//8-i:]),
+                converter.sink.data.eq(sr_data[trx_dw-8*i:])
+            ]
+        self.comb += [
+            converter.sink.stb.eq(sink.stb),
+            Case(byte_alignment, cases),
+            sink.ack.eq(converter.sink.ack)
+        ]
+        if trx_dw == 16:
+            self.comb += converter.reset.eq(converter.source.charisk[2:] != 0)
+
         # clock domain crossing
-        #   (sata_gen3) 300MHz sata_rx clk to sys_clk
-        #   (sata_gen2) 150MHz sata_rx clk to sys_clk
-        #   (sata_gen1) 75MHz sata_rx clk to sys_clk
+        #   (sata_gen3) 300MHz (16 bits) / 150MHz (32 bits) sata_rx clk to sys_clk
+        #   (sata_gen2) 150MHz (16 bits) / 75MHz (32 bits) sata_rx clk to sys_clk
+        #   (sata_gen1) 75MHz (16 bits) / 37.5MHz (32 bits) sata_rx clk to sys_clk
         #   requirements:
         #     due to the convertion ratio of 2, sys_clk need to be > sata_rx/2
         #     source destination is always able to accept data (ack always 1)
@@ -55,16 +65,16 @@ class LiteSATAPHYDatapathRX(Module):
 
 
 class LiteSATAPHYDatapathTX(Module):
-    def __init__(self):
+    def __init__(self, trx_dw):
         self.sink = sink = Sink(phy_description(32))
-        self.source = source = Source(phy_description(16))
+        self.source = source = Source(phy_description(trx_dw))
 
         # # #
 
         # clock domain crossing
-        #   (sata_gen3) sys_clk to 300MHz sata_tx clk
-        #   (sata_gen2) sys_clk to 150MHz sata_tx clk
-        #   (sata_gen1) sys_clk to 75MHz sata_tx clk
+        #   (sata_gen3) sys_clk to 300MHz (16 bits) / 150MHz (32 bits) sata_tx clk
+        #   (sata_gen2) sys_clk to 150MHz (16 bits) / 75MHz (32 bits) sata_tx clk
+        #   (sata_gen1) sys_clk to 75MHz (16 bits) / 37.5MHz (32 bits) sata_tx clk
         #   requirements:
         #     source destination is always able to accept data (ack always 1)
         fifo = AsyncFIFO(phy_description(32), 4)
@@ -72,9 +82,9 @@ class LiteSATAPHYDatapathTX(Module):
         self.submodules += fifo
         self.comb += Record.connect(sink, fifo.sink)
 
-        # width convertion (32 to 16)
+        # width convertion
         converter = Converter(phy_description(32),
-                              phy_description(16),
+                              phy_description(trx_dw),
                               reverse=False)
         converter = RenameClockDomains(converter, "sata_tx")
         self.submodules += converter
@@ -146,7 +156,7 @@ class LiteSATAPHYDatapath(Module):
         # TX path
         align_inserter = LiteSATAPHYAlignInserter(ctrl)
         mux = Multiplexer(phy_description(32), 2)
-        tx = LiteSATAPHYDatapathTX()
+        tx = LiteSATAPHYDatapathTX(trx.dw)
         self.submodules += align_inserter, mux, tx
         self.comb += [
             mux.sel.eq(ctrl.ready),
@@ -158,7 +168,7 @@ class LiteSATAPHYDatapath(Module):
         ]
 
         # RX path
-        rx = LiteSATAPHYDatapathRX()
+        rx = LiteSATAPHYDatapathRX(trx.dw)
         demux = Demultiplexer(phy_description(32), 2)
         align_remover = LiteSATAPHYAlignRemover()
         self.submodules += rx, demux, align_remover

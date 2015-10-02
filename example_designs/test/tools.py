@@ -30,11 +30,11 @@ def link_trace(logic_analyzer, tx_data_name, rx_data_name):
     dump = Dump()
     dump.add_from_layout(logic_analyzer.layout, logic_analyzer.data)
 
-    for var in dump.vars:
-        if var.name == tx_data_name:
-            tx_data = var.values
-        if var.name == rx_data_name:
-            rx_data = var.values
+    for variable in dump.variables:
+        if variable.name == tx_data_name:
+            tx_data = variable.values
+        if variable.name == rx_data_name:
+            rx_data = variable.values
 
     for i in range(len(tx_data)):
         tx = "{:08x} ".format(tx_data[i])

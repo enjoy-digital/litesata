@@ -5,7 +5,7 @@ from litescope.software.driver.logic_analyzer import LiteScopeLogicAnalyzerDrive
 
 
 def main(wb):
-    logic_analyzer = LiteScopeLADriver(wb.regs, "logic_analyzer", debug=True)
+    logic_analyzer = LiteScopeLogicAnalyzerDriver(wb.regs, "logic_analyzer", debug=True)
     identify = LiteSATABISTIdentifyDriver(wb.regs, "sata_bist")
     generator = LiteSATABISTGeneratorDriver(wb.regs, "sata_bist")
     checker = LiteSATABISTCheckerDriver(wb.regs, "sata_bist")
@@ -13,10 +13,10 @@ def main(wb):
     regs = wb.regs
     # # #
     trig = "now"
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 3:
         print("No trigger condition, triggering immediately!")
     else:
-        trig = sys.argv[1]
+        trig = sys.argv[2]
 
     conditions = {}
     conditions["now"] = {}

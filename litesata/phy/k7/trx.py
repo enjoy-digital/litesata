@@ -35,8 +35,11 @@ class _LowPassFilter(Module):
 
 
 class K7LiteSATAPHYTRX(Module):
-    def __init__(self, pads, revision):
+    def __init__(self, pads, revision, dw=16):
     # Common signals
+        self.dw = dw
+        if dw not in [16, 32]:
+            raise ValueError("Unsupported datawidth")
 
         # control
         self.tx_idle = Signal()         #i
@@ -53,8 +56,8 @@ class K7LiteSATAPHYTRX(Module):
         self.rx_comwake_stb = Signal()  #o
 
         # datapath
-        self.sink = Sink(phy_description(16))
-        self.source = Source(phy_description(16))
+        self.sink = Sink(phy_description(dw))
+        self.source = Source(phy_description(dw))
 
     # K7 specific signals
         # Channel - Ref Clock Ports
@@ -68,11 +71,11 @@ class K7LiteSATAPHYTRX(Module):
         self.rxuserrdy = Signal()
 
         # Receive Ports - 8b10b Decoder
-        self.rxcharisk = Signal(2)
+        self.rxcharisk = Signal(dw//8)
 
         # Receive Ports - RX Data Path interface
         self.gtrxreset = Signal()
-        self.rxdata = Signal(16)
+        self.rxdata = Signal(dw)
         self.rxoutclk = Signal()
         self.rxusrclk = Signal()
         self.rxusrclk2 = Signal()
@@ -93,11 +96,11 @@ class K7LiteSATAPHYTRX(Module):
         self.txuserrdy = Signal()
 
         # Transmit Ports - 8b10b Encoder Control Ports
-        self.txcharisk = Signal(2)
+        self.txcharisk = Signal(dw//8)
 
         # Transmit Ports - TX Data Path interface
         self.gttxreset = Signal()
-        self.txdata = Signal(16)
+        self.txdata = Signal(dw)
         self.txoutclk = Signal()
         self.txusrclk = Signal()
         self.txusrclk2 = Signal()
@@ -257,8 +260,8 @@ class K7LiteSATAPHYTRX(Module):
                     "p_CBCC_DATA_SOURCE_SEL": "DECODED",
                     "p_CLK_COR_SEQ_2_USE": "FALSE",
                     "p_CLK_COR_KEEP_IDLE": "FALSE",
-                    "p_CLK_COR_MAX_LAT": 9,
-                    "p_CLK_COR_MIN_LAT": 7,
+                    "p_CLK_COR_MAX_LAT": 9 if dw == 16 else 19,
+                    "p_CLK_COR_MIN_LAT": 7 if dw == 16 else 15,
                     "p_CLK_COR_PRECEDENCE": "TRUE",
                     "p_CLK_COR_REPEAT_WAIT": 0,
                     "p_CLK_COR_SEQ_LEN": 1,
@@ -307,7 +310,7 @@ class K7LiteSATAPHYTRX(Module):
                     "p_ES_VERT_OFFSET": 0,
 
                 # FPGA RX Interface Attributes
-                    "p_RX_DATA_WIDTH": 20,
+                    "p_RX_DATA_WIDTH": 20 if dw == 16 else 40,
 
                 # PMA Attributes
                     "p_OUTREFCLK_SEL_INV": 0b11,
@@ -415,7 +418,7 @@ class K7LiteSATAPHYTRX(Module):
                     "p_TX_XCLK_SEL": "TXUSR",
 
                 # FPGA TX Interface Attributes
-                    "p_TX_DATA_WIDTH": 20,
+                    "p_TX_DATA_WIDTH": 20 if dw ==16 else 40,
 
                 # TX Configurable Driver Attributes
                     "p_TX_DEEMPH0": 0,
@@ -480,10 +483,10 @@ class K7LiteSATAPHYTRX(Module):
                     "p_TX_CLKMUX_PD": 1,
 
                 # FPGA RX Interface Attribute
-                    "p_RX_INT_DATAWIDTH": 0,
+                    "p_RX_INT_DATAWIDTH": 0 if dw == 16 else 1,
 
                 # FPGA TX Interface Attribute
-                    "p_TX_INT_DATAWIDTH": 0,
+                    "p_TX_INT_DATAWIDTH": 0 if dw == 16 else 1,
 
                 # TX Configurable Driver Attributes
                     "p_TX_QPI_STATUS_EN": 0,
