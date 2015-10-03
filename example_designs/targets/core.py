@@ -44,18 +44,19 @@ class CorePlatform(XilinxPlatform):
 
 class Core(Module):
     platform = CorePlatform()
-    def __init__(self, platform, design="bist", clk_freq=200*1000000, nports=1):
+    def __init__(self, platform, design="base", clk_freq=200*1000000, nports=2, ports_dw=32):
         self.clk_freq = clk_freq
 
-        if design == "bist":
+        if design == "base" or design == "bist":
             # SATA PHY/Core/frontend
-            self.submodules.sata_phy = LiteSATAPHY(platform.device, platform.request("sata_clocks"), platform.request("sata"), "sata_gen2", clk_freq)
+            self.submodules.sata_phy = LiteSATAPHY(platform.device, platform.request("sata_clocks"), platform.request("sata"), "sata_gen3", clk_freq)
             self.sata_phys = [self.sata_phy]
             self.submodules.sata_core = LiteSATACore(self.sata_phy)
             self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
 
-            # BIST
-            self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar)
+            if design == "bist":
+                # BIST
+                self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar)
 
         elif design == "striping":
             self.nphys = 4
@@ -81,8 +82,11 @@ class Core(Module):
             self.submodules.sata_striping = LiteSATAStriping(sata_cores)
             self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_striping)
 
+        else:
+            ValueError("Unknown design " + design)
+
         # Get user ports from crossbar
-        self.user_ports = self.sata_crossbar.get_ports(nports)
+        self.user_ports = self.sata_crossbar.get_ports(nports, ports_dw)
 
     def get_ios(self):
         ios = set()

@@ -43,8 +43,11 @@ example_designs:
 	cd ../example_designs && $(PYTHON) make.py -t mirroring -s MirroringSoC -p kc705 -Ob run False build-bitstream
 	cd ../example_designs && $(PYTHON) make.py -t striping -s StripingSoC -p kc705 -Ob run False build-bitstream
 	cd ../example_designs && $(PYTHON) make.py -t striping -s StripingSoCDevel -p kc705 -Ob run False build-bitstream
+	cd ../example_designs && $(PYTHON) make.py -t core -Ot design base build-core
+	cd ../example_designs && $(PYTHON) make.py -t core -Ot design base -Ot ports_dw 64 build-core
 	cd ../example_designs && $(PYTHON) make.py -t core -Ot design bist build-core
 	cd ../example_designs && $(PYTHON) make.py -t core -Ot design striping build-core
+
 
 all: phy_datapath_tb link_crc_tb link_scrambler_tb link_cont_tb link_tb command_tb bist_tb striping_tb mirroring_tb
 
