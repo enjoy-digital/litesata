@@ -35,7 +35,8 @@ class DataLogger(PacketLogger):
 
 
 class TRX(Module):
-    def __init__(self):
+    def __init__(self, dw=16):
+        self.dw = dw
         self.sink = Sink(phy_description(32))
         self.source = Source(phy_description(32))
         self.comb += Record.connect(self.sink, self.source)
