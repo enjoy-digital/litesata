@@ -1,6 +1,6 @@
 import sys
 from bist import *
-from litescope.software.driver.la import LiteScopeLADriver
+from litescope.software.driver.la import LiteScopeLogicAnalyzerDriver
 
 
 def main(wb):

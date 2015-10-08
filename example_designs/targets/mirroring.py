@@ -1,4 +1,3 @@
-from litesata.common import *
 from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
