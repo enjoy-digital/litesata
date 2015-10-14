@@ -24,11 +24,12 @@ class LiteSATAPHYCtrl(Module):
         non_align_counter = Counter(4)
         self.submodules += non_align_counter
 
+        misalign_mask = 0b1010 if trx.dw == 16 else 0b1110
         self.comb +=  [
             If(sink.stb,
                 align_det.eq((self.sink.charisk == 0b0001) &
-                                (self.sink.data == primitives["ALIGN"])),
-                misalign_det.eq((self.sink.charisk & 0b1010) != 0)
+                             (self.sink.data == primitives["ALIGN"])),
+                misalign_det.eq((self.sink.charisk & misalign_mask) != 0)
             )
         ]
 
