@@ -32,36 +32,45 @@ class K7LiteSATAPHYCRG(Module):
         #   (sata_gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
         #   (sata_gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
         #   (sata_gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
-        mmcm_reset = Signal()
-        mmcm_locked = Signal()
-        mmcm_fb = Signal()
-        mmcm_clk_i = Signal()
-        mmcm_clk0_o = Signal()
+        mmcm_mult = 8.0
         mmcm_div_config = {
             "sata_gen1":   16.0*gtx.dw/16,
             "sata_gen2":    8.0*gtx.dw/16,
             "sata_gen3":    4.0*gtx.dw/16
-            }
+        }
         mmcm_div = mmcm_div_config[revision]
-        self.specials += [
-            Instance("BUFG", i_I=gtx.txoutclk, o_O=mmcm_clk_i),
-            Instance("MMCME2_ADV",
-                p_BANDWIDTH="HIGH", p_COMPENSATION="ZHOLD", i_RST=mmcm_reset, o_LOCKED=mmcm_locked,
+        use_mmcm = mmcm_mult/mmcm_div != 1.0
 
-                # DRP
-                i_DCLK=0, i_DEN=0, i_DWE=0, #o_DRDY=,
-                i_DADDR=0, i_DI=0, #o_DO=,
+        if use_mmcm:
+            mmcm_reset = Signal()
+            mmcm_locked = Signal()
+            mmcm_fb = Signal()
+            mmcm_clk_i = Signal()
+            mmcm_clk0_o = Signal()
+            self.specials += [
+                Instance("BUFG", i_I=gtx.txoutclk, o_O=mmcm_clk_i),
+                Instance("MMCME2_ADV",
+                     p_BANDWIDTH="HIGH", p_COMPENSATION="ZHOLD", i_RST=mmcm_reset, o_LOCKED=mmcm_locked,
 
-                # VCO
-                p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=6.66667,
-                p_CLKFBOUT_MULT_F=8.000, p_CLKFBOUT_PHASE=0.000, p_DIVCLK_DIVIDE=1,
-                i_CLKIN1=mmcm_clk_i, i_CLKFBIN=mmcm_fb, o_CLKFBOUT=mmcm_fb,
+                     # DRP
+                     i_DCLK=0, i_DEN=0, i_DWE=0, #o_DRDY=,
+                     i_DADDR=0, i_DI=0, #o_DO=,
 
-                # CLK0
-                p_CLKOUT0_DIVIDE_F=mmcm_div, p_CLKOUT0_PHASE=0.000, o_CLKOUT0=mmcm_clk0_o,
-            ),
-            Instance("BUFG", i_I=mmcm_clk0_o, o_O=self.cd_sata_tx.clk),
-        ]
+                     # VCO
+                     p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=6.66667,
+                     p_CLKFBOUT_MULT_F=mmcm_mult, p_CLKFBOUT_PHASE=0.000, p_DIVCLK_DIVIDE=1,
+                     i_CLKIN1=mmcm_clk_i, i_CLKFBIN=mmcm_fb, o_CLKFBOUT=mmcm_fb,
+
+                     # CLK0
+                     p_CLKOUT0_DIVIDE_F=mmcm_div, p_CLKOUT0_PHASE=0.000, o_CLKOUT0=mmcm_clk0_o,
+                ),
+                Instance("BUFG", i_I=mmcm_clk0_o, o_O=self.cd_sata_tx.clk),
+            ]
+        else:
+            mmcm_locked = Signal(reset=1)
+            mmcm_reset = Signal()
+            self.specials += Instance("BUFG", i_I=gtx.txoutclk, o_O=self.cd_sata_tx.clk)
+
         self.comb += [
             gtx.txusrclk.eq(self.cd_sata_tx.clk),
             gtx.txusrclk2.eq(self.cd_sata_tx.clk)
