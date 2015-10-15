@@ -77,9 +77,9 @@ class K7LiteSATAPHYCRG(Module):
         ]
 
         # RX clocking
-        #   (sata_gen3) sata_rx recovered clk @ 300MHz from GTX RXOUTCLK
-        #   (sata_gen2) sata_rx recovered clk @ 150MHz from GTX RXOUTCLK
-        #   (sata_gen1) sata_rx recovered clk @ 150MHz from GTX RXOUTCLK
+        #   (sata_gen3) sata_rx recovered clk @  @ 300MHz (16-bits) /  150MHz (32-bits) from GTX RXOUTCLK
+        #   (sata_gen2) sata_rx recovered clk @  @ 150MHz (16-bits) /   75MHz (32-bits) from GTX RXOUTCLK
+        #   (sata_gen1) sata_rx recovered clk @  @ 75MHz  (16-bits) / 37.5MHz (32-bits) from GTX RXOUTCLK
         self.specials += [
             Instance("BUFG", i_I=gtx.rxoutclk, o_O=self.cd_sata_rx.clk),
         ]

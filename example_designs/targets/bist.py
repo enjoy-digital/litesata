@@ -81,21 +81,25 @@ class BISTSoC(SoC):
         "sata_bist": 16
     }
     csr_map.update(SoC.csr_map)
-    def __init__(self, platform):
+    def __init__(self, platform, revision="sata_gen3", trx_dw=16):
         clk_freq = 200*1000000
         SoC.__init__(self, platform, clk_freq,
             cpu_type="none",
             with_csr=True, csr_data_width=32,
             with_uart=False,
             with_identifier=True,
-            with_timer=False
-        )
+            with_timer=False)
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
         # SATA PHY/Core/Frontend
-        self.submodules.sata_phy = LiteSATAPHY(platform.device, platform.request("sata_clocks"), platform.request("sata", 0), "sata_gen3", clk_freq, trx_dw=16)
+        self.submodules.sata_phy = LiteSATAPHY(platform.device,
+        	                                   platform.request("sata_clocks"),
+        	                                   platform.request("sata", 0),
+        	                                   revision,
+        	                                   clk_freq,
+        	                                   trx_dw)
         self.submodules.sata_core = LiteSATACore(self.sata_phy)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
@@ -106,14 +110,14 @@ class BISTSoC(SoC):
         platform.add_platform_command("""
 create_clock -name sys_clk -period 5 [get_nets sys_clk]
 
-create_clock -name sata_rx_clk -period 3.33 [get_nets sata_rx_clk]
-create_clock -name sata_tx_clk -period 3.33 [get_nets sata_tx_clk]
+create_clock -name sata_rx_clk -period {sata_clk_period} [get_nets sata_rx_clk]
+create_clock -name sata_tx_clk -period {sata_clk_period} [get_nets sata_tx_clk]
 
 set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_rx_clk]
 set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_tx_clk]
 set_false_path -from [get_clocks sata_rx_clk] -to [get_clocks sys_clk]
 set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
-""")
+""".format(sata_clk_period="3.3" if trx_dw == 16 else "6.6"))
 
 class BISTSoCDevel(BISTSoC):
     csr_map = {
