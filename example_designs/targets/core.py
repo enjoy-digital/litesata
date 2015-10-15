@@ -61,25 +61,27 @@ class Core(Module):
         elif design == "striping":
             self.nphys = 4
             # SATA PHYs
-            sata_phy0 = LiteSATAPHY(platform.device, platform.request("sata_clocks"), platform.request("sata", 0), "sata_gen3", clk_freq)
-            sata_phy1 = LiteSATAPHY(platform.device, sata_phy0.crg.refclk, platform.request("sata", 1), "sata_gen3", clk_freq)
-            sata_phy2 = LiteSATAPHY(platform.device, sata_phy0.crg.refclk, platform.request("sata", 2), "sata_gen3", clk_freq)
-            sata_phy3 = LiteSATAPHY(platform.device, sata_phy0.crg.refclk, platform.request("sata", 3), "sata_gen3", clk_freq)
-            self.sata_phys = [sata_phy0, sata_phy1, sata_phy2, sata_phy3]
-            for i, sata_phy in enumerate(self.sata_phys):
+            self.sata_phys = []
+            for i in range(self.nphys):
+                sata_phy = LiteSATAPHY(platform.device,
+                                       platform.request("sata_clocks") if i == 0 else self.sata_phys[0].crg.refclk,
+                                       platform.request("sata", i),
+                                       "sata_gen3",
+                                       clk_freq)
                 sata_phy = RenameClockDomains(sata_phy, {"sata_rx": "sata_rx{}".format(str(i)),
                                                          "sata_tx": "sata_tx{}".format(str(i))})
                 setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
+                self.sata_phys.append(sata_phy)
 
             # SATA Cores
-            self.submodules.sata_core0 = LiteSATACore(self.sata_phy0)
-            self.submodules.sata_core1 = LiteSATACore(self.sata_phy1)
-            self.submodules.sata_core2 = LiteSATACore(self.sata_phy2)
-            self.submodules.sata_core3 = LiteSATACore(self.sata_phy3)
-            sata_cores = [self.sata_core0, self.sata_core1, self.sata_core2, self.sata_core3]
+            self.sata_cores = []
+            for i in range(self.nphys):
+                sata_core = LiteSATACore(self.sata_phys[i])
+                setattr(self.submodules, "sata_core{}".format(str(i)), sata_core)
+                self.sata_cores.append(sata_core)
 
             # SATA Frontend
-            self.submodules.sata_striping = LiteSATAStriping(sata_cores)
+            self.submodules.sata_striping = LiteSATAStriping(self.sata_cores)
             self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_striping)
 
         else:

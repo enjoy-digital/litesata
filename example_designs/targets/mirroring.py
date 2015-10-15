@@ -23,7 +23,8 @@ class MirroringSoC(SoC):
         "sata_bist3": 19,
     }
     csr_map.update(SoC.csr_map)
-    def __init__(self, platform, revision="sata_gen3", trx_dw=16):
+    def __init__(self, platform, revision="sata_gen3", trx_dw=16, nphys=4):
+        self.nphys = nphys
         clk_freq = 200*1000000
         SoC.__init__(self, platform, clk_freq,
             cpu_type="none",
@@ -36,65 +37,50 @@ class MirroringSoC(SoC):
         self.submodules.crg = CRG(platform)
 
         # SATA PHYs
-        sata_phy0 = LiteSATAPHY(platform.device,
-                                platform.request("sata_clocks"),
-                                platform.request("sata", 0),
-                                revision,
-                                clk_freq,
-                                trx_dw)
-        sata_phy1 = LiteSATAPHY(platform.device,
-                                sata_phy0.crg.refclk,
-                                platform.request("sata", 1),
-                                revision,
-                                clk_freq,
-                                trx_dw)
-        sata_phy2 = LiteSATAPHY(platform.device,
-                                sata_phy0.crg.refclk,
-                                platform.request("sata", 2),
-                                revision,
-                                clk_freq,
-                                trx_dw)
-        sata_phy3 = LiteSATAPHY(platform.device,
-                                sata_phy0.crg.refclk,
-                                platform.request("sata", 3),
-                                revision,
-                                clk_freq,
-                                trx_dw)
-        sata_phys = [sata_phy0, sata_phy1, sata_phy2, sata_phy3]
-        for i, sata_phy in enumerate(sata_phys):
+        self.sata_phys = []
+        for i in range(self.nphys):
+            sata_phy = LiteSATAPHY(platform.device,
+                                   platform.request("sata_clocks") if i == 0 else self.sata_phys[0].crg.refclk,
+                                   platform.request("sata", i),
+                                   revision,
+                                   clk_freq,
+                                   trx_dw)
             sata_phy = RenameClockDomains(sata_phy, {"sata_rx": "sata_rx{}".format(str(i)),
                                                      "sata_tx": "sata_tx{}".format(str(i))})
             setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
+            self.sata_phys.append(sata_phy)
 
         # SATA Cores
-        self.submodules.sata_core0 = LiteSATACore(self.sata_phy0)
-        self.submodules.sata_core1 = LiteSATACore(self.sata_phy1)
-        self.submodules.sata_core2 = LiteSATACore(self.sata_phy2)
-        self.submodules.sata_core3 = LiteSATACore(self.sata_phy3)
-        sata_cores = [self.sata_core0, self.sata_core1, self.sata_core2, self.sata_core3]
+        self.sata_cores = []
+        for i in range(self.nphys):
+            sata_core = LiteSATACore(self.sata_phys[i])
+            setattr(self.submodules, "sata_core{}".format(str(i)), sata_core)
+            self.sata_cores.append(sata_core)
 
         # SATA Frontend
-        self.submodules.sata_mirroring = LiteSATAMirroring(sata_cores)
-        self.submodules.sata_crossbar0 = LiteSATACrossbar(self.sata_mirroring.ports[0])
-        self.submodules.sata_crossbar1 = LiteSATACrossbar(self.sata_mirroring.ports[1])
-        self.submodules.sata_crossbar2 = LiteSATACrossbar(self.sata_mirroring.ports[2])
-        self.submodules.sata_crossbar3 = LiteSATACrossbar(self.sata_mirroring.ports[3])
+        self.submodules.sata_mirroring = LiteSATAMirroring(self.sata_cores)
+        self.sata_crossbars = []
+        for i in range(self.nphys):
+            sata_crossbar = LiteSATACrossbar(self.sata_mirroring.ports[i])
+            setattr(self.submodules, "sata_crossbar{}".format(str(i)), sata_crossbar)
+            self.sata_crossbars.append(sata_crossbar)
 
         # SATA Application
-        self.submodules.sata_bist0 = LiteSATABIST(self.sata_crossbar0, with_csr=True)
-        self.submodules.sata_bist1 = LiteSATABIST(self.sata_crossbar1, with_csr=True)
-        self.submodules.sata_bist2 = LiteSATABIST(self.sata_crossbar2, with_csr=True)
-        self.submodules.sata_bist3 = LiteSATABIST(self.sata_crossbar3, with_csr=True)
+        self.sata_bists = []
+        for i in range(self.nphys):
+            sata_bist = LiteSATABIST(self.sata_crossbars[i], with_csr=True)
+            setattr(self.submodules, "sata_bist{}".format(str(i)), sata_bist)
+            self.sata_bists.append(sata_bist)
 
         # Status Leds
-        self.submodules.status_leds = StatusLeds(platform, sata_phys)
+        self.submodules.status_leds = StatusLeds(platform, self.sata_phys)
 
 
         platform.add_platform_command("""
 create_clock -name sys_clk -period 5 [get_nets sys_clk]
 """)
 
-        for i in range(len(sata_phys)):
+        for i in range(len(self.sata_phys)):
             platform.add_platform_command("""
 create_clock -name {sata_rx_clk} -period {sata_clk_period} [get_nets {sata_rx_clk}]
 create_clock -name {sata_tx_clk} -period {sata_clk_period} [get_nets {sata_tx_clk}]

@@ -95,11 +95,11 @@ class BISTSoC(SoC):
 
         # SATA PHY/Core/Frontend
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
-        	                                   platform.request("sata_clocks"),
-        	                                   platform.request("sata", 0),
-        	                                   revision,
-        	                                   clk_freq,
-        	                                   trx_dw)
+                                               platform.request("sata_clocks"),
+                                               platform.request("sata", 0),
+                                               revision,
+                                               clk_freq,
+                                               trx_dw)
         self.submodules.sata_core = LiteSATACore(self.sata_phy)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
