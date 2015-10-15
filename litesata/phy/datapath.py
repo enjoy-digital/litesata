@@ -55,7 +55,7 @@ class LiteSATAPHYDatapathRX(Module):
         #   requirements:
         #     due to the convertion ratio of 2, sys_clk need to be > sata_rx/2
         #     source destination is always able to accept data (ack always 1)
-        fifo = AsyncFIFO(phy_description(32), 4)
+        fifo = AsyncFIFO(phy_description(32), 8)
         fifo = RenameClockDomains(fifo, {"write": "sata_rx", "read": "sys"})
         self.submodules += fifo
         self.comb += [
@@ -77,7 +77,7 @@ class LiteSATAPHYDatapathTX(Module):
         #   (sata_gen1) sys_clk to 75MHz (16 bits) / 37.5MHz (32 bits) sata_tx clk
         #   requirements:
         #     source destination is always able to accept data (ack always 1)
-        fifo = AsyncFIFO(phy_description(32), 4)
+        fifo = AsyncFIFO(phy_description(32), 8)
         fifo = RenameClockDomains(fifo, {"write": "sys", "read": "sata_tx"})
         self.submodules += fifo
         self.comb += Record.connect(sink, fifo.sink)
