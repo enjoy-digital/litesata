@@ -186,8 +186,8 @@ Since it's probably easier to figure out how to use the frontend modules with re
 
 - A Mirroring_ design that can be used to understand how to combine 4 HDDs together in mirroring mode and do a BIST on it.
 
-.. _BIST: https://github.com/m-labs/misoc/blob/master/misoclib/mem/litesata/example_designs/targets/bist.py
+.. _BIST: https://github.com/enjoy-digital/litesata/blob/master/example_designs/targets/bist.py
 
-.. _Striping: https://github.com/m-labs/misoc/blob/master/misoclib/mem/litesata/example_designs/targets/striping.py
+.. _Striping: https://github.com/enjoy-digital/litesata/blob/master/example_designs/targets/striping.py
 
-.. _Mirroring: https://github.com/m-labs/misoc/blob/master/misoclib/mem/litesata/example_designs/targets/mirroring.py
+.. _Mirroring: https://github.com/enjoy-digital/litesata/blob/master/example_designs/targets/mirroring.py
