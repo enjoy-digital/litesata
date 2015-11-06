@@ -1,5 +1,5 @@
 from litesata.common import *
-from litesata.core.link import Scrambler
+from litesata.core.link.scrambler import Scrambler
 
 from migen.bank.description import *
 
