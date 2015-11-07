@@ -127,6 +127,8 @@ class LiteSATACommandRX(Module):
         self.to_tx = to_tx = Source(rx_to_tx)
         self.from_tx = from_tx = Sink(tx_to_rx)
 
+        self.d2h_status = Signal(8)
+
         # # #
 
         def test_type(name):
@@ -165,6 +167,9 @@ class LiteSATACommandRX(Module):
                 read_error.eq(1)
             )
 
+        update_d2h_status = Signal()
+        self.sync += If(update_d2h_status, self.d2h_status.eq(transport.source.status))
+
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
         fsm.act("IDLE",
@@ -190,6 +195,7 @@ class LiteSATACommandRX(Module):
                 If(test_type("DMA_ACTIVATE_D2H"),
                     is_dma_activate.eq(1),
                 ).Elif(test_type("REG_D2H"),
+                    update_d2h_status.eq(1),
                     set_d2h_error.eq(transport.source.status[reg_d2h_status["err"]]),
                     NextState("PRESENT_WRITE_RESPONSE")
                 )
@@ -213,6 +219,8 @@ class LiteSATACommandRX(Module):
                 If(test_type("DATA"),
                     NextState("PRESENT_READ_DATA")
                 ).Elif(test_type("REG_D2H"),
+                    update_d2h_status.eq(1),
+                    set_d2h_error.eq(transport.source.status[reg_d2h_status["err"]]),
                     NextState("PRESENT_READ_RESPONSE")
                 )
             )
