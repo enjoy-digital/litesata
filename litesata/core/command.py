@@ -41,7 +41,8 @@ class LiteSATACommandTX(Module):
         is_identify = Signal()
 
         self.fsm = fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
+        timeout = WaitTimer(int(200*1e6/10)) # 100ms with 200MHz clk
+        self.submodules += InsertReset(fsm), timeout
         fsm.act("IDLE",
             sink.ack.eq(0),
             If(sink.stb & sink.sop,
@@ -50,6 +51,10 @@ class LiteSATACommandTX(Module):
                 sink.ack.eq(1)
             )
         )
+        self.comb += [
+            timeout.wait.eq(~fsm.ongoing("IDLE")),
+            fsm.reset.eq(timeout.done)
+        ]
         self.sync += \
             If(fsm.ongoing("IDLE"),
                 is_write.eq(sink.write),
@@ -171,7 +176,8 @@ class LiteSATACommandRX(Module):
         self.sync += If(update_d2h_status, self.d2h_status.eq(transport.source.status))
 
         self.fsm = fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
+        timeout = WaitTimer(int(200*1e6/10)) # 100ms with 200MHz clk
+        self.submodules += InsertReset(fsm), timeout
         fsm.act("IDLE",
             dwords_counter.reset.eq(1),
             transport.source.ack.eq(1),
@@ -185,6 +191,10 @@ class LiteSATACommandRX(Module):
                 NextState("WAIT_PIO_SETUP_D2H"),
             )
         )
+        self.comb += [
+            timeout.wait.eq(~fsm.ongoing("IDLE")),
+            fsm.reset.eq(timeout.done)
+        ]  
         self.sync += \
             If(fsm.ongoing("IDLE"),
                 is_identify.eq(from_tx.identify)
