@@ -1,27 +1,21 @@
 import math
 
-from migen.fhdl.std import *
+from migen import *
 from migen.fhdl.decorators import ModuleTransformer
 from migen.genlib.resetsync import *
-from migen.genlib.fsm import *
-from migen.genlib.record import *
-from migen.genlib.misc import chooser, optree, WaitTimer
-from migen.genlib.cdc import *
-from migen.flow.actor import *
-from migen.flow.plumbing import Multiplexer, Demultiplexer
-from migen.actorlib.fifo import *
-from migen.actorlib.structuring import Pipeline, Converter
-from migen.actorlib.packet import Buffer
-from migen.actorlib.misc import BufferizeEndpoints
-from migen.actorlib.packet import HeaderField, Header
 
+from migen.genlib.misc import chooser, WaitTimer
+from migen.genlib.cdc import *
+
+from litex.soc.interconnect.stream import *
+from litex.soc.interconnect.packet import *
 
 @ResetInserter()
 @CEInserter()
 class Counter(Module):
     def __init__(self, *args, increment=1, **kwargs):
         self.value = Signal(*args, **kwargs)
-        self.width = flen(self.value)
+        self.width = len(self.value)
         self.sync += self.value.eq(self.value+increment)
 
 

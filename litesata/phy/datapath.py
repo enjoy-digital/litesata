@@ -32,7 +32,7 @@ class LiteSATAPHYDatapathRX(Module):
                               phy_description(32),
                               reverse=False)
         if trx_dw == 16: # when trx_dw=32, converter is just direct connection
-            converter = InsertReset(RenameClockDomains(converter, "sata_rx"))
+            converter = ResetInserter()(ClockDomainsRenamer("sata_rx")(converter))
         self.submodules += converter
         cases = {}
         for i in range(trx_dw//8):
@@ -56,7 +56,7 @@ class LiteSATAPHYDatapathRX(Module):
         #     due to the convertion ratio of 2, sys_clk need to be > sata_rx/2
         #     source destination is always able to accept data (ack always 1)
         fifo = AsyncFIFO(phy_description(32), 8)
-        fifo = RenameClockDomains(fifo, {"write": "sata_rx", "read": "sys"})
+        fifo = ClockDomainsRenamer({"write": "sata_rx", "read": "sys"})(fifo)
         self.submodules += fifo
         self.comb += [
             Record.connect(converter.source, fifo.sink),
@@ -78,7 +78,7 @@ class LiteSATAPHYDatapathTX(Module):
         #   requirements:
         #     source destination is always able to accept data (ack always 1)
         fifo = AsyncFIFO(phy_description(32), 8)
-        fifo = RenameClockDomains(fifo, {"write": "sys", "read": "sata_tx"})
+        fifo = ClockDomainsRenamer({"write": "sys", "read": "sata_tx"})(fifo)
         self.submodules += fifo
         self.comb += Record.connect(sink, fifo.sink)
 
@@ -86,7 +86,7 @@ class LiteSATAPHYDatapathTX(Module):
         converter = Converter(phy_description(32),
                               phy_description(trx_dw),
                               reverse=False)
-        converter = RenameClockDomains(converter, "sata_tx")
+        converter = ClockDomainsRenamer("sata_tx")(converter)
         self.submodules += converter
         self.comb += [
             Record.connect(fifo.source, converter.sink),

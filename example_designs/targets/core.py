@@ -1,11 +1,9 @@
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
-from mibuild.generic_platform import *
-from mibuild.xilinx.platform import XilinxPlatform
+from litex.build.generic_platform import *
+from litex.build.xilinx.platform import XilinxPlatform
 
 from targets import *
-
-from misoclib.soc import SoC
 
 from litesata.common import *
 from litesata.phy import LiteSATAPHY
@@ -68,8 +66,8 @@ class Core(Module):
                                        platform.request("sata", i),
                                        "sata_gen3",
                                        clk_freq)
-                sata_phy = RenameClockDomains(sata_phy, {"sata_rx": "sata_rx{}".format(str(i)),
-                                                         "sata_tx": "sata_tx{}".format(str(i))})
+                sata_phy = ClockDomainsRenamer({"sata_rx": "sata_rx{}".format(str(i)),
+                                                "sata_tx": "sata_tx{}".format(str(i))})(sata_phy)
                 setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
                 self.sata_phys.append(sata_phy)
 

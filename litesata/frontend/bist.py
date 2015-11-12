@@ -1,8 +1,7 @@
 from litesata.common import *
 from litesata.core.link import Scrambler
 
-from migen.bank.description import *
-
+from litex.soc.interconnect.csr import *
 
 class LiteSATABISTGenerator(Module):
     def __init__(self, user_port):
@@ -25,7 +24,7 @@ class LiteSATABISTGenerator(Module):
         counter = Counter(32)
         self.submodules += counter
 
-        scrambler = scrambler = InsertReset(Scrambler())
+        scrambler = scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler
         self.comb += [
             scrambler.reset.eq(counter.reset),
@@ -94,7 +93,7 @@ class LiteSATABISTChecker(Module):
         self.submodules += counter, error_counter
         self.comb += self.errors.eq(error_counter.value)
 
-        scrambler = InsertReset(Scrambler())
+        scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler
         self.comb += [
             scrambler.reset.eq(counter.reset),

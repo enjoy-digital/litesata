@@ -8,7 +8,7 @@ from test.common import *
 
 class TB(Module):
     def __init__(self, length):
-        self.submodules.scrambler = InsertReset(Scrambler())
+        self.submodules.scrambler = ResetInserter()(Scrambler())
         self.length = length
 
     def get_c_values(self, length):

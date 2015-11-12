@@ -1,8 +1,8 @@
 from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
-from misoclib.soc import SoC
-from misoclib.com.uart.bridge import UARTWishboneBridge
+from litex.soc.integration.soc_core import SoCCore
+from litex.soc.cores.uart.bridge import UARTWishboneBridge
 
 from litesata.common import *
 from litesata.phy import LiteSATAPHY
@@ -14,20 +14,20 @@ from litesata.frontend.bist import LiteSATABIST
 from targets.bist import CRG, StatusLeds
 
 
-class StripingSoC(SoC):
+class StripingSoC(SoCCore):
     default_platform = "kc705"
     csr_map = {
         "sata_bist": 16
     }
-    csr_map.update(SoC.csr_map)
+    csr_map.update(SoCCore.csr_map)
     def __init__(self, platform, revision="sata_gen3", trx_dw=16, nphys=4):
         self.nphys = nphys
         clk_freq = 200*1000000
-        SoC.__init__(self, platform, clk_freq,
-            cpu_type="none",
-            with_csr=True, csr_data_width=32,
+        SoCCore.__init__(self, platform, clk_freq,
+            cpu_type=None,
+            csr_data_width=32,
             with_uart=False,
-            with_identifier=True,
+            ident="LiteSATA example design",
             with_timer=False
         )
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))
@@ -43,8 +43,8 @@ class StripingSoC(SoC):
                                    revision,
                                    clk_freq,
                                    trx_dw)
-            sata_phy = RenameClockDomains(sata_phy, {"sata_rx": "sata_rx{}".format(str(i)),
-                                                     "sata_tx": "sata_tx{}".format(str(i))})
+            sata_phy = ClockDomainsRenamer({"sata_rx": "sata_rx{}".format(str(i)),
+                                            "sata_tx": "sata_tx{}".format(str(i))})(sata_phy) 
             setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
             self.sata_phys.append(sata_phy)
 

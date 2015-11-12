@@ -1,5 +1,5 @@
-from mibuild.generic_platform import *
-from mibuild.platforms import kc705
+from litex.build.generic_platform import *
+from litex.boards.platforms import kc705
 
 _sata_io = [
     ("sata_clocks", 0,

@@ -7,19 +7,30 @@ import subprocess
 import struct
 import importlib
 
-from mibuild.tools import write_to_file
-from migen.util.misc import autotype
-from migen.fhdl import verilog, edif
+from migen.fhdl import verilog
 from migen.fhdl.structure import _Fragment
-from migen.bank.description import CSRStatus
-from mibuild import tools
-from mibuild.xilinx.common import *
 
-from misoclib.soc import cpuif
+from litex.build.tools import write_to_file
+from litex.build.xilinx.common import *
+
+from litex.soc.integration import cpu_interface
 
 litesata_path = "../"
 sys.path.append(litesata_path) # XXX
+
 from litesata.common import *
+
+
+def autotype(s):
+    if s == "True":
+        return True
+    elif s == "False":
+        return False
+    try:
+        return int(s, 0)
+    except ValueError:
+        pass
+    return s
 
 
 def _import(default, name):
@@ -55,8 +66,6 @@ all             clean, build-csr-csv, build-bitstream, load-bitstream.
     parser.add_argument("action", nargs="+", help="specify an action")
 
     return parser.parse_args()
-
-# Note: misoclib need to be installed as a python library
 
 if __name__ == "__main__":
     args = _get_args()
@@ -142,7 +151,7 @@ System Clk: {} MHz (min: {} MHz)
         subprocess.call(["rm", "-rf", "build/*"])
 
     if actions["build-csr-csv"]:
-        csr_csv = cpuif.get_csr_csv(csr_regions)
+        csr_csv = cpu_interface.get_csr_csv(csr_regions)
         write_to_file(args.csr_csv, csr_csv)
 
     if actions["build-core"]:

@@ -33,7 +33,7 @@ class LiteSATAPHYCtrl(Module):
             )
         ]
 
-        self.fsm = fsm = InsertReset(FSM(reset_state="RESET"))
+        self.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.submodules += fsm
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
         fsm.act("RESET",

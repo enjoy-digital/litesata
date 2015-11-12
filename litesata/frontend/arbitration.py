@@ -63,7 +63,7 @@ class LiteSATAArbiter(Module):
 
 class LiteSATACrossbar(Module):
     def __init__(self, controller):
-        self.dw = flen(controller.sink.data)
+        self.dw = len(controller.sink.data)
         self.users = []
         self.master = LiteSATAMasterPort(self.dw)
         self.comb += [

@@ -20,7 +20,7 @@ class TB(Module):
         self.submodules.hdd = HDD(
                 link_debug=False, link_random_level=50,
                 transport_debug=False, transport_loopback=True)
-        self.submodules.link = InsertReset(LiteSATALink(self.hdd.phy, buffer_depth=512))
+        self.submodules.link = ResetInserter()(LiteSATALink(self.hdd.phy, buffer_depth=512))
 
         self.submodules.streamer = LinkStreamer()
         self.submodules.streamer_randomizer = Randomizer(link_description(32), level=50)

@@ -1,8 +1,8 @@
 from litesata.common import *
 from litesata.frontend.arbitration import LiteSATAUserPort
+from functools import reduce
+from operator import and_, or_
 
-from migen.actorlib.packet import Arbiter, Dispatcher, Status
-from migen.flow.plumbing import Multiplexer
 
 # striping
 
@@ -52,7 +52,7 @@ class LiteSATAStripingTX(Module):
         fsm.act("SPLIT",
             split.eq(1),
             [s.stb.eq(sink.stb & ~already_acked[i]) for i, s in enumerate(sources)],
-            sink.ack.eq(optree("&", [s.ack | already_acked[i] for i, s in enumerate(sources)])),
+            sink.ack.eq(reduce(and_, [s.ack | already_acked[i] for i, s in enumerate(sources)])),
             If(sink.stb & sink.eop & sink.ack,
                 NextState("IDLE")
             )
@@ -75,7 +75,7 @@ class LiteSATAStripingRX(Module):
         # # #
 
         sop = Signal()
-        self.comb += sop.eq(optree("&", [s.stb & s.sop for s in sinks]))
+        self.comb += sop.eq(reduce(and_, [s.stb & s.sop for s in sinks]))
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
@@ -96,8 +96,8 @@ class LiteSATAStripingRX(Module):
 
 
         fsm.act("COMBINE",
-            source.failed.eq(optree("|", [s.failed for s in sinks])), # XXX verify this is enough
-            source.stb.eq(optree("&", [s.stb for s in sinks])),
+            source.failed.eq(reduce(or_, [s.failed for s in sinks])), # XXX verify this is enough
+            source.stb.eq(reduce(and_, [s.stb for s in sinks])),
             [s.ack.eq(source.stb & source.ack) for s in sinks],
             If(source.stb & source.eop & source.ack,
                 NextState("IDLE")
@@ -123,7 +123,7 @@ class LiteSATAStriping(Module):
 
         # # #
         n = len(controllers)
-        dw = flen(controllers[0].sink.data)
+        dw = len(controllers[0].sink.data)
 
         self.submodules.tx = LiteSATAStripingTX(n, dw)
         self.submodules.rx = LiteSATAStripingRX(n, dw)
@@ -295,7 +295,7 @@ class LiteSATAMirroring(Module):
     """
     def __init__(self, controllers):
         n = len(controllers)
-        dw = flen(controllers[0].sink.data)
+        dw = len(controllers[0].sink.data)
         self.ports = [LiteSATAUserPort(dw) for i in range(n)]
 
         # # #

@@ -1,4 +1,6 @@
 from collections import OrderedDict
+from functools import reduce
+from operator import xor
 
 from litesata.common import *
 
@@ -69,11 +71,11 @@ class CRCEngine(Module):
             for t, n in curval[i]:
                 if t == "new":
                     xors += [new[n]]
-            self.comb += self.next[i].eq(optree("^", xors))
+            self.comb += self.next[i].eq(reduce(xor, xors))
 
 
-@DecorateModule(InsertReset)
-@DecorateModule(InsertCE)
+@ResetInserter()
+@CEInserter()
 class LiteSATACRC(Module):
     """SATA CRC
 
@@ -135,7 +137,7 @@ class CRCInserter(Module):
 
         # # #
 
-        dw = flen(sink.d)
+        dw = len(sink.d)
         crc = crc_class(dw)
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
@@ -211,13 +213,13 @@ class CRCChecker(Module):
 
         # # #
 
-        dw = flen(sink.d)
+        dw = len(sink.d)
         crc = crc_class(dw)
         self.submodules += crc
         ratio = crc.width//dw
 
         error = Signal()
-        fifo = InsertReset(SyncFIFO(layout, ratio + 1))
+        fifo = ResetInserter()(SyncFIFO(layout, ratio + 1))
         self.submodules += fifo
 
         fsm = FSM(reset_state="RESET")
@@ -280,7 +282,7 @@ class LiteSATACRCChecker(CRCChecker):
 
 # link scrambler
 
-@DecorateModule(InsertCE)
+@CEInserter()
 class Scrambler(Module):
     """SATA Scrambler
 
@@ -340,12 +342,12 @@ class Scrambler(Module):
 
         for n, coefs in enumerate(lfsr_coefs):
             eq = [context[i] for i in coefs]
-            self.comb += next_value[n].eq(optree("^", eq))
+            self.comb += next_value[n].eq(reduce(xor, eq))
 
         self.comb += self.value.eq(next_value)
 
 
-@DecorateModule(InsertReset)
+@ResetInserter()
 class LiteSATAScrambler(Module):
     def __init__(self, description):
         self.sink = sink = Sink(description)
@@ -400,7 +402,7 @@ class LiteSATACONTInserter(Module):
         )
 
         # scrambler
-        scrambler = InsertReset(Scrambler())
+        scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler
 
         # Datapath
