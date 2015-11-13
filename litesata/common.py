@@ -1,11 +1,11 @@
 import math
 
-from migen import *
-from migen.fhdl.decorators import ModuleTransformer
-from migen.genlib.resetsync import *
+from litex.gen import *
+from litex.gen.fhdl.decorators import ModuleTransformer
+from litex.gen.genlib.resetsync import *
 
-from migen.genlib.misc import chooser, WaitTimer
-from migen.genlib.cdc import *
+from litex.gen.genlib.misc import chooser, WaitTimer
+from litex.gen.genlib.cdc import *
 
 from litex.soc.interconnect.stream import *
 from litex.soc.interconnect.packet import *

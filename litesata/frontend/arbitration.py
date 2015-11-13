@@ -1,6 +1,6 @@
 from litesata.common import *
 
-from migen.genlib.roundrobin import *
+from litex.gen.genlib.roundrobin import *
 
 
 class LiteSATAMasterPort:

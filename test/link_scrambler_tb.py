@@ -47,6 +47,6 @@ class TB(Module):
         print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
 if __name__ == "__main__":
-    from migen.sim.generic import run_simulation
+    from litex.gen.sim.generic import run_simulation
     length = 8192
     run_simulation(TB(length), ncycles=length+100, vcd_name="my.vcd")

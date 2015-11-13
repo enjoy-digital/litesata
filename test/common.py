@@ -1,7 +1,7 @@
 import random
 import copy
 
-from migen.sim.generic import run_simulation
+from litex.gen.sim.generic import run_simulation
 
 from litesata.common import *
 
