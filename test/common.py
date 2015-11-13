@@ -1,5 +1,5 @@
 import random
-import copy
+from copy import deepcopy
 
 from litex.gen.sim.generic import run_simulation
 
@@ -21,8 +21,8 @@ def seed_to_data(seed, random=True):
 
 
 def check(p1, p2):
-    p1 = copy.deepcopy(p1)
-    p2 = copy.deepcopy(p2)
+    p1 = deepcopy(p1)
+    p2 = deepcopy(p2)
     if isinstance(p1, int):
         return 0, 1, int(p1 != p2)
     else:
@@ -59,7 +59,7 @@ class PacketStreamer(Module):
         self.source_data = 0
 
     def send(self, packet, blocking=True):
-        packet = copy.deepcopy(packet)
+        packet = deepcopy(packet)
         self.packets.append(packet)
         if blocking:
             while packet.done == 0:
