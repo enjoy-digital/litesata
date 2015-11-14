@@ -19,12 +19,12 @@ def _get_args():
 if __name__ == "__main__":
     args = _get_args()
     if args.bridge == "uart":
-        from misoclib.com.uart.software.wishbone import UARTWishboneBridgeDriver
+        from litex.soc.cores.uart.software.wishbone import UARTWishboneBridgeDriver
         port = args.port if not args.port.isdigit() else int(args.port)
         wb = UARTWishboneBridgeDriver(port, args.baudrate, "./csr.csv", int(args.busword), debug=False)
     elif args.bridge == "etherbone":
-        from misoclib.com.liteth.software.wishbone import LiteEthWishboneDriver
-        wb = LiteEthWishboneDriver(args.ip_address, int(args.udp_port), "./csr.csv", int(args.busword), debug=False)
+        from liteth.software.wishbone import LiteEthWishboneBridgeDriver
+        wb = LiteEthWishboneBridgeDriver(args.ip_address, int(args.udp_port), "./csr.csv", int(args.busword), debug=False)
     else:
         ValueError("Invalid bridge {}".format(args.bridge))
 

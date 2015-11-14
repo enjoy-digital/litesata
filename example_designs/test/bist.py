@@ -2,7 +2,7 @@ import time
 import argparse
 import random as rand
 from collections import OrderedDict
-from misoclib.com.uart.software.wishbone import UARTWishboneBridgeDriver
+from litex.soc.cores.uart.software.wishbone import UARTWishboneBridgeDriver
 
 KB = 1024
 MB = 1024*KB
