@@ -1,3 +1,4 @@
+from litex.gen.fhdl.specials import Keep
 from litex.gen.genlib.cdc import *
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
@@ -46,7 +47,7 @@ class MirroringSoC(SoCCore):
                                    clk_freq,
                                    trx_dw)
             sata_phy = ClockDomainsRenamer({"sata_rx": "sata_rx{}".format(str(i)),
-                                            "sata_tx": "sata_tx{}".format(str(i))})(sata_phy) 
+                                            "sata_tx": "sata_tx{}".format(str(i))})(sata_phy)
             setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
             self.sata_phys.append(sata_phy)
 
@@ -81,6 +82,10 @@ create_clock -name sys_clk -period 5 [get_nets sys_clk]
 """)
 
         for i in range(len(self.sata_phys)):
+            self.specials += [
+                Keep(ClockSignal("sata_rx{}".format(str(i)))),
+                Keep(ClockSignal("sata_tx{}".format(str(i))))
+            ]
             platform.add_platform_command("""
 create_clock -name {sata_rx_clk} -period {sata_clk_period} [get_nets {sata_rx_clk}]
 create_clock -name {sata_tx_clk} -period {sata_clk_period} [get_nets {sata_tx_clk}]

@@ -1,3 +1,4 @@
+from litex.gen.fhdl.specials import Keep
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.build.generic_platform import *
@@ -56,6 +57,11 @@ class Core(Module):
                 # BIST
                 self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar)
 
+            self.specials += [
+                Keep(ClockSignal("sata_rx")),
+                Keep(ClockSignal("sata_tx"))
+            ]
+
         elif design == "striping":
             self.nphys = 4
             # SATA PHYs
@@ -82,8 +88,15 @@ class Core(Module):
             self.submodules.sata_striping = LiteSATAStriping(self.sata_cores)
             self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_striping)
 
+            for i in range(len(self.sata_phys)):
+                self.specials += [
+                    Keep(ClockSignal("sata_rx{}".format(str(i)))),
+                    Keep(ClockSignal("sata_tx{}".format(str(i))))
+                ]
+
         else:
             ValueError("Unknown design " + design)
+
 
         # Get user ports from crossbar
         self.user_ports = self.sata_crossbar.get_ports(nports, ports_dw)

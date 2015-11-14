@@ -1,4 +1,5 @@
 from litex.gen.genlib.cdc import *
+from litex.gen.fhdl.specials import Keep
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.soc.integration.soc_core import SoCCore
@@ -107,6 +108,10 @@ class BISTSoC(SoCCore):
         # Status Leds
         self.submodules.leds = StatusLeds(platform, self.sata_phy)
 
+        self.specials += [
+            Keep(ClockSignal("sata_rx")),
+            Keep(ClockSignal("sata_tx"))
+        ]
         platform.add_platform_command("""
 create_clock -name sys_clk -period 5 [get_nets sys_clk]
 
