@@ -24,10 +24,10 @@ class Timer:
 
 
 class LiteSATABISTUnitDriver:
-    def __init__(self, regs, name):
+    def __init__(self, regs, constants, name):
         self.regs = regs
         self.name = name
-        self.frequency = regs.identifier_frequency.read()
+        self.frequency = constants.system_clock_frequency
         self.time = 0
         for s in ["start", "sector", "count", "loops", "random", "done", "aborted", "errors", "cycles"]:
             setattr(self, s, getattr(regs, name + "_" + s))
@@ -59,17 +59,17 @@ class LiteSATABISTUnitDriver:
 
 
 class LiteSATABISTGeneratorDriver(LiteSATABISTUnitDriver):
-    def __init__(self, regs, name):
-        LiteSATABISTUnitDriver.__init__(self, regs, name + "_generator")
+    def __init__(self, regs, constants, name):
+        LiteSATABISTUnitDriver.__init__(self, regs, constants, name + "_generator")
 
 
 class LiteSATABISTCheckerDriver(LiteSATABISTUnitDriver):
-    def __init__(self, regs, name):
-        LiteSATABISTUnitDriver.__init__(self, regs, name + "_checker")
+    def __init__(self, regs, constants, name):
+        LiteSATABISTUnitDriver.__init__(self, regs, constants,name + "_checker")
 
 
 class LiteSATABISTIdentifyDriver:
-    def __init__(self, regs, name):
+    def __init__(self, regs, constants, name):
         self.regs = regs
         self.name = name
         for s in ["start", "done", "data_width", "source_stb", "source_ack", "source_data"]:
@@ -152,9 +152,9 @@ if __name__ == "__main__":
     wb = UARTWishboneBridgeDriver(args.port, args.baudrate, "./csr.csv", int(args.busword), debug=False)
     wb.open()
     # # #
-    identify = LiteSATABISTIdentifyDriver(wb.regs, "sata_bist")
-    generator = LiteSATABISTGeneratorDriver(wb.regs, "sata_bist")
-    checker = LiteSATABISTCheckerDriver(wb.regs, "sata_bist")
+    identify = LiteSATABISTIdentifyDriver(wb.regs, wb.constants, "sata_bist")
+    generator = LiteSATABISTGeneratorDriver(wb.regs, wb.constants, "sata_bist")
+    checker = LiteSATABISTCheckerDriver(wb.regs, wb.constants, "sata_bist")
 
     identify.run()
     identify.hdd_info()

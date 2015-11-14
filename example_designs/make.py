@@ -96,6 +96,7 @@ if __name__ == "__main__":
     try:
         memory_regions = soc.get_memory_regions()
         csr_regions = soc.get_csr_regions()
+        constants = soc.get_constants()
     except:
         pass
 
@@ -151,7 +152,7 @@ System Clk: {} MHz (min: {} MHz)
         subprocess.call(["rm", "-rf", "build/*"])
 
     if actions["build-csr-csv"]:
-        csr_csv = cpu_interface.get_csr_csv(csr_regions)
+        csr_csv = cpu_interface.get_csr_csv(csr_regions, constants, memory_regions)
         write_to_file(args.csr_csv, csr_csv)
 
     if actions["build-core"]:
