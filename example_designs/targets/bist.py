@@ -195,4 +195,4 @@ class BISTSoCDevel(BISTSoC):
     def do_exit(self, vns):
         self.logic_analyzer.export(vns, "test/logic_analyzer.csv")
 
-default_subtarget = BISTSoC
+default_subtarget = BISTSoCDevel
