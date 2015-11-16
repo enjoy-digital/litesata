@@ -183,7 +183,9 @@ class LiteSATACommandRX(Module):
             transport.source.ack.eq(1),
             clr_d2h_error.eq(1),
             clr_read_error.eq(1),
-            If(from_tx.write,
+            If(timeout.done,
+                NextState("PRESENT_TIMEOUT_ERROR")
+            ).Elif(from_tx.write,
                 NextState("WAIT_WRITE_ACTIVATE_OR_REG_D2H")
             ).Elif(from_tx.read,
                 NextState("WAIT_READ_DATA_OR_REG_D2H"),
@@ -194,7 +196,7 @@ class LiteSATACommandRX(Module):
         self.comb += [
             timeout.wait.eq(~fsm.ongoing("IDLE")),
             fsm.reset.eq(timeout.done)
-        ]  
+        ]
         self.sync += \
             If(fsm.ongoing("IDLE"),
                 is_identify.eq(from_tx.identify)
@@ -290,6 +292,17 @@ class LiteSATACommandRX(Module):
             to_tx.dma_activate.eq(is_dma_activate),
             to_tx.d2h_error.eq(d2h_error)
         ]
+
+        fsm.act("PRESENT_TIMEOUT_ERROR",
+            source.stb.eq(1),
+            source.sop.eq(1),
+            source.eop.eq(1),
+            source.last.eq(1),
+            source.failed.eq(1),
+            If(source.stb & source.ack,
+                NextState("IDLE")
+            )
+        )
 
 # command
 
