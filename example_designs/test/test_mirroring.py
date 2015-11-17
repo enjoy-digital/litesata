@@ -1,5 +1,5 @@
 import sys
-from bist import *
+from test_bist import *
 
 from litex.soc.tools.remote import RemoteClient
 
@@ -7,9 +7,9 @@ identifys = []
 generators = []
 checkers = []
 for i in range(4):
-    identifys.append(LiteSATABISTIdentifyDriver(wb.regs, "sata_bist{:d}".format(i)))
-    generators.append(LiteSATABISTGeneratorDriver(wb.regs, "sata_bist{:d}".format(i)))
-    checkers.append(LiteSATABISTCheckerDriver(wb.regs, "sata_bist{:d}".format(i)))
+    identifys.append(LiteSATABISTIdentifyDriver(wb.regs, wb.constants, "sata_bist{:d}".format(i)))
+    generators.append(LiteSATABISTGeneratorDriver(wb.regs, wb.constants, "sata_bist{:d}".format(i)))
+    checkers.append(LiteSATABISTCheckerDriver(wb.regs, wb.constants, "sata_bist{:d}".format(i)))
 
 wb = RemoteClient()
 wb.open()
