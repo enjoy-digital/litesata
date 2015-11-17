@@ -41,7 +41,7 @@ class LiteSATACommandTX(Module):
         is_identify = Signal()
 
         self.fsm = fsm = FSM(reset_state="IDLE")
-        timeout = WaitTimer(int(200*1e6/10)) # 100ms with 200MHz clk
+        timeout = WaitTimer(int(200*1e6/1)) # 1s with 200MHz clk
         self.submodules += ResetInserter()(fsm), timeout
         fsm.act("IDLE",
             sink.ack.eq(0),
@@ -176,7 +176,7 @@ class LiteSATACommandRX(Module):
         self.sync += If(update_d2h_status, self.d2h_status.eq(transport.source.status))
 
         self.fsm = fsm = FSM(reset_state="IDLE")
-        timeout = WaitTimer(int(200*1e6/10)) # 100ms with 200MHz clk
+        timeout = WaitTimer(int(200*1e6/1)) # 1s with 200MHz clk
         self.submodules += ResetInserter()(fsm), timeout
         fsm.act("IDLE",
             dwords_counter.reset.eq(1),
