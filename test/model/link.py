@@ -74,6 +74,8 @@ class LinkTXPacket(LinkPacket):
     def encode(self):
         self.insert_crc()
         self.scramble()
+        if hasattr(self, "data_error_injection"):
+            self[-1] = ~self[-1] # inverse bits of last data
 
 
 class LinkLayer(Module):

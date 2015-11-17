@@ -24,6 +24,7 @@ class FIS:
             setattr(self, k, get_field_data(v, self.packet))
 
     def encode(self):
+        self.packet = [0]*len(self.packet)
         for k, v in self.description.items():
             self.packet[v.byte//4] |= (getattr(self, k) << v.offset)
 
@@ -117,6 +118,8 @@ class TransportLayer(Module):
     def send(self, fis):
         fis.encode()
         packet = LinkTXPacket(fis.packet)
+        if hasattr(fis, "data_error_injection"):
+            packet.data_error_injection = True
         self.link.tx_packets.append(packet)
         if self.debug and not self.loopback:
             print_transport(fis, self.n)

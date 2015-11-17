@@ -35,6 +35,9 @@ striping_tb:
 mirroring_tb:
 	$(CMD) mirroring_tb.py
 
+robustness_tb:
+	$(CMD) robustness_tb.py
+
 example_designs:
 	cd ../example_designs && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
 	cd ../example_designs && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
