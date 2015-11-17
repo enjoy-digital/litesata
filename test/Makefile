@@ -14,6 +14,7 @@ link_crc_tb:
 	$(CMD) link_crc_tb.py
 
 link_scrambler_tb: scrambler
+	$(CC) $(CFLAGS) $(INC) -o scrambler scrambler.c
 	$(CMD) link_scrambler_tb.py
 
 link_cont_tb:
@@ -33,9 +34,6 @@ striping_tb:
 
 mirroring_tb:
 	$(CMD) mirroring_tb.py
-
-scrambler: scrambler.c
-	$(CC) $(CFLAGS) $(INC) -o $@ $<
 
 example_designs:
 	cd ../example_designs && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
