@@ -525,8 +525,7 @@ class LiteSATALinkTX(Module):
                 cont.sink.stb.eq(1),
                 cont.sink.data.eq(self.from_rx.insert),
                 cont.sink.charisk.eq(0x0001),
-            ).
-            Elif(insert,
+            ).Elif(insert,
                 cont.sink.stb.eq(1),
                 cont.sink.data.eq(insert),
                 cont.sink.charisk.eq(0x0001),
@@ -535,9 +534,9 @@ class LiteSATALinkTX(Module):
                 cont.sink.data.eq(scrambler.source.d),
                 scrambler.source.ack.eq(cont.sink.ack),
                 cont.sink.charisk.eq(0)
-            )
+            ),
+            Record.connect(cont.source, phy.sink)
         ]
-        self.comb += Record.connect(cont.source, phy.sink)
 
         # FSM
         fsm.act("IDLE",
