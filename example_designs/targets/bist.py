@@ -10,6 +10,7 @@ from litesata.phy import LiteSATAPHY
 from litesata.core import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABIST
+from litesata.frontend.bist import LiteSATABISTRobustness, LiteSATABISTRobustnessCSR
 
 
 class CRG(Module):
@@ -82,7 +83,7 @@ class BISTSoC(SoCCore):
         "sata_bist": 16
     }
     csr_map.update(SoCCore.csr_map)
-    def __init__(self, platform, revision="sata_gen3", trx_dw=16):
+    def __init__(self, platform, revision="sata_gen3", trx_dw=16, with_bist_robustness=False):
         clk_freq = 200*1000000
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -103,7 +104,11 @@ class BISTSoC(SoCCore):
                                                trx_dw)
         self.submodules.sata_core = LiteSATACore(self.sata_phy)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
-        self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
+        if with_bist_robustness:
+            sata_bist = LiteSATABISTRobustness(self.sata_crossbar)
+            self.submodules.sata_bist = LiteSATABISTRobustnessCSR(sata_bist)
+        else:
+            self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
 
         # Status Leds
         self.submodules.leds = StatusLeds(platform, self.sata_phy)
@@ -195,4 +200,4 @@ class BISTSoCDevel(BISTSoC):
     def do_exit(self, vns):
         self.logic_analyzer.export(vns, "test/logic_analyzer.csv")
 
-default_subtarget = BISTSoCDevel
+default_subtarget = BISTSoC

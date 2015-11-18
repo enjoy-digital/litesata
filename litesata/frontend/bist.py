@@ -309,7 +309,8 @@ class LiteSATABIST(Module, AutoCSR):
 
 
 class LiteSATABISTRobustness(Module):
-    def __init__(self, crossbar, with_csr=False, fifo_depth=512):
+    def __init__(self, crossbar, fifo_depth=512):
+        self.crossbar = crossbar
         self.fifo_depth = fifo_depth
 
         # inputs
@@ -330,12 +331,8 @@ class LiteSATABISTRobustness(Module):
 
         generator = LiteSATABISTGenerator(crossbar.get_port())
         checker = LiteSATABISTChecker(crossbar.get_port())
-        identify = LiteSATABISTIdentify(crossbar.get_port())
-        if with_csr:
-        	identify = LiteSATABISTIdentifyCSR(identify)
         self.submodules.generator = generator
         self.submodules.checker = checker
-        self.submodules.identify = identify
 
          # fifo
         fifo_layout = [("sector", 48),
@@ -443,11 +440,14 @@ class LiteSATABISTRobustnessCSR(Module, AutoCSR):
 
         self.done = CSRStatus()
         self.loop_index = CSRStatus(16)
-        self.loop_count = CSSignal(16)
+        self.loop_count = CSRStatus(16)
 
         # # #
 
         self.submodules += bist_robustness
+
+        identify = LiteSATABISTIdentify(bist_robustness.crossbar.get_port())
+        self.submodules.identify = LiteSATABISTIdentifyCSR(identify)
 
         self.comb += [
             bist_robustness.sector.eq(self.sector.storage),
@@ -459,7 +459,6 @@ class LiteSATABISTRobustnessCSR(Module, AutoCSR):
             bist_robustness.start.eq(self.start.r & self.start.re),
 
             self.done.status.eq(bist_robustness.done),
-            self.loop_index.eq(bist_robustness.loop_index),
-            self.loop_count.eq(bist_robustness.loop_count)
-
+            self.loop_index.status.eq(bist_robustness.loop_index),
+            self.loop_count.status.eq(bist_robustness.loop_count)
         ]
