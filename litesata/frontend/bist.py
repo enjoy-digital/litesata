@@ -306,3 +306,160 @@ class LiteSATABIST(Module, AutoCSR):
         self.submodules.generator = generator
         self.submodules.checker = checker
         self.submodules.identify = identify
+
+
+class LiteSATABISTRobustness(Module):
+    def __init__(self, crossbar, with_csr=False, fifo_depth=512):
+        self.fifo_depth = fifo_depth
+
+        # inputs
+        self.sector = Signal(48)
+        self.count = Signal(16)
+        self.write_read_n = Signal()
+        self.loop_prog_n = Signal()
+        self.we = Signal()
+        self.flush = Signal()
+        self.start = Signal()
+
+        # outputs
+        self.done = Signal()
+        self.loop_index = Signal(16)
+        self.loop_count = Signal(16)
+
+        # # #
+
+        generator = LiteSATABISTGenerator(crossbar.get_port())
+        checker = LiteSATABISTChecker(crossbar.get_port())
+        identify = LiteSATABISTIdentify(crossbar.get_port())
+        if with_csr:
+        	identify = LiteSATABISTIdentifyCSR(identify)
+        self.submodules.generator = generator
+        self.submodules.checker = checker
+        self.submodules.identify = identify
+
+         # fifo
+        fifo_layout = [("sector", 48),
+                       ("count", 16),
+                       ("write_read_n", 1),
+                       ("start", 1)]
+        fifo = SyncFIFO(fifo_layout, fifo_depth)
+        self.submodules += ResetInserter()(fifo)
+        self.comb += fifo.reset.eq(self.flush)
+
+        # fifo write path
+        self.sync += [
+            # in "loop" mode, each data read from the fifo is
+            # written back
+            If(self.loop_prog_n,
+                fifo.sink.sector.eq(fifo.source.sector),
+                fifo.sink.count.eq(fifo.source.count),
+                fifo.sink.write_read_n.eq(fifo.source.write_read_n),
+                fifo.sink.start.eq(fifo.source.start),
+                fifo.sink.stb.eq(fifo.source.ack)
+            # in "program" mode, fifo input is connected
+            # to inputs
+            ).Else(
+                fifo.sink.sector.eq(self.sector),
+                fifo.sink.count.eq(self.count),
+                fifo.sink.write_read_n.eq(self.write_read_n),
+                fifo.sink.start.eq(~fifo.source.stb),
+                fifo.sink.stb.eq(self.we)
+            )
+        ]
+
+        # fifo read path
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+            self.done.eq(1),
+            If(self.start,
+                NextState("CHECK")
+            )
+        )
+        fsm.act("CHECK",
+            If(fifo.source.stb,
+                If(fifo.source.write_read_n,
+                    NextState("WRITE_START")
+                ).Else(
+                    NextState("READ_START")
+                )
+            ).Else(
+                NextState("IDLE")
+            )
+        )
+        self.comb += [
+            generator.sector.eq(fifo.source.sector),
+            generator.count.eq(fifo.source.count)
+        ]
+        fsm.act("WRITE_START",
+            generator.start.eq(1),
+            NextState("WRITE_WAIT")
+        )
+        fsm.act("WRITE_WAIT",
+            If(generator.done,
+                fifo.source.ack.eq(1),
+                NextState("CHECK")
+            )
+        )
+        self.comb += [
+            checker.sector.eq(fifo.source.sector),
+            checker.count.eq(fifo.source.count),
+        ]
+        fsm.act("READ_START",
+            checker.start.eq(1),
+            NextState("READ_WAIT")
+        )
+        fsm.act("READ_WAIT",
+            If(checker.done,
+                fifo.source.ack.eq(1),
+                NextState("CHECK")
+            )
+        )
+
+        # loop_index, loop_count
+        # used by the for synchronization in "loop" mode
+        self.sync += \
+            If(self.flush,
+                self.loop_index.eq(0),
+                self.loop_count.eq(0),
+            ).Elif(fifo.source.stb & fifo.source.ack,
+                If(fifo.source.start,
+                    self.loop_index.eq(0),
+                    self.loop_count.eq(self.loop_count + 1)
+                ).Else(
+                    self.loop_index.eq(self.loop_index + 1)
+                )
+            )
+
+
+class LiteSATABISTRobustnessCSR(Module, AutoCSR):
+    def __init__(self, bist_robustness):
+        self.sector = CSRStorage(48)
+        self.count = CSRStorage(16)
+        self.write_read_n = CSRStorage()
+        self.loop_prog_n = CSRStorage()
+        self.we = CSR()
+        self.flush = CSR()
+        self.start = CSR()
+
+        self.done = CSRStatus()
+        self.loop_index = CSRStatus(16)
+        self.loop_count = CSSignal(16)
+
+        # # #
+
+        self.submodules += bist_robustness
+
+        self.comb += [
+            bist_robustness.sector.eq(self.sector.storage),
+            bist_robustness.count.eq(self.count.storage),
+            bist_robustness.write_read_n.eq(self.write_read_n.storage),
+            bist_robustness.loop_prog_n.eq(self.loop_prog_n.storage),
+            bist_robustness.we.eq(self.we.r & self.we.re),
+            bist_robustness.flush.eq(self.flush.r & self.flush.re),
+            bist_robustness.start.eq(self.start.r & self.start.re),
+
+            self.done.status.eq(bist_robustness.done),
+            self.loop_index.eq(bist_robustness.loop_index),
+            self.loop_count.eq(bist_robustness.loop_count)
+
+        ]

@@ -13,7 +13,7 @@ link_crc_tb:
 	$(CC) $(CFLAGS) $(INC) -o crc crc.c
 	$(CMD) link_crc_tb.py
 
-link_scrambler_tb: scrambler
+link_scrambler_tb:
 	$(CC) $(CFLAGS) $(INC) -o scrambler scrambler.c
 	$(CMD) link_scrambler_tb.py
 
@@ -26,8 +26,11 @@ link_tb:
 command_tb:
 	$(CMD) command_tb.py
 
-bist_tb: scrambler
+bist_tb:
 	$(CMD) bist_tb.py
+
+bist_robustness_tb:
+	$(CMD) bist_robustness_tb.py	
 
 striping_tb:
 	$(CMD) striping_tb.py
