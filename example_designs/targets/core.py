@@ -15,19 +15,19 @@ from litesata.frontend.bist import LiteSATABIST
 
 
 _io = [
-    ("sys_clk", 0, Pins("X")),
-    ("sys_rst", 1, Pins("X")),
+    ("sys_clk", 0, Pins(1)),
+    ("sys_rst", 1, Pins(1)),
     ("sata_clocks", 0,
-        Subsignal("refclk_p", Pins("X")),
-        Subsignal("refclk_n", Pins("X"))
+        Subsignal("refclk_p", Pins(1)),
+        Subsignal("refclk_n", Pins(1))
     ),
 ]
 for i in range(4):
     _io.append(("sata", i,
-                   Subsignal("txp", Pins("X")),
-                   Subsignal("txn", Pins("X")),
-                   Subsignal("rxp", Pins("X")),
-                   Subsignal("rxn", Pins("X"))
+                   Subsignal("txp", Pins(1)),
+                   Subsignal("txn", Pins(1)),
+                   Subsignal("rxp", Pins(1)),
+                   Subsignal("rxn", Pins(1))
                 )
     )
 
