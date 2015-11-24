@@ -567,9 +567,9 @@ class LiteSATALinkTX(Module):
         fsm.act("COPY",
             copy.eq(1),
             If(self.from_rx.det == primitives["HOLD"],
-                insert.eq(primitives["HOLDA"]),
+                insert.eq(primitives["HOLDA"])
             ).Elif(~scrambler.source.stb,
-                insert.eq(primitives["HOLD"]),
+                insert.eq(primitives["HOLD"])
             ).Elif(scrambler.source.stb &
                    scrambler.source.eop &
                    scrambler.source.ack,
@@ -725,8 +725,8 @@ class LiteSATALinkRX(Module):
         self.comb += [
             self.to_tx.idle.eq(fsm.ongoing("IDLE")),
             self.to_tx.insert.eq(insert),
-            self.to_tx.det.eq(det)
         ]
+        self.sync += If(cont.source.stb, self.to_tx.det.eq(det))
 
 # link
 
