@@ -4,6 +4,8 @@ from operator import xor
 
 from litesata.common import *
 
+from litex.soc.interconnect.stream_packet import Buffer
+
 # link crc
 
 class CRCEngine(Module):

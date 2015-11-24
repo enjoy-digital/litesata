@@ -1,14 +1,9 @@
-import math
+from math import ceil
 
 from litex.gen import *
-from litex.gen.fhdl.decorators import ModuleTransformer
-from litex.gen.genlib.resetsync import *
-
-from litex.gen.genlib.misc import chooser, WaitTimer
-from litex.gen.genlib.cdc import *
 
 from litex.soc.interconnect.stream import *
-from litex.soc.interconnect.stream_packet import *
+from litex.soc.interconnect.stream_packet import Header, HeaderField
 
 @ResetInserter()
 @CEInserter()
@@ -270,7 +265,7 @@ logical_sector_size = 512  # constant since all HDDs use this
 
 
 def dwords2sectors(n):
-    return math.ceil(n*4/logical_sector_size)
+    return ceil(n*4/logical_sector_size)
 
 
 def sectors2dwords(n):

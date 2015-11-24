@@ -1,5 +1,7 @@
 from litesata.common import *
 
+from litex.gen.genlib.misc import WaitTimer
+
 
 class LiteSATAPHYCtrl(Module):
     def __init__(self, trx, crg, clk_freq):
@@ -156,4 +158,4 @@ class LiteSATAPHYCtrl(Module):
 
     def us(self, t):
         clk_period_us = 1000000/self.clk_freq
-        return math.ceil(t/clk_period_us)
+        return ceil(t/clk_period_us)

@@ -1,8 +1,10 @@
-from litesata.common import *
-from litesata.frontend.arbitration import LiteSATAUserPort
 from functools import reduce
 from operator import and_, or_
 
+from litesata.common import *
+from litesata.frontend.arbitration import LiteSATAUserPort
+
+from litex.soc.interconnect.stream_packet import Status, Arbiter, Dispatcher
 
 # striping
 

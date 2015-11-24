@@ -1,5 +1,8 @@
 from litesata.common import *
 
+from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from litex.gen.genlib.misc import WaitTimer
+
 
 class K7LiteSATAPHYCRG(Module):
     def __init__(self, clock_pads_or_refclk, pads, gtx, revision, clk_freq):
@@ -91,7 +94,7 @@ class K7LiteSATAPHYCRG(Module):
         # Configuration Reset
         #   After configuration, GTX's resets have to stay low for at least 500ns
         #   See AR43482
-        startup_cycles = math.ceil(500*clk_freq/1000000000)
+        startup_cycles = ceil(500*clk_freq/1000000000)
         startup_timer = WaitTimer(startup_cycles)
         self.submodules += startup_timer
         self.comb += startup_timer.wait.eq(~(self.tx_reset | self.rx_reset))
