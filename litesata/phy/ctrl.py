@@ -23,8 +23,15 @@ class LiteSATAPHYCtrl(Module):
 
         align_det = Signal()
         misalign_det = Signal()
-        non_align_counter = Counter(4)
-        self.submodules += non_align_counter
+        non_align_counter = Signal(4)
+        non_align_counter_reset = Signal()
+        non_align_counter_ce = Signal()
+        self.sync += \
+            If(non_align_counter_reset,
+                non_align_counter.eq(0)
+            ).Elif(non_align_counter_ce,
+                non_align_counter.eq(non_align_counter + 1)
+            )
 
         misalign_mask = 0b1010 if trx.dw == 16 else 0b1110
         self.comb +=  [
@@ -40,7 +47,7 @@ class LiteSATAPHYCtrl(Module):
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
         fsm.act("RESET",
             trx.tx_idle.eq(1),
-            non_align_counter.reset.eq(1),
+            non_align_counter_reset.eq(1),
             If(crg.ready,
                 NextState("COMINIT")
             )
@@ -119,12 +126,12 @@ class LiteSATAPHYCtrl(Module):
             source.charisk.eq(0b0001),
             If(sink.stb,
                If(sink.data[0:8] == 0x7C,
-                   non_align_counter.ce.eq(1)
+                   non_align_counter_ce.eq(1)
                ).Else(
-                   non_align_counter.reset.eq(1)
+                   non_align_counter_reset.eq(1)
                )
             ),
-            If(non_align_counter.value == 3,
+            If(non_align_counter == 3,
                 NextState("READY")
             )
         )

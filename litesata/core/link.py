@@ -374,8 +374,15 @@ class LiteSATACONTInserter(Module):
 
         # # #
 
-        counter = Counter(max=4)
-        self.submodules += counter
+        counter = Signal(max=4)
+        counter_reset = Signal()
+        counter_ce = Signal()
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + 1)
+            )
 
         is_data = Signal()
         was_data = Signal()
@@ -412,20 +419,20 @@ class LiteSATACONTInserter(Module):
             Record.connect(sink, source),
             If(sink.stb,
                 If(~change,
-                    counter.ce.eq(sink.ack & (counter.value != 2)),
+                    counter_ce.eq(sink.ack & (counter != 2)),
                     # insert CONT
-                    If(counter.value == 1,
+                    If(counter == 1,
                         source.charisk.eq(0b0001),
                         source.data.eq(primitives["CONT"])
                     # insert scrambled data for EMI
-                    ).Elif(counter.value == 2,
+                    ).Elif(counter == 2,
                         scrambler.ce.eq(sink.ack),
                         source.charisk.eq(0b0000),
                         source.data.eq(scrambler.value)
                     )
                 ).Else(
-                    counter.reset.eq(source.ack),
-                    If(counter.value == 2,
+                    counter_reset.eq(source.ack),
+                    If(counter == 2,
                         # Reinsert last primitive
                         If(is_data | (~is_data & was_hold),
                             source.stb.eq(1),

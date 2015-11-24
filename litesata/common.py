@@ -5,14 +5,6 @@ from litex.gen import *
 from litex.soc.interconnect.stream import *
 from litex.soc.interconnect.stream_packet import Header, HeaderField
 
-@ResetInserter()
-@CEInserter()
-class Counter(Module):
-    def __init__(self, *args, increment=1, **kwargs):
-        self.value = Signal(*args, **kwargs)
-        self.width = len(self.value)
-        self.sync += self.value.eq(self.value+increment)
-
 
 bitrates = {
     "sata_gen3": 6.0,

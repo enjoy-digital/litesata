@@ -16,10 +16,17 @@ class LiteSATATransportTX(Module):
                           fis_data_header.length)
         encoded_cmd = Signal(cmd_ndwords*32)
 
-        counter = Counter(max=cmd_ndwords+1)
-        self.submodules += counter
+        counter = Signal(max=cmd_ndwords+1)
+        counter_ce = Signal()
+        counter_reset = Signal()
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + 1)
+            )
 
-        cmd_len = Signal(counter.width)
+        cmd_len = Signal(len(counter))
         cmd_with_data = Signal()
 
         cmd_send = Signal()
@@ -36,7 +43,7 @@ class LiteSATATransportTX(Module):
         self.submodules += fsm
         fsm.act("IDLE",
             sink.ack.eq(0),
-            counter.reset.eq(1),
+            counter_reset.eq(1),
             update_fis_type.eq(1),
             If(sink.stb & sink.sop,
                 If(test_type_tx("REG_H2D"),
@@ -85,15 +92,15 @@ class LiteSATATransportTX(Module):
             cmd_cases[i] = [link.sink.d.eq(encoded_cmd[32*i:32*(i+1)])]
 
         self.comb += [
-            counter.ce.eq(sink.stb & link.sink.ack),
-            cmd_done.eq((counter.value == cmd_len) &
+            counter_ce.eq(sink.stb & link.sink.ack),
+            cmd_done.eq((counter == cmd_len) &
                         link.sink.stb &
                         link.sink.ack),
             If(cmd_send,
                 link.sink.stb.eq(sink.stb),
-                link.sink.sop.eq(counter.value == 0),
-                link.sink.eop.eq((counter.value == cmd_len) & ~cmd_with_data),
-                Case(counter.value, cmd_cases)
+                link.sink.sop.eq(counter == 0),
+                link.sink.eop.eq((counter == cmd_len) & ~cmd_with_data),
+                Case(counter, cmd_cases)
             ).Elif(data_send,
                 link.sink.stb.eq(sink.stb),
                 link.sink.sop.eq(0),
@@ -116,10 +123,17 @@ class LiteSATATransportRX(Module):
                           fis_data_header.length)
         encoded_cmd = Signal(cmd_ndwords*32)
 
-        counter = Counter(max=cmd_ndwords+1)
-        self.submodules += counter
+        counter = Signal(max=cmd_ndwords+1)
+        counter_ce = Signal()
+        counter_reset = Signal()
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + 1)
+            )
 
-        cmd_len = Signal(counter.width)
+        cmd_len = Signal(len(counter))
 
         cmd_receive = Signal()
         data_receive = Signal()
@@ -138,7 +152,7 @@ class LiteSATATransportRX(Module):
 
         fsm.act("IDLE",
             link.source.ack.eq(0),
-            counter.reset.eq(1),
+            counter_reset.eq(1),
             update_fis_type.eq(1),
             If(link.source.stb & link.source.sop,
                 If(test_type_rx("REG_D2H"),
@@ -225,13 +239,13 @@ class LiteSATATransportRX(Module):
 
         self.comb += \
             If(cmd_receive & link.source.stb,
-                counter.ce.eq(1)
+                counter_ce.eq(1)
             )
         self.sync += \
             If(cmd_receive,
-                Case(counter.value, cmd_cases),
+                Case(counter, cmd_cases),
             )
-        self.comb += cmd_done.eq((counter.value == cmd_len) & link.source.ack)
+        self.comb += cmd_done.eq((counter == cmd_len) & link.source.ack)
 
 # transport
 

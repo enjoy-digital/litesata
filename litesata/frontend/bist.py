@@ -21,41 +21,48 @@ class LiteSATABISTGenerator(Module):
 
         source, sink = user_port.sink, user_port.source
 
-        counter = Counter(32)
-        self.submodules += counter
+        counter = Signal(32)
+        counter_reset = Signal()
+        counter_ce = Signal()
+        self.sync += \
+        	If(counter_reset,
+        		counter.eq(0)
+        	).Elif(counter_ce,
+        		counter.eq(counter + 1)
+        	)
 
         scrambler = scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler
         self.comb += [
-            scrambler.reset.eq(counter.reset),
-            scrambler.ce.eq(counter.ce)
+            scrambler.reset.eq(counter_reset),
+            scrambler.ce.eq(counter_ce)
         ]
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
         fsm.act("IDLE",
             self.done.eq(1),
-            counter.reset.eq(1),
+            counter_reset.eq(1),
             If(self.start,
                 NextState("SEND_CMD_AND_DATA")
             )
         )
         self.comb += [
-            source.sop.eq(counter.value == 0),
-            source.eop.eq(counter.value == (logical_sector_size//4*self.count)-1),
+            source.sop.eq(counter == 0),
+            source.eop.eq(counter == (logical_sector_size//4*self.count)-1),
             source.write.eq(1),
             source.sector.eq(self.sector),
             source.count.eq(self.count*count_mult),
             If(self.random,
                 source.data.eq(Replicate(scrambler.value, n))
             ).Else(
-                source.data.eq(Replicate(counter.value, n))
+                source.data.eq(Replicate(counter, n))
             )
         ]
         fsm.act("SEND_CMD_AND_DATA",
             source.stb.eq(1),
             If(source.stb & source.ack,
-                counter.ce.eq(1),
+                counter_ce.eq(1),
                 If(source.eop,
                     NextState("WAIT_ACK")
                 )
@@ -88,25 +95,42 @@ class LiteSATABISTChecker(Module):
 
         source, sink = user_port.sink, user_port.source
 
-        counter = Counter(32)
-        error_counter = Counter(32)
-        self.submodules += counter, error_counter
-        self.comb += self.errors.eq(error_counter.value)
+        counter = Signal(32)
+        counter_ce = Signal()
+        counter_reset = Signal()
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + 1)
+            )
+
+        error_counter = Signal(32)
+        error_counter_ce = Signal()
+        error_counter_reset = Signal()
+        self.sync += \
+            If(error_counter_reset,
+                error_counter.eq(0)
+            ).Elif(error_counter_ce,
+                error_counter.eq(error_counter + 1)
+            )
+
+        self.comb += self.errors.eq(error_counter)
 
         scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler
         self.comb += [
-            scrambler.reset.eq(counter.reset),
-            scrambler.ce.eq(counter.ce)
+            scrambler.reset.eq(counter_reset),
+            scrambler.ce.eq(counter_ce)
         ]
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += self.fsm
         fsm.act("IDLE",
             self.done.eq(1),
-            counter.reset.eq(1),
+            counter_reset.eq(1),
             If(self.start,
-                error_counter.reset.eq(1),
+                error_counter_reset.eq(1),
                 NextState("SEND_CMD")
             )
         )
@@ -120,7 +144,7 @@ class LiteSATABISTChecker(Module):
         fsm.act("SEND_CMD",
             source.stb.eq(1),
             If(source.ack,
-                counter.reset.eq(1),
+                counter_reset.eq(1),
                 NextState("WAIT_ACK")
             )
         )
@@ -134,14 +158,14 @@ class LiteSATABISTChecker(Module):
             If(self.random,
                 expected_data.eq(Replicate(scrambler.value, n))
             ).Else(
-                expected_data.eq(Replicate(counter.value, n))
+                expected_data.eq(Replicate(counter, n))
             )
         fsm.act("RECEIVE_DATA",
             sink.ack.eq(1),
             If(sink.stb,
-                counter.ce.eq(1),
+                counter_ce.eq(1),
                 If(sink.data != expected_data,
-                    error_counter.ce.eq(~sink.last)
+                    error_counter_ce.eq(~sink.last)
                 ),
                 If(sink.eop,
                     If(sink.last,
@@ -186,17 +210,26 @@ class LiteSATABISTUnitCSR(Module, AutoCSR):
         ]
 
         self.fsm = fsm = FSM(reset_state="IDLE")
-        loop_counter = Counter(8)
-        self.submodules += fsm, loop_counter
+        self.submodules += fsm
+        loop_counter = Signal(8)
+        loop_counter_reset = Signal()
+        loop_counter_ce = Signal()
+        self.sync += \
+            If(loop_counter_reset,
+                loop_counter.eq(0)
+            ).Elif(loop_counter_ce,
+                loop_counter.eq(loop_counter + 1)
+            )
+
         fsm.act("IDLE",
             self._done.status.eq(1),
-            loop_counter.reset.eq(1),
+            loop_counter_reset.eq(1),
             If(start,
                 NextState("CHECK")
             )
         )
         fsm.act("CHECK",
-            If(loop_counter.value < loops,
+            If(loop_counter < loops,
                 NextState("START")
             ).Else(
                 NextState("IDLE")
@@ -208,17 +241,25 @@ class LiteSATABISTUnitCSR(Module, AutoCSR):
         )
         fsm.act("WAIT_DONE",
             If(bist_unit.done,
-                loop_counter.ce.eq(1),
+                loop_counter_ce.eq(1),
                 NextState("CHECK")
             )
         )
 
-        cycles_counter = Counter(32)
-        self.submodules += cycles_counter
+        cycles_counter = Signal(32)
+        cycles_counter_reset = Signal()
+        cycles_counter_ce = Signal()
+        self.sync += \
+            If(cycles_counter_reset,
+                cycles_counter.eq(0)
+            ).Elif(cycles_counter_ce,
+                cycles_counter.eq(cycles_counter + 1)
+            )
+
         self.sync += [
-            cycles_counter.reset.eq(start),
-            cycles_counter.ce.eq(~fsm.ongoing("IDLE")),
-            self._cycles.status.eq(cycles_counter.value)
+            cycles_counter_reset.eq(start),
+            cycles_counter_ce.eq(~fsm.ongoing("IDLE")),
+            self._cycles.status.eq(cycles_counter)
         ]
 
 

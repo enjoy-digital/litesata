@@ -33,8 +33,15 @@ class LiteSATACommandTX(Module):
             transport.sink.data.eq(sink.data)
         ]
 
-        dwords_counter = Counter(max=fis_max_dwords)
-        self.submodules += dwords_counter
+        dwords_counter = Signal(max=fis_max_dwords)
+        dwords_counter_reset = Signal()
+        dwords_counter_ce = Signal()
+        self.sync += \
+            If(dwords_counter_reset,
+                dwords_counter.eq(0)
+            ).Elif(dwords_counter_ce,
+                dwords_counter.eq(dwords_counter + 1)
+            )
 
         is_write = Signal()
         is_read = Signal()
@@ -72,7 +79,7 @@ class LiteSATACommandTX(Module):
             )
         )
         fsm.act("WAIT_DMA_ACTIVATE",
-            dwords_counter.reset.eq(1),
+            dwords_counter_reset.eq(1),
             If(from_rx.dma_activate,
                 NextState("SEND_DATA")
             ).Elif(from_rx.d2h_error,
@@ -81,18 +88,18 @@ class LiteSATACommandTX(Module):
             )
         )
         fsm.act("SEND_DATA",
-            dwords_counter.ce.eq(sink.stb & sink.ack),
+            dwords_counter_ce.eq(sink.stb & sink.ack),
 
             transport.sink.stb.eq(sink.stb),
-            transport.sink.sop.eq(dwords_counter.value == 0),
-            transport.sink.eop.eq((dwords_counter.value == (fis_max_dwords-1)) |
+            transport.sink.sop.eq(dwords_counter == 0),
+            transport.sink.eop.eq((dwords_counter == (fis_max_dwords-1)) |
                                   sink.eop),
 
             sink.ack.eq(transport.sink.ack),
             If(sink.stb & sink.ack,
                 If(sink.eop,
                     NextState("IDLE")
-                ).Elif(dwords_counter.value == (fis_max_dwords-1),
+                ).Elif(dwords_counter == (fis_max_dwords-1),
                     NextState("WAIT_DMA_ACTIVATE")
                 )
             )
@@ -137,15 +144,22 @@ class LiteSATACommandRX(Module):
         is_identify = Signal()
         is_dma_activate = Signal()
         read_ndwords = Signal(max=sectors2dwords(2**16))
-        dwords_counter = Counter(max=sectors2dwords(2**16))
-        self.submodules += dwords_counter
+        dwords_counter = Signal(max=sectors2dwords(2**16))
+        dwords_counter_reset = Signal()
+        dwords_counter_ce = Signal()
+        self.sync += \
+            If(dwords_counter_reset,
+                dwords_counter.eq(0)
+            ).Elif(dwords_counter_ce,
+                dwords_counter.eq(dwords_counter + 1)
+            )
         read_done = Signal()
 
         self.sync += \
             If(from_tx.read,
-                read_ndwords.eq(from_tx.count*sectors2dwords(1)-1)
+                read_ndwords.eq(from_tx.count*sectors2dwords(1) - 1)
             )
-        self.comb += read_done.eq(dwords_counter.value == read_ndwords)
+        self.comb += read_done.eq(dwords_counter == read_ndwords)
 
         d2h_error = Signal()
         clr_d2h_error = Signal()
@@ -173,7 +187,7 @@ class LiteSATACommandRX(Module):
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
         fsm.act("IDLE",
-            dwords_counter.reset.eq(1),
+            dwords_counter_reset.eq(1),
             transport.source.ack.eq(1),
             clr_d2h_error.eq(1),
             clr_read_error.eq(1),
@@ -253,7 +267,7 @@ class LiteSATACommandRX(Module):
             source.data.eq(transport.source.data),
             transport.source.ack.eq(source.ack),
             If(source.stb & source.ack,
-                dwords_counter.ce.eq(~read_done),
+                dwords_counter_ce.eq(~read_done),
                 If(source.eop,
                     If(is_identify,
                         NextState("IDLE")
