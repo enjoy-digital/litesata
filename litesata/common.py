@@ -104,7 +104,7 @@ fis_reg_d2h_header_fields = {
     "pm_port": HeaderField(0*4,  8, 4),
     "i":       HeaderField(0*4, 14, 1),
     "status":  HeaderField(0*4, 16, 8),
-    "error":   HeaderField(0*4, 24, 8),
+    "errors":  HeaderField(0*4, 24, 8),
 
     "lba_lsb": HeaderField(1*4, 0, 24),
     "device":  HeaderField(1*4, 24, 8),
@@ -133,7 +133,7 @@ fis_pio_setup_d2h_header_fields = {
     "d":              HeaderField(0*4, 13, 1),
     "i":              HeaderField(0*4, 14, 1),
     "status":         HeaderField(0*4, 16, 8),
-    "error":          HeaderField(0*4, 24, 8),
+    "errors":         HeaderField(0*4, 24, 8),
 
     "lba_lsb":        HeaderField(1*4, 0, 24),
 
