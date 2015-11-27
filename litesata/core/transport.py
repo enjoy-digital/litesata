@@ -58,7 +58,7 @@ class LiteSATATransportTX(Module):
             )
         )
         self.sync += \
-            If(update_fis_type, fis_type.eq(link.source.d[:8]))
+            If(update_fis_type, fis_type.eq(link.source.data[:8]))
 
         fsm.act("SEND_CTRL_CMD",
             fis_reg_h2d_header.encode(sink, encoded_cmd),
@@ -89,7 +89,7 @@ class LiteSATATransportTX(Module):
 
         cmd_cases = {}
         for i in range(cmd_ndwords):
-            cmd_cases[i] = [link.sink.d.eq(encoded_cmd[32*i:32*(i+1)])]
+            cmd_cases[i] = [link.sink.data.eq(encoded_cmd[32*i:32*(i+1)])]
 
         self.comb += [
             counter_ce.eq(sink.stb & link.sink.ack),
@@ -105,7 +105,7 @@ class LiteSATATransportTX(Module):
                 link.sink.stb.eq(sink.stb),
                 link.sink.sop.eq(0),
                 link.sink.eop.eq(sink.eop),
-                link.sink.d.eq(sink.data)
+                link.sink.data.eq(sink.data)
             )
         ]
 
@@ -141,7 +141,7 @@ class LiteSATATransportRX(Module):
         data_done = Signal()
 
         def test_type_rx(name):
-            return test_type(name, link.source.d[:8])
+            return test_type(name, link.source.data[:8])
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
@@ -171,7 +171,7 @@ class LiteSATATransportRX(Module):
             )
         )
         self.sync += \
-            If(update_fis_type, fis_type.eq(link.source.d[:8]))
+            If(update_fis_type, fis_type.eq(link.source.data[:8]))
 
         fsm.act("RECEIVE_CTRL_CMD",
             If(test_type("REG_D2H", fis_type),
@@ -217,7 +217,7 @@ class LiteSATATransportRX(Module):
             source.sop.eq(data_sop),
             source.eop.eq(link.source.eop),
             source.error.eq(link.source.error),
-            source.data.eq(link.source.d),
+            source.data.eq(link.source.data),
             link.source.ack.eq(source.ack),
             If(source.stb & source.eop & source.ack,
                 NextState("IDLE")
@@ -235,7 +235,7 @@ class LiteSATATransportRX(Module):
 
         cmd_cases = {}
         for i in range(cmd_ndwords):
-            cmd_cases[i] = [encoded_cmd[32*i:32*(i+1)].eq(link.source.d)]
+            cmd_cases[i] = [encoded_cmd[32*i:32*(i+1)].eq(link.source.data)]
 
         self.comb += \
             If(cmd_receive & link.source.stb,

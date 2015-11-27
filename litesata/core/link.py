@@ -31,7 +31,7 @@ class CRCEngine(Module):
         next CRC value.
     """
     def __init__(self, width, polynom):
-        self.d = Signal(width)
+        self.data = Signal(width)
         self.last = Signal(width)
         self.next = Signal(width)
 
@@ -55,7 +55,7 @@ class CRCEngine(Module):
             return r
 
         new = Signal(32)
-        self.comb += new.eq(self.last ^ self.d)
+        self.comb += new.eq(self.last ^ self.data)
 
         # compute and optimize CRC's LFSR
         curval = [[("new", i)] for i in range(width)]
@@ -96,7 +96,7 @@ class LiteSATACRC(Module):
     check = 0x00000000
 
     def __init__(self):
-        self.d = Signal(self.width)
+        self.data = Signal(self.width)
         self.value = Signal(self.width)
         self.error = Signal()
 
@@ -107,7 +107,7 @@ class LiteSATACRC(Module):
         reg_i = Signal(self.width, reset=self.init)
         self.sync += reg_i.eq(engine.next)
         self.comb += [
-            engine.d.eq(self.d),
+            engine.data.eq(self.data),
             engine.last.eq(reg_i),
 
             self.value.eq(reg_i),
@@ -153,7 +153,7 @@ class LiteSATACRCInserter(Module):
         )
         fsm.act("COPY",
             crc.ce.eq(sink.stb & source.ack),
-            crc.d.eq(sink.d),
+            crc.data.eq(sink.data),
             Record.connect(sink, source),
             source.eop.eq(0),
             If(sink.stb & sink.eop & source.ack,
@@ -163,7 +163,7 @@ class LiteSATACRCInserter(Module):
         fsm.act("INSERT",
             source.stb.eq(1),
             source.eop.eq(1),
-            source.d.eq(crc.value),
+            source.data.eq(crc.value),
             If(source.ack, NextState("IDLE"))
         )
         self.comb += self.busy.eq(~fsm.ongoing("IDLE"))
@@ -232,14 +232,14 @@ class LiteSATACRCChecker(Module):
             NextState("IDLE"),
         )
         fsm.act("IDLE",
-            crc.d.eq(sink.d),
+            crc.data.eq(sink.data),
             If(sink.stb & sink.sop & sink.ack,
                 crc.ce.eq(1),
                 NextState("COPY")
             )
         )
         fsm.act("COPY",
-            crc.d.eq(sink.d),
+            crc.data.eq(sink.data),
             If(sink.stb & sink.ack,
                 crc.ce.eq(1),
                 If(sink.eop,
@@ -329,7 +329,7 @@ class LiteSATAScrambler(Module):
         self.comb += [
             scrambler.ce.eq(sink.stb & sink.ack),
             Record.connect(sink, source),
-            source.d.eq(sink.d ^ scrambler.value)
+            source.data.eq(sink.data ^ scrambler.value)
         ]
 
 # link cont
@@ -508,7 +508,7 @@ class LiteSATALinkTX(Module):
                 cont.sink.charisk.eq(0x0001),
             ).Elif(copy,
                 cont.sink.stb.eq(scrambler.source.stb),
-                cont.sink.data.eq(scrambler.source.d),
+                cont.sink.data.eq(scrambler.source.data),
                 scrambler.source.ack.eq(cont.sink.ack),
                 cont.sink.charisk.eq(0)
             ),
@@ -640,7 +640,7 @@ class LiteSATALinkRX(Module):
         cont_source_data_d = Signal(32)
         self.sync += \
             If(cont.source.stb & (det == 0),
-                scrambler.sink.d.eq(cont.source.data)
+                scrambler.sink.data.eq(cont.source.data)
             )
 
         # FSM

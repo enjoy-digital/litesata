@@ -61,7 +61,7 @@ def phy_description(dw):
 
 def link_description(dw):
     layout = [
-        ("d", dw),
+        ("data", dw),
         ("error", 1)
     ]
     return EndpointDescription(layout, packetized=True)
