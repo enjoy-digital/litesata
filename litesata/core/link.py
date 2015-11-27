@@ -95,7 +95,7 @@ class LiteSATACRC(Module):
     init = 0x52325032
     check = 0x00000000
 
-    def __init__(self, dw=32):
+    def __init__(self):
         self.d = Signal(self.width)
         self.value = Signal(self.width)
         self.error = Signal()
@@ -115,8 +115,8 @@ class LiteSATACRC(Module):
         ]
 
 
-class CRCInserter(Module):
-    """CRC Inserter
+class LiteSATACRCInserter(Module):
+    """SATA CRC Inserter
 
     Append a CRC at the end of each packet.
 
@@ -132,15 +132,14 @@ class CRCInserter(Module):
     source : out
         Packets output with CRC.
     """
-    def __init__(self, crc_class, layout):
-        self.sink = sink = Sink(layout)
-        self.source = source = Source(layout)
+    def __init__(self, description):
+        self.sink = sink = Sink(description)
+        self.source = source = Source(description)
         self.busy = Signal()
 
         # # #
 
-        dw = len(sink.d)
-        crc = crc_class(dw)
+        crc = LiteSATACRC()
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
 
@@ -161,37 +160,17 @@ class CRCInserter(Module):
                 NextState("INSERT"),
             )
         )
-        ratio = crc.width//dw
-        if ratio > 1:
-            cnt = Signal(max=ratio, reset=ratio-1)
-            cnt_done = Signal()
-            fsm.act("INSERT",
-                source.stb.eq(1),
-                chooser(crc.value, cnt, source.d, reverse=True),
-                If(cnt_done,
-                    source.eop.eq(1),
-                    If(source.ack, NextState("IDLE"))
-                )
-            )
-            self.comb += cnt_done.eq(cnt == 0)
-            self.sync += \
-                If(fsm.ongoing("IDLE"),
-                    cnt.eq(cnt.reset)
-                ).Elif(fsm.ongoing("INSERT") & ~cnt_done,
-                    cnt.eq(cnt - source.ack)
-                )
-        else:
-            fsm.act("INSERT",
-                source.stb.eq(1),
-                source.eop.eq(1),
-                source.d.eq(crc.value),
-                If(source.ack, NextState("IDLE"))
-            )
+        fsm.act("INSERT",
+            source.stb.eq(1),
+            source.eop.eq(1),
+            source.d.eq(crc.value),
+            If(source.ack, NextState("IDLE"))
+        )
         self.comb += self.busy.eq(~fsm.ongoing("IDLE"))
 
 
-class CRCChecker(Module):
-    """CRC Checker
+class LiteSATACRCChecker(Module):
+    """SATA CRC Checker
 
     Check CRC at the end of each packet.
 
@@ -208,20 +187,18 @@ class CRCChecker(Module):
         Packets output without CRC and "error" set to 0
         on eop when CRC OK / set to 1 when CRC KO.
     """
-    def __init__(self, crc_class, layout):
-        self.sink = sink = Sink(layout)
-        self.source = source = Source(layout)
+    def __init__(self, description):
+        self.sink = sink = Sink(description)
+        self.source = source = Source(description)
         self.busy = Signal()
 
         # # #
 
-        dw = len(sink.d)
-        crc = crc_class(dw)
+        crc = LiteSATACRC()
         self.submodules += crc
-        ratio = crc.width//dw
 
         error = Signal()
-        fifo = ResetInserter()(SyncFIFO(layout, ratio + 1))
+        fifo = ResetInserter()(SyncFIFO(description, 2))
         self.submodules += fifo
 
         fsm = FSM(reset_state="RESET")
@@ -232,7 +209,7 @@ class CRCChecker(Module):
         fifo_full = Signal()
 
         self.comb += [
-            fifo_full.eq(fifo.level == ratio),
+            fifo_full.eq(fifo.level == 1),
             fifo_in.eq(sink.stb & (~fifo_full | fifo_out)),
             fifo_out.eq(source.stb & source.ack),
 
@@ -271,16 +248,6 @@ class CRCChecker(Module):
             )
         )
         self.comb += self.busy.eq(~fsm.ongoing("IDLE"))
-
-
-class LiteSATACRCInserter(CRCInserter):
-    def __init__(self, description):
-        CRCInserter.__init__(self, LiteSATACRC, description)
-
-
-class LiteSATACRCChecker(CRCChecker):
-    def __init__(self, description):
-        CRCChecker.__init__(self, LiteSATACRC, description)
 
 # link scrambler
 
@@ -743,7 +710,7 @@ class LiteSATALinkRX(Module):
         self.comb += [
             self.to_tx.idle.eq(fsm.ongoing("IDLE")),
             self.to_tx.insert.eq(insert),
-            self.to_tx.new.eq(cont.source.stb),
+            self.to_tx.valid.eq(cont.source.stb),
             self.to_tx.det.eq(det)
         ]
 
