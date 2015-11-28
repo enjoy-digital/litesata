@@ -26,7 +26,7 @@ class TB(Module):
 
     def gen_simulation(self, selfp):
         # init CRC
-        selfp.crc.d = 0
+        selfp.crc.data = 0
         selfp.crc.ce = 1
         selfp.crc.reset = 1
         yield
@@ -37,7 +37,7 @@ class TB(Module):
         for i in range(self.length):
             data = seed_to_data(i, self.random)
             datas.append(data)
-            selfp.crc.d = data
+            selfp.crc.data = data
             yield
 
         # log results

@@ -24,7 +24,7 @@ class FIS:
             setattr(self, k, get_field_data(v, self.packet))
 
     def encode(self):
-        self.packet = [0]*len(self.packet)
+        #self.packet = [0]*len(self.packet) # FIXME (needed for robustness_tb)
         for k, v in self.description.items():
             self.packet[v.byte//4] |= (getattr(self, k) << v.offset)
 

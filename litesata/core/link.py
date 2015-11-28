@@ -461,67 +461,53 @@ class LiteSATACONTRemover(Module):
 from_rx = [
     ("idle", 1),
     ("insert", 32),
-    ("valid", 1),
-    ("det", 32)
+    ("primitive_stb", 1),
+    ("primitive", 32)
 ]
 
 class LiteSATALinkTX(Module):
-    def __init__(self, phy):
-        self.sink = Sink(link_description(32))
+    def __init__(self):
+        self.sink = sink = Sink(link_description(32))
+        self.source = source = Source(phy_description(32))
         self.from_rx = Sink(from_rx)
 
         # # #
 
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
-
-        # insert CRC
+        # CRC / Scrambler
         crc = LiteSATACRCInserter(link_description(32))
-        self.submodules += crc
-
-        # scramble
         scrambler = LiteSATAScrambler(link_description(32))
-        self.submodules += scrambler
-
-        # connect CRC / scrambler
-        self.comb += [
-            Record.connect(self.sink, crc.sink),
-            Record.connect(crc.source, scrambler.sink)
-        ]
-
-        # inserter CONT and scrambled data between
-        # CONT and next primitive
-        cont = BufferizeEndpoints("sink")(LiteSATACONTInserter(phy_description(32)))
-        self.submodules += cont
+        pipeline = Pipeline(sink, crc, scrambler)
+        self.submodules += crc, scrambler, pipeline
 
         # datas / primitives mux
         insert = Signal(32)
         copy = Signal()
         self.comb += [
             If(self.from_rx.insert,
-                cont.sink.stb.eq(1),
-                cont.sink.data.eq(self.from_rx.insert),
-                cont.sink.charisk.eq(0x0001),
+                source.stb.eq(1),
+                source.data.eq(self.from_rx.insert),
+                source.charisk.eq(0x0001),
             ).Elif(insert,
-                cont.sink.stb.eq(1),
-                cont.sink.data.eq(insert),
-                cont.sink.charisk.eq(0x0001),
+                source.stb.eq(1),
+                source.data.eq(insert),
+                source.charisk.eq(0x0001),
             ).Elif(copy,
-                cont.sink.stb.eq(scrambler.source.stb),
-                cont.sink.data.eq(scrambler.source.data),
-                scrambler.source.ack.eq(cont.sink.ack),
-                cont.sink.charisk.eq(0)
-            ),
-            Record.connect(cont.source, phy.sink)
+                source.stb.eq(pipeline.source.stb),
+                source.data.eq(pipeline.source.data),
+                pipeline.source.ack.eq(source.ack),
+                source.charisk.eq(0)
+            )
         ]
 
         # FSM
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             scrambler.reset.eq(1),
             If(self.from_rx.idle,
                 insert.eq(primitives["SYNC"]),
-                If(scrambler.source.stb & scrambler.source.sop,
-                    If(self.from_rx.det == primitives["SYNC"],
+                If(pipeline.source.stb & pipeline.source.sop,
+                    If(self.from_rx.primitive_stb & 
+                       (self.from_rx.primitive == primitives["SYNC"]),
                         NextState("RDY")
                     )
                 )
@@ -531,99 +517,92 @@ class LiteSATALinkTX(Module):
             insert.eq(primitives["X_RDY"]),
             If(~self.from_rx.idle,
                 NextState("IDLE")
-            ).Elif(self.from_rx.det == primitives["R_RDY"],
+            ).Elif(self.from_rx.primitive_stb & 
+                   (self.from_rx.primitive == primitives["R_RDY"]),
                 NextState("SOF")
             )
         )
         fsm.act("SOF",
             insert.eq(primitives["SOF"]),
-            If(phy.sink.ack,
+            If(source.ack,
                 NextState("COPY")
             )
         )
         fsm.act("COPY",
             copy.eq(1),
-            If(self.from_rx.valid &
-               (self.from_rx.det == primitives["HOLD"]),
-               NextState("HOLDA")
-            ).Elif(~scrambler.source.stb,
-                insert.eq(primitives["HOLD"])
-            ).Elif(scrambler.source.stb &
-                   scrambler.source.eop &
-                   scrambler.source.ack,
+            If(pipeline.source.stb &
+               pipeline.source.eop &
+               pipeline.source.ack,
                 NextState("EOF")
+            ).Elif(self.from_rx.primitive_stb & 
+               (self.from_rx.primitive == primitives["HOLD"]),
+               NextState("HOLDA")
+            ).Elif(~pipeline.source.stb,
+                insert.eq(primitives["HOLD"])
             )
         )
         fsm.act("HOLDA",
             insert.eq(primitives["HOLDA"]),
-            If(self.from_rx.valid &
-               (self.from_rx.det != primitives["HOLD"]),
+            If(self.from_rx.primitive_stb & 
+               (self.from_rx.primitive == primitives["R_IP"]),
                 NextState("COPY")
             )
         )
         fsm.act("EOF",
             insert.eq(primitives["EOF"]),
-            If(phy.sink.ack,
+            If(source.ack,
                 NextState("WTRM")
             )
         )
         fsm.act("WTRM",
             insert.eq(primitives["WTRM"]),
-            If(self.from_rx.det == primitives["R_OK"],
-                NextState("IDLE")
-            ).Elif(self.from_rx.det == primitives["R_ERR"],
-                NextState("IDLE")
+            If(self.from_rx.primitive_stb,
+                If(self.from_rx.primitive == primitives["R_OK"],
+                    NextState("IDLE")
+                ).Elif(self.from_rx.primitive == primitives["R_ERR"],
+                    NextState("IDLE")
+                )
             )
         )
 
 # link rx
 
 class LiteSATALinkRX(Module):
-    def __init__(self, phy):
-        self.source = Source(link_description(32))
+    def __init__(self):
+        self.sink = sink = Sink(phy_description(32))
+        self.source = source = Source(link_description(32))
         self.hold = Signal()
         self.to_tx = Source(from_rx)
 
         # # #
 
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
-
-        # CONT remover
-        cont = BufferizeEndpoints("source")(LiteSATACONTRemover(phy_description(32)))
-        self.submodules += cont
-        self.comb += Record.connect(phy.source, cont.sink)
+        # always ack data from phy
+        self.comb += sink.ack.eq(1)
 
         # datas / primitives detection
         insert = Signal(32)
-        det = Signal(32)
-        self.comb += \
-            If(cont.source.stb & (cont.source.charisk == 0b0001),
-                det.eq(cont.source.data)
-            )
+        data_stb = Signal()
+        primitive_stb = Signal()
+        primitive = Signal(32)
+        self.comb += [
+            If(sink.stb,
+                data_stb.eq(sink.charisk == 0),
+                primitive_stb.eq(sink.charisk == 0b0001)
+            ),
+            primitive.eq(sink.data)
+        ]
 
-        # descrambler
-        scrambler = LiteSATAScrambler(link_description(32))
-        self.submodules += scrambler
-
-        # check CRC
+        # descrambler / CRC
+        descrambler = LiteSATAScrambler(link_description(32))
         crc = LiteSATACRCChecker(link_description(32))
-        self.submodules += crc
+        pipeline = Pipeline(descrambler, crc, source)
+        self.submodules += descrambler, crc, pipeline
 
-        idle = Signal()
-        copy = Signal()
-
+        # internal logic
         sop = Signal()
-        eop = Signal()
-        self.sync += \
-            If(idle,
-                sop.eq(1),
-            ).Elif(copy,
-                If(scrambler.sink.stb & scrambler.sink.ack,
-                    sop.eq(0)
-                )
-            )
-        self.comb += eop.eq(det == primitives["EOF"])
+        sop_clr = Signal()
+        sop_set = Signal()
+        self.sync += If(sop_clr, sop.eq(0)).Elif(sop_set, sop.eq(1))
 
         crc_error = Signal()
         self.sync += \
@@ -631,57 +610,53 @@ class LiteSATALinkRX(Module):
                 crc_error.eq(crc.source.error)
             )
 
-        # graph
-        self.comb += [
-            cont.source.ack.eq(1),
-            Record.connect(scrambler.source, crc.sink),
-            Record.connect(crc.source, self.source),
-        ]
-        cont_source_data_d = Signal(32)
-        self.sync += \
-            If(cont.source.stb & (det == 0),
-                scrambler.sink.data.eq(cont.source.data)
-            )
-
         # FSM
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            idle.eq(1),
-            scrambler.reset.eq(1),
-            If(det == primitives["X_RDY"],
+            descrambler.reset.eq(1),
+            If(primitive_stb & 
+               (primitive == primitives["X_RDY"]),
                 NextState("RDY")
             )
         )
         fsm.act("RDY",
             insert.eq(primitives["R_RDY"]),
-            If(det == primitives["SOF"],
+            If(primitive_stb &
+               (primitive == primitives["SOF"]),
                 NextState("WAIT_FIRST")
             )
         )
         fsm.act("WAIT_FIRST",
+            sop_set.eq(1),
             insert.eq(primitives["R_IP"]),
-            If(cont.source.stb & (det == 0),
+            If(data_stb,
                 NextState("COPY")
             )
         )
-        self.comb += [
-            scrambler.sink.sop.eq(sop),
-            scrambler.sink.eop.eq(eop)
-        ]
         fsm.act("COPY",
-            copy.eq(1),
-            scrambler.sink.stb.eq(cont.source.stb & ((det == 0) | eop)),
+            sop_clr.eq(data_stb),
+            pipeline.sink.stb.eq(data_stb),
+            pipeline.sink.sop.eq(sop),
             insert.eq(primitives["R_IP"]),
-            If(det == primitives["HOLD"],
-                insert.eq(primitives["HOLDA"])
-            ).Elif(det == primitives["EOF"],
-                NextState("WTRM")
+            If(primitive_stb,
+                If(primitive == primitives["HOLD"],
+                    insert.eq(primitives["HOLDA"])
+                ).Elif(primitive == primitives["EOF"],
+                    # 1 clock cycle latency
+                    pipeline.sink.stb.eq(1), 
+                    pipeline.sink.eop.eq(1),
+                    NextState("WTRM")
+                )
             ).Elif(self.hold,
                 insert.eq(primitives["HOLD"])
             )
         )
+        # 1 clock cycle latency
+        self.sync += If(data_stb, pipeline.sink.data.eq(sink.data))
         fsm.act("EOF",
             insert.eq(primitives["R_IP"]),
-            If(det == primitives["WTRM"],
+            If(primitive_stb &
+               (primitive == primitives["WTRM"]),
                 NextState("WTRM")
             )
         )
@@ -695,13 +670,15 @@ class LiteSATALinkRX(Module):
         )
         fsm.act("R_OK",
             insert.eq(primitives["R_OK"]),
-            If(det == primitives["SYNC"],
+            If(primitive_stb &
+               (primitive == primitives["SYNC"]),
                 NextState("IDLE")
             )
         )
         fsm.act("R_ERR",
             insert.eq(primitives["R_ERR"]),
-            If(det == primitives["SYNC"],
+            If(primitive_stb & 
+               (primitive == primitives["SYNC"]),
                 NextState("IDLE")
             )
         )
@@ -710,23 +687,28 @@ class LiteSATALinkRX(Module):
         self.comb += [
             self.to_tx.idle.eq(fsm.ongoing("IDLE")),
             self.to_tx.insert.eq(insert),
-            self.to_tx.valid.eq(cont.source.stb),
-            self.to_tx.det.eq(det)
+            self.to_tx.primitive_stb.eq(primitive_stb),
+            self.to_tx.primitive.eq(primitive)
         ]
 
 # link
 
 class LiteSATALink(Module):
     def __init__(self, phy, buffer_depth):
+        # tx
         self.submodules.tx_buffer = Buffer(link_description(32), buffer_depth)
-        self.submodules.tx = LiteSATALinkTX(phy)
-        self.submodules.rx = LiteSATALinkRX(phy)
+        self.submodules.tx = BufferizeEndpoints("source")(LiteSATALinkTX())
+        self.submodules.tx_cont = LiteSATACONTInserter(phy_description(32))
+        self.submodules.tx_pipeline = Pipeline(self.tx_buffer, self.tx, self.tx_cont, phy)
+
+        # rx
+        self.submodules.rx_cont = LiteSATACONTRemover(phy_description(32))
+        self.submodules.rx = BufferizeEndpoints("sink")(LiteSATALinkRX())
         self.submodules.rx_buffer = Buffer(link_description(32), buffer_depth,
                                                  almost_full=3*buffer_depth//4)
-        self.comb += [
-            Record.connect(self.tx_buffer.source, self.tx.sink),
-            Record.connect(self.rx.to_tx, self.tx.from_rx),
-            Record.connect(self.rx.source, self.rx_buffer.sink),
-            self.rx.hold.eq(self.rx_buffer.almost_full)
-        ]
-        self.sink, self.source = self.tx_buffer.sink, self.rx_buffer.source
+        self.comb += self.rx.hold.eq(self.rx_buffer.almost_full)
+        self.submodules.rx_pipeline = Pipeline(phy, self.rx_cont, self.rx, self.rx_buffer)
+
+        # rx --> tx
+        self.comb += Record.connect(self.rx.to_tx, self.tx.from_rx)
+        self.sink, self.source = self.tx_pipeline.sink, self.rx_pipeline.source

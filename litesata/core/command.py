@@ -134,6 +134,7 @@ class LiteSATACommandRX(Module):
         self.to_tx = to_tx = Source(rx_to_tx)
         self.from_tx = from_tx = Sink(tx_to_rx)
 
+        # debug
         self.d2h_status = Signal(8)
         self.d2h_errors = Signal(8)
 
