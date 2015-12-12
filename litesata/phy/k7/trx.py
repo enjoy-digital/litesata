@@ -714,7 +714,7 @@ class K7LiteSATAPHYTRX(Module):
                     i_RXPMARESET=0,
 
                 # Receive Ports - RX Margin Analysis ports
-                    i_RXLPMEN=0,
+                    i_RXLPMEN=1,
 
                 # Receive Ports - RX OOB Signaling ports
                     #o_RXCOMSASDET=,
