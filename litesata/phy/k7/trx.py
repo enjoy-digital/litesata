@@ -230,6 +230,12 @@ class K7LiteSATAPHYTRX(Module):
         self.qpllclk = Signal()
         self.qpllrefclk = Signal()
 
+    # OOB clock (75MHz)
+        oobclk = Signal()
+        self.specials += \
+            Instance("FDPE", p_INIT=1, i_CE=1,  i_PRE=0,
+                     i_C=self.gtrefclk0, i_D=~oobclk, o_Q=oobclk)
+
     # Instance
         gtxe2_channel_parameters = {
                 # Simulation-Only Attributes
@@ -337,7 +343,7 @@ class K7LiteSATAPHYTRX(Module):
                     "p_PCS_PCIE_EN": "FALSE",
 
                 # PCS Attributes
-                    "p_PCS_RSVD_ATTR": 0x100,
+                    "p_PCS_RSVD_ATTR": 0x108,
 
                 # RX Buffer Attributes
                     "p_RXBUF_ADDR_MODE": "FAST",
@@ -521,7 +527,7 @@ class K7LiteSATAPHYTRX(Module):
                     #o_TSTOUT=,
 
                 # Channel
-                    i_CLKRSVD=0,
+                    i_CLKRSVD=oobclk,
 
                 # Channel - Clocking Ports
                     i_GTGREFCLK=0,
