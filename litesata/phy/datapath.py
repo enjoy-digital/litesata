@@ -37,8 +37,8 @@ class LiteSATAPHYDatapathRX(Module):
         cases = {}
         for i in range(trx_dw//8):
             cases[2**i] = [
-                converter.sink.charisk.eq(sr_charisk[trx_dw//8-i:]),
-                converter.sink.data.eq(sr_data[trx_dw-8*i:])
+                converter.sink.charisk.eq(sr_charisk[trx_dw//8-i:2*trx_dw//8-i]),
+                converter.sink.data.eq(sr_data[trx_dw-8*i:2*trx_dw-8*i])
             ]
         self.comb += [
             converter.sink.stb.eq(sink.stb),
