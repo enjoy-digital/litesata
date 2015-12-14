@@ -52,6 +52,7 @@ class K7LiteSATAPHYTRX(Module):
         self.tx_comwake_ack = Signal()  #o
 
         self.rx_idle = Signal()         #o
+        self.rx_cdrhold = Signal()      #i
         self.rx_align = Signal()        #i
 
         self.rx_cominit_stb = Signal()  #o
@@ -586,7 +587,7 @@ class K7LiteSATAPHYTRX(Module):
 
                 # Receive Ports - CDR Ports
                     i_RXCDRFREQRESET=0,
-                    i_RXCDRHOLD=self.rxelecidle,
+                    i_RXCDRHOLD=self.rx_cdrhold,
                     #o_RXCDRLOCK=,
                     i_RXCDROVRDEN=0,
                     i_RXCDRRESET=0,

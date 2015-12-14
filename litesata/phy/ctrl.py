@@ -46,12 +46,15 @@ class LiteSATAPHYCtrl(Module):
         self.submodules += fsm
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
         fsm.act("RESET",
+            trx.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             crg.rx_reset.eq(1),
             crg.tx_reset.eq(1),
             NextState("AWAIT_CRG_RESET")
         )
         fsm.act("AWAIT_CRG_RESET",
             trx.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             non_align_counter_reset.eq(1),
             If(crg.ready,
                 NextState("COMINIT")
@@ -59,6 +62,7 @@ class LiteSATAPHYCtrl(Module):
         )
         fsm.act("COMINIT",
             trx.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             trx.tx_cominit_stb.eq(1),
             If(trx.tx_cominit_ack & ~trx.rx_cominit_stb,
                 NextState("AWAIT_COMINIT")
@@ -66,6 +70,7 @@ class LiteSATAPHYCtrl(Module):
         )
         fsm.act("AWAIT_COMINIT",
             trx.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             retry_timer.wait.eq(1),
             If(trx.rx_cominit_stb,
                 NextState("AWAIT_NO_COMINIT")
@@ -73,6 +78,7 @@ class LiteSATAPHYCtrl(Module):
         )
         fsm.act("AWAIT_NO_COMINIT",
             trx.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             retry_timer.wait.eq(1),
             If(~trx.rx_cominit_stb,
                 NextState("CALIBRATE")
@@ -80,10 +86,12 @@ class LiteSATAPHYCtrl(Module):
         )
         fsm.act("CALIBRATE",
             trx.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             NextState("COMWAKE"),
         )
         fsm.act("COMWAKE",
             trx.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             trx.tx_comwake_stb.eq(1),
             If(trx.tx_comwake_ack,
                 NextState("AWAIT_COMWAKE")
@@ -91,6 +99,7 @@ class LiteSATAPHYCtrl(Module):
         )
         fsm.act("AWAIT_COMWAKE",
             trx.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             retry_timer.wait.eq(1),
             If(trx.rx_comwake_stb,
                 NextState("AWAIT_NO_COMWAKE")
@@ -98,12 +107,13 @@ class LiteSATAPHYCtrl(Module):
         )
         fsm.act("AWAIT_NO_COMWAKE",
             trx.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             If(~trx.rx_comwake_stb,
                 NextState("AWAIT_NO_RX_IDLE")
             )
         )
         fsm.act("AWAIT_NO_RX_IDLE",
-            trx.tx_idle.eq(0),
+            trx.rx_cdrhold.eq(1),
             source.data.eq(0x4A4A4A4A),  # D10.2
             source.charisk.eq(0b0000),
             align_timer.wait.eq(1),
@@ -113,7 +123,6 @@ class LiteSATAPHYCtrl(Module):
             )
         )
         fsm.act("AWAIT_ALIGN",
-            trx.tx_idle.eq(0),
             source.data.eq(0x4A4A4A4A),  # D10.2
             source.charisk.eq(0b0000),
             align_timer.wait.eq(crg.ready),
@@ -122,7 +131,6 @@ class LiteSATAPHYCtrl(Module):
             )
         )
         fsm.act("SEND_ALIGN",
-            trx.tx_idle.eq(0),
             align_timer.wait.eq(1),
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
@@ -144,7 +152,6 @@ class LiteSATAPHYCtrl(Module):
         self.submodules += stability_timer
 
         fsm.act("READY",
-            trx.tx_idle.eq(0),
             source.data.eq(primitives["SYNC"]),
             source.charisk.eq(0b0001),
             stability_timer.wait.eq(1),
