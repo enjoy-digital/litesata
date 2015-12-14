@@ -46,6 +46,11 @@ class LiteSATAPHYCtrl(Module):
         self.submodules += fsm
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
         fsm.act("RESET",
+            crg.rx_reset.eq(1),
+            crg.tx_reset.eq(1),
+            NextState("AWAIT_CRG_RESET")
+        )
+        fsm.act("AWAIT_CRG_RESET",
             trx.tx_idle.eq(1),
             non_align_counter_reset.eq(1),
             If(crg.ready,
@@ -104,7 +109,6 @@ class LiteSATAPHYCtrl(Module):
             align_timer.wait.eq(1),
             If(~trx.rx_idle,
                 NextState("AWAIT_ALIGN"),
-                crg.tx_reset.eq(1),
                 crg.rx_reset.eq(1)
             )
         )
@@ -112,15 +116,13 @@ class LiteSATAPHYCtrl(Module):
             trx.tx_idle.eq(0),
             source.data.eq(0x4A4A4A4A),  # D10.2
             source.charisk.eq(0b0000),
-            trx.rx_align.eq(1),
-            align_timer.wait.eq(1),
-            If(align_det & ~trx.rx_idle,
+            align_timer.wait.eq(crg.ready),
+            If(crg.ready & align_det & ~trx.rx_idle,
                 NextState("SEND_ALIGN")
             )
         )
         fsm.act("SEND_ALIGN",
             trx.tx_idle.eq(0),
-            trx.rx_align.eq(1),
             align_timer.wait.eq(1),
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
@@ -143,7 +145,6 @@ class LiteSATAPHYCtrl(Module):
 
         fsm.act("READY",
             trx.tx_idle.eq(0),
-            trx.rx_align.eq(1),
             source.data.eq(primitives["SYNC"]),
             source.charisk.eq(0b0001),
             stability_timer.wait.eq(1),
