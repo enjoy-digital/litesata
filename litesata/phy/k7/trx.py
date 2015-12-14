@@ -121,6 +121,15 @@ class K7LiteSATAPHYTRX(Module):
         self.txcominit = Signal()
         self.txcomwake = Signal()
 
+        # DRP port
+        self.drpaddr = Signal(9)
+        self.drpclk  = Signal()
+        self.drpdi   = Signal(16)
+        self.drpdo   = Signal(16)
+        self.drpen   = Signal()
+        self.drprdy  = Signal()
+        self.drpwe   = Signal()
+
     # Config at startup
         div_config = {
             "sata_gen1": 4,
@@ -540,13 +549,13 @@ class K7LiteSATAPHYTRX(Module):
                     i_GTSOUTHREFCLK1=0,
 
                 # Channel - DRP Ports
-                    i_DRPADDR=0,
-                    i_DRPCLK=0,
-                    i_DRPDI=0,
-                    #o_DRPDO=,
-                    i_DRPEN=0,
-                    #o_DRPRDY=,
-                    i_DRPWE=0,
+                    i_DRPADDR=self.drpaddr,
+                    i_DRPCLK=self.drpclk,
+                    i_DRPDI=self.drpdi,
+                    o_DRPDO=self.drpdo,
+                    i_DRPEN=self.drpen,
+                    o_DRPRDY=self.drprdy,
+                    i_DRPWE=self.drpwe,
 
                 # Clocking Ports
                     #o_GTREFCLKMONITOR=,
