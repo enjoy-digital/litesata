@@ -130,6 +130,11 @@ class K7LiteSATAPHYTRX(Module):
         self.drprdy  = Signal()
         self.drpwe   = Signal()
 
+        # Power-down signals
+        self.cpllpd = Signal()
+        self.rxpd   = Signal()
+        self.txpd   = Signal()
+
     # Config at startup
         div_config = {
             "sata_gen1": 4,
@@ -148,7 +153,7 @@ class K7LiteSATAPHYTRX(Module):
 
     # Specific / Generic signals encoding/decoding
         self.comb += [
-            self.txelecidle.eq(self.tx_idle),
+            self.txelecidle.eq(self.tx_idle | self.txpd),
             self.tx_cominit_ack.eq(self.tx_cominit_stb & self.txcomfinish),
             self.tx_comwake_ack.eq(self.tx_comwake_stb & self.txcomfinish),
             self.rx_idle.eq(self.rxelecidle),
@@ -524,7 +529,7 @@ class K7LiteSATAPHYTRX(Module):
                     o_CPLLLOCK=self.cplllock,
                     i_CPLLLOCKDETCLK=0,
                     i_CPLLLOCKEN=1,
-                    i_CPLLPD=0,
+                    i_CPLLPD=self.cpllpd,
                     #o_CPLLREFCLKLOST=0,
                     i_CPLLREFCLKSEL=0b001,
                     i_CPLLRESET=self.cpllreset,
@@ -579,8 +584,8 @@ class K7LiteSATAPHYTRX(Module):
                     #o_RXVALID=,
 
                 # Power-Down Ports
-                    i_RXPD=0b00,
-                    i_TXPD=0b00,
+                    i_RXPD=Replicate(self.rxpd, 2),
+                    i_TXPD=Replicate(self.txpd, 2),
 
                 # RX 8B/10B Decoder Ports
                     i_SETERRSTATUS=0,
