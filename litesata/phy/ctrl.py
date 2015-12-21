@@ -109,24 +109,16 @@ class LiteSATAPHYCtrl(Module):
             trx.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             If(~trx.rx_comwake_stb,
-                NextState("AWAIT_NO_RX_IDLE")
+                NextState("AWAIT_ALIGN")
             )
         )
-        fsm.act("AWAIT_NO_RX_IDLE",
+        fsm.act("AWAIT_ALIGN",
             trx.rx_cdrhold.eq(1),
             source.data.eq(0x4A4A4A4A),  # D10.2
             source.charisk.eq(0b0000),
             align_timer.wait.eq(1),
-            If(~trx.rx_idle,
-                NextState("AWAIT_ALIGN"),
-                crg.rx_reset.eq(1)
-            )
-        )
-        fsm.act("AWAIT_ALIGN",
-            source.data.eq(0x4A4A4A4A),  # D10.2
-            source.charisk.eq(0b0000),
-            align_timer.wait.eq(crg.ready),
-            If(crg.ready & align_det & ~trx.rx_idle,
+            If(align_det & ~trx.rx_idle,
+                crg.rx_reset.eq(1),
                 NextState("SEND_ALIGN")
             )
         )
