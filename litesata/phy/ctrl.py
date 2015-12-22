@@ -138,9 +138,9 @@ class LiteSATAPHYCtrl(Module):
             )
         )
 
-        # wait alignement stability for 10ms before declaring ctrl is ready,
+        # wait alignement stability for 100ms before declaring ctrl is ready,
         # reset the RX part of the transceiver when misalignment is detected.
-        stability_timer = WaitTimer(10*clk_freq//1000)
+        stability_timer = WaitTimer(100*clk_freq//1000)
         self.submodules += stability_timer
 
         fsm.act("READY",
@@ -151,8 +151,8 @@ class LiteSATAPHYCtrl(Module):
             If(trx.rx_idle,
                 NextState("RESET"),
             ).Elif(self.misalign |
-                   trx.rxdisperr |
-                   trx.rxnotintable,
+                   (trx.rxdisperr != 0) |
+                   (trx.rxnotintable != 0),
                 crg.rx_reset.eq(1),
                 NextState("RESET_RX")
             )

@@ -57,8 +57,8 @@ class K7LiteSATAPHYTRX(Module):
         self.rx_cominit_stb = Signal()  #o
         self.rx_comwake_stb = Signal()  #o
 
-        self.rxdisperr = Signal()      #o 
-        self.rxnotintable = Signal()   #o
+        self.rxdisperr = Signal(dw//8)      #o 
+        self.rxnotintable = Signal(dw//8)   #o
 
         # datapath
         self.sink = Sink(phy_description(dw))
@@ -231,8 +231,8 @@ class K7LiteSATAPHYTRX(Module):
         rxcomwakedet = Signal()
         rxratedone = Signal()
         rxdlyresetdone = Signal()
-        rxdisperr = Signal()
-        rxnotintable = Signal()
+        rxdisperr = Signal(dw//8)
+        rxnotintable = Signal(dw//8)
 
         self.specials += [
             MultiReg(rxelecidle, rxelecidle_i, "sys"),
