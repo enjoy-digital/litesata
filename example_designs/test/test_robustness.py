@@ -26,17 +26,25 @@ class LiteSATABISTDriver:
                   "done", "loop_index", "loop_count"]:
             setattr(self, s, getattr(regs, name + "_" + s))
 
+    def get_sectors(self, loop, index):
+        loop_sectors = 0
+        current_sectors = 0
+        for i, access in enumerate(self.accesses):
+            loop_sectors += access.count
+            if i < index:
+                current_sectors += access.count
+        return loop*loop_sectors + current_sectors
+        
     def program(self, accesses):
         self.loop_prog_n.write(0)
         self.flush.write(1)
-        total_sectors = 0
+        self.accesses = accesses
         for access in accesses:
             self.sector.write(access.sector)
             self.count.write(access.count)
             self.write_read_n.write(access.write_read_n)
             self.we.write(1)
-            total_sectors += access.count
-        return total_sectors
+            time.sleep(0.001)
 
     def run(self, loops=0, blocking=True, debug=True):
         if loops:
@@ -48,7 +56,9 @@ class LiteSATABISTDriver:
                     if self.loop_count.read() > loops - 2:
                         self.loop_prog_n.write(0)
                 if debug:
-                  print("loop: {}, access {}".format(self.loop_count.read(), self.loop_index.read()))
+                    loop_count = self.loop_count.read()
+                    loop_index = self.loop_index.read()
+                    print("loop: {}, index {} / {:4.2f}GB".format(loop_count, loop_index, self.get_sectors(loop_count, loop_index)*logical_sector_size/1e9))
                 time.sleep(1)
 
 wb = RemoteClient()
@@ -67,10 +77,8 @@ for i in range(256):
                                    random.randint(0, max_count),  # count
                                    random.randint(0, 1)))         # read_write_n
 bist_loops = 16
-total_sectors = bist.program(bist_accesses)
-bist.run(bist_loops)
-
-print("total read/write transfer: {:d}GB".format(int(bist_loops*total_sectors*logical_sector_size/1e9)))
+bist.program(bist_accesses)
+bist.run(bist_loops, debug=True)
 
 # # #
 
