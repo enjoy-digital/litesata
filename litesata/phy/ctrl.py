@@ -150,9 +150,7 @@ class LiteSATAPHYCtrl(Module):
             self.ready.eq(stability_timer.done),
             If(trx.rx_idle,
                 NextState("RESET"),
-            ).Elif(self.misalign |
-                   (trx.rxdisperr != 0) |
-                   (trx.rxnotintable != 0),
+            ).Elif(self.misalign,
                 crg.rx_reset.eq(1),
                 NextState("RESET_RX")
             )
@@ -162,6 +160,7 @@ class LiteSATAPHYCtrl(Module):
                 NextState("READY")
             )
         )
+
 
 
     def us(self, t):
