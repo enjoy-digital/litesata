@@ -151,6 +151,8 @@ class LiteSATAPHYDatapath(Module):
         self.sink = sink = Sink(phy_description(32))
         self.source = source = Source(phy_description(32))
 
+        self.misalign = Signal()
+
         # # #
 
         # TX path
@@ -180,3 +182,5 @@ class LiteSATAPHYDatapath(Module):
             Record.connect(demux.source1, align_remover.sink),
             Record.connect(align_remover.source, source)
         ]
+
+        self.comb += self.misalign.eq(rx.source.stb & ((rx.source.charisk & 0xb1110) != 0))

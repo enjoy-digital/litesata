@@ -23,4 +23,5 @@ class LiteSATAPHY(Module):
 
         # Datapath
         self.submodules.datapath = LiteSATAPHYDatapath(self.trx, self.ctrl)
+        self.comb += self.ctrl.misalign.eq(self.datapath.misalign)
         self.sink, self.source = self.datapath.sink, self.datapath.source

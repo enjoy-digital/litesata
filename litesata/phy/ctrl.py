@@ -9,6 +9,7 @@ class LiteSATAPHYCtrl(Module):
         self.ready = Signal()
         self.sink = sink = Sink(phy_description(32))
         self.source = source = Source(phy_description(32))
+        self.misalign = Signal()
 
         # # #
 
@@ -33,12 +34,10 @@ class LiteSATAPHYCtrl(Module):
                 non_align_counter.eq(non_align_counter + 1)
             )
 
-        misalign_mask = 0b1010 if trx.dw == 16 else 0b1110
         self.comb +=  [
             If(sink.stb,
                 align_det.eq((self.sink.charisk == 0b0001) &
-                             (self.sink.data == primitives["ALIGN"])),
-                misalign_det.eq((self.sink.charisk & misalign_mask) != 0)
+                             (self.sink.data == primitives["ALIGN"]))
             )
         ]
 
@@ -126,7 +125,8 @@ class LiteSATAPHYCtrl(Module):
             align_timer.wait.eq(1),
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
-            If(sink.stb,
+            If(sink.stb & 
+			   (sink.charisk == 0b0001),
                If(sink.data[0:8] == 0x7C,
                    non_align_counter_ce.eq(1)
                ).Else(
@@ -138,9 +138,9 @@ class LiteSATAPHYCtrl(Module):
             )
         )
 
-        # wait alignement stability for 100ms before declaring ctrl is ready,
+        # wait alignement stability for 10ms before declaring ctrl is ready,
         # reset the RX part of the transceiver when misalignment is detected.
-        stability_timer = WaitTimer(100*clk_freq//1000)
+        stability_timer = WaitTimer(10*clk_freq//1000)
         self.submodules += stability_timer
 
         fsm.act("READY",
@@ -150,17 +150,18 @@ class LiteSATAPHYCtrl(Module):
             self.ready.eq(stability_timer.done),
             If(trx.rx_idle,
                 NextState("RESET"),
-            ).Elif(misalign_det,
+            ).Elif(self.misalign |
+                   trx.rxdisperr |
+                   trx.rxnotintable,
                 crg.rx_reset.eq(1),
-                NextState("REALIGN")
+                NextState("RESET_RX")
             )
         )
-        fsm.act("REALIGN",
+        fsm.act("RESET_RX",
             If(crg.ready,
                 NextState("READY")
             )
         )
-
 
 
     def us(self, t):

@@ -53,10 +53,12 @@ class K7LiteSATAPHYTRX(Module):
 
         self.rx_idle = Signal()         #o
         self.rx_cdrhold = Signal()      #i
-        self.rx_align = Signal()        #i
 
         self.rx_cominit_stb = Signal()  #o
         self.rx_comwake_stb = Signal()  #o
+
+        self.rxdisperr = Signal()      #o 
+        self.rxnotintable = Signal()   #o
 
         # datapath
         self.sink = Sink(phy_description(dw))
@@ -229,6 +231,8 @@ class K7LiteSATAPHYTRX(Module):
         rxcomwakedet = Signal()
         rxratedone = Signal()
         rxdlyresetdone = Signal()
+        rxdisperr = Signal()
+        rxnotintable = Signal()
 
         self.specials += [
             MultiReg(rxelecidle, rxelecidle_i, "sys"),
@@ -236,6 +240,8 @@ class K7LiteSATAPHYTRX(Module):
             MultiReg(rxcominitdet, self.rxcominitdet, "sys"),
             MultiReg(rxcomwakedet, self.rxcomwakedet, "sys"),
             MultiReg(rxdlyresetdone, self.rxdlyresetdone, "sys"),
+            MultiReg(rxdisperr, self.rxdisperr, "sys"),
+            MultiReg(rxnotintable, self.rxnotintable, "sys"),
         ]
 
         rxelecidle_filter = _LowPassFilter(rxelecidle_i, self.rxelecidle, 256)
@@ -633,8 +639,8 @@ class K7LiteSATAPHYTRX(Module):
                     i_RXDFEXYDOVRDEN=0,
 
                 # Receive Ports - RX 8B/10B Decoder Ports
-                    #o_RXDISPERR=,
-                    #o_RXNOTINTABLE=,
+                    o_RXDISPERR=rxdisperr,
+                    o_RXNOTINTABLE=rxnotintable,
 
                 # Receive Ports - RX AFE
                     i_GTXRXP=pads.rxp,
