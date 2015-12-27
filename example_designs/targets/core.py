@@ -15,8 +15,8 @@ from litesata.frontend.bist import LiteSATABIST
 
 
 _io = [
-    ("sys_clk", 0, Pins(1)),
-    ("sys_rst", 1, Pins(1)),
+    ("sys_clock", 0, Pins(1)),
+    ("sys_reset", 1, Pins(1)),
     ("sata_clocks", 0,
         Subsignal("refclk_p", Pins(1)),
         Subsignal("refclk_n", Pins(1))
@@ -30,7 +30,70 @@ for i in range(4):
                    Subsignal("rxn", Pins(1))
                 )
     )
+_io += [
+    # Ready pins
+    ("crg_ready",  0, Pins(4)), # FIXME
+    ("ctrl_ready", 0, Pins(4)), # FIXME
 
+    # Generator pins
+    ("generator", 0,
+        Subsignal("start",   Pins(1)),
+        Subsignal("sector",  Pins(48)),
+        Subsignal("count",   Pins(16)),
+        Subsignal("random",  Pins(1)),
+        Subsignal("done",    Pins(1)),
+        Subsignal("aborted", Pins(1)),
+        Subsignal("errors", Pins(32))
+    ),
+
+    # Checker pins
+    ("checker", 0,
+        Subsignal("start",   Pins(1)),
+        Subsignal("sector",  Pins(48)),
+        Subsignal("count",   Pins(16)),
+        Subsignal("random",  Pins(1)),
+        Subsignal("done",    Pins(1)),
+        Subsignal("aborted", Pins(1)),
+        Subsignal("errors",  Pins(32))
+    ),
+
+    # Identify pins
+    ("identify", 0,
+        Subsignal("start",       Pins(1)),
+        Subsignal("done",        Pins(1)),
+        Subsignal("source_stb",  Pins(1)),
+        Subsignal("source_ack",  Pins(1)),
+        Subsignal("source_data", Pins(32))
+    ),
+]
+
+# User Ports pins
+for i in range(2):
+    _io += [
+        ("user_port", i+1,
+            Subsignal("sink_stb",      Pins(1)),
+            Subsignal("sink_sop",      Pins(1)),
+            Subsignal("sink_eop",      Pins(1)),
+            Subsignal("sink_ack",      Pins(1)),
+            Subsignal("sink_write",    Pins(1)),
+            Subsignal("sink_read",     Pins(1)),
+            Subsignal("sink_identify", Pins(1)),
+            Subsignal("sink_sector",   Pins(48)),
+            Subsignal("sink_count",    Pins(16)),
+            Subsignal("sink_data",     Pins(128)), # FIXME
+
+            Subsignal("source_stb",      Pins(1)),
+            Subsignal("source_sop",      Pins(1)),
+            Subsignal("source_eop",      Pins(1)),
+            Subsignal("source_ack",      Pins(1)),
+            Subsignal("source_write",    Pins(1)),
+            Subsignal("source_read",     Pins(1)),
+            Subsignal("source_identify", Pins(1)),
+            Subsignal("source_last",     Pins(1)),
+            Subsignal("source_failed",   Pins(1)),
+            Subsignal("source_data",     Pins(128)), #FIXME
+        ),
+    ]
 
 class CorePlatform(XilinxPlatform):
     name = "core"
@@ -43,8 +106,14 @@ class CorePlatform(XilinxPlatform):
 
 class Core(Module):
     platform = CorePlatform()
-    def __init__(self, platform, design="base", clk_freq=200*1000000, nports=2, ports_dw=32):
+    def __init__(self, platform, design="base", clk_freq=200*1000000, nports=1, ports_dw=32):
         self.clk_freq = clk_freq
+
+        self.clock_domains.cd_sys = ClockDomain()
+        self.comb += [
+            self.cd_sys.clk.eq(platform.request("sys_clock")),
+            self.cd_sys.rst.eq(platform.request("sys_reset"))
+        ]
 
         if design == "base" or design == "bist":
             # SATA PHY/Core/frontend
@@ -56,6 +125,42 @@ class Core(Module):
             if design == "bist":
                 # BIST
                 self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar)
+                generator = self.sata_bist.generator
+                generator_pads = platform.request("generator")
+                self.comb += [
+                    generator.start.eq(generator_pads.start),
+                    generator.sector.eq(generator_pads.sector),
+                    generator.count.eq(generator_pads.count),
+                    generator.random.eq(generator_pads.random),
+
+                    generator_pads.done.eq(generator.done),
+                    generator_pads.aborted.eq(generator.aborted),
+                    generator_pads.errors.eq(generator.errors)
+                ]
+
+                checker = self.sata_bist.checker
+                checker_pads = platform.request("checker")
+                self.comb += [
+                    checker.start.eq(checker_pads.start),
+                    checker.sector.eq(checker_pads.sector),
+                    checker.count.eq(checker_pads.count),
+                    checker.random.eq(checker_pads.random),
+
+                    checker_pads.done.eq(checker.done),
+                    checker_pads.aborted.eq(checker.aborted),
+                    checker_pads.errors.eq(checker.errors),
+                ]
+
+                identify = self.sata_bist.identify
+                identify_pads = platform.request("identify")
+                self.comb += [
+                    identify.start.eq(identify_pads.start),
+                    identify_pads.done.eq(identify.done),
+
+                    identify_pads.source_stb.eq(identify.source.stb),
+                    identify_pads.source_data.eq(identify.source.data),
+                    identify.source.ack.eq(identify_pads.source_ack)
+                ]
 
             self.specials += [
                 Keep(ClockSignal("sata_rx")),
@@ -98,55 +203,43 @@ class Core(Module):
             ValueError("Unknown design " + design)
 
 
+        # CRG / Ctrl ready
+        crg_ready_pads = platform.request("crg_ready")
+        ctrl_ready_pads = platform.request("ctrl_ready")
+        for i, sata_phy in enumerate(self.sata_phys):
+            self.comb += [
+                crg_ready_pads[i].eq(sata_phy.crg.ready),
+                ctrl_ready_pads[i].eq(sata_phy.ctrl.ready)
+            ]
+
         # Get user ports from crossbar
         self.user_ports = self.sata_crossbar.get_ports(nports, ports_dw)
+        for i, user_port in enumerate(self.user_ports):
+            user_port_pads = platform.request("user_port", i+1)
+            self.comb += [
+                user_port.sink.stb.eq(user_port_pads.sink_stb),
+                user_port.sink.sop.eq(user_port_pads.sink_sop),
+                user_port.sink.eop.eq(user_port_pads.sink_eop),
+                user_port.sink.write.eq(user_port_pads.sink_write),
+                user_port.sink.read.eq(user_port_pads.sink_read),
+                user_port.sink.identify.eq(user_port_pads.sink_identify),
+                user_port.sink.sector.eq(user_port_pads.sink_sector),
+                user_port.sink.count.eq(user_port_pads.sink_count),
 
-    def get_ios(self):
-        ios = set()
+                user_port_pads.sink_ack.eq(user_port.sink.ack),
+            ]
+            self.comb += [
+                user_port_pads.source_stb.eq(user_port.source.stb),
+                user_port_pads.source_sop.eq(user_port.source.sop),
+                user_port_pads.source_eop.eq(user_port.source.eop),
+                user_port_pads.source_write.eq(user_port.source.write),
+                user_port_pads.source_read.eq(user_port.source.read),
+                user_port_pads.source_identify.eq(user_port.source.identify),
+                user_port_pads.source_last.eq(user_port.source.last),
+                user_port_pads.source_failed.eq(user_port.source.failed),
+                user_port_pads.source_data.eq(user_port.source.data),
 
-        for sata_phy in self.sata_phys:
-            # Transceiver
-            for e in dir(sata_phy.clock_pads):
-                obj = getattr(sata_phy.clock_pads, e)
-                if isinstance(obj, Signal):
-                    ios = ios.union({obj})
-            for e in dir(sata_phy.pads):
-                obj = getattr(sata_phy.pads, e)
-                if isinstance(obj, Signal):
-                    ios = ios.union({obj})
-
-            # Status
-            ios = ios.union({
-                sata_phy.crg.ready,
-                sata_phy.ctrl.ready
-            })
-
-        # BIST
-        if hasattr(self, "sata_bist"):
-            for bist_unit in ["generator", "checker"]:
-                for signal in ["start", "sector", "count", "random", "done", "aborted", "errors"]:
-                    ios = ios.union({getattr(getattr(self.sata_bist, bist_unit), signal)})
-            ios = ios.union({
-                self.sata_bist.identify.start,
-                self.sata_bist.identify.done,
-                self.sata_bist.identify.source.stb,
-                self.sata_bist.identify.source.data,
-                self.sata_bist.identify.source.ack
-            })
-
-        # User ports
-        def _iter_layout(layout):
-            for e in layout:
-                if isinstance(e[1], list):
-                    yield from _iter_layout(e[1])
-                else:
-                    yield e
-
-        for port in self.user_ports:
-            for endpoint in [port.sink, port.source]:
-                for e in _iter_layout(endpoint.layout):
-                    obj = getattr(endpoint, e[0])
-                    ios = ios.union({obj})
-        return ios
+                user_port.source.ack.eq(user_port_pads.source_ack),
+            ]
 
 default_subtarget = Core

@@ -46,7 +46,7 @@ This program builds and/or loads LiteSATA components.
 One or several actions can be specified:
 
 clean           delete previous build(s).
-build-rtl       build verilog rtl.
+build-core      build verilog core.
 build-bitstream build-bitstream build FPGA bitstream.
 build-csr-csv   save CSR map into CSV file.
 
@@ -156,16 +156,14 @@ System Clk: {} MHz (min: {} MHz)
         write_to_file(args.csr_csv, csr_csv)
 
     if actions["build-core"]:
-        ios = soc.get_ios()
-        if not isinstance(soc, _Fragment):
-            soc = soc.get_fragment()
-        platform.finalize(soc)
+        soc_fragment = soc.get_fragment()
+        platform.finalize(soc_fragment)
         so = {
             NoRetiming:             XilinxNoRetiming,
             MultiReg:               XilinxMultiReg,
             AsyncResetSynchronizer: XilinxAsyncResetSynchronizer
         }
-        v_output = verilog.convert(soc, ios, name="litesata", special_overrides=so)
+        v_output = platform.get_verilog(soc_fragment, name="litesata", special_overrides=so)
         v_output.write("build/litesata.v")
 
     if actions["build-bitstream"]:
