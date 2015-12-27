@@ -139,7 +139,7 @@ class Randomizer(Module):
 
         self.comb += \
             If(self.run,
-                Record.connect(self.sink, self.source)
+                self.sink.connect(self.source)
             ).Else(
                 self.source.stb.eq(0),
                 self.sink.ack.eq(0),

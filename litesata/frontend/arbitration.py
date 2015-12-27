@@ -10,10 +10,8 @@ class LiteSATAMasterPort:
         self.sink = Sink(command_rx_description(dw))
 
     def connect(self, slave):
-        return [
-            Record.connect(self.source, slave.sink),
-            Record.connect(slave.source, self.sink)
-        ]
+        return [self.source.connect(slave.sink),
+                slave.source.connect(self.sink)]
 
 
 class LiteSATASlavePort:
@@ -23,10 +21,8 @@ class LiteSATASlavePort:
         self.source = Source(command_rx_description(dw))
 
     def connect(self, master):
-        return [
-            Record.connect(self.sink, master.source),
-            Record.connect(master.sink, self.source)
-        ]
+        return [self.sink.connect(master.source),
+                master.sink.connect(self.source)]
 
 
 class LiteSATAUserPort(LiteSATASlavePort):
@@ -80,16 +76,16 @@ class LiteSATACrossbar(Module):
                                   command_tx_description(self.dw))
             self.submodules += converter
             self.comb += [
-                Record.connect(user_port.sink, converter.sink),
-                Record.connect(converter.source, internal_port.sink)
+                user_port.sink.connect(converter.sink),
+                converter.source.connect(internal_port.sink)
             ]
 
             converter = Converter(command_rx_description(self.dw),
                                   command_rx_description(user_port.dw))
             self.submodules += converter
             self.comb += [
-                Record.connect(internal_port.source, converter.sink),
-                Record.connect(converter.source, user_port.source)
+                internal_port.source.connect(converter.sink),
+                converter.source.connect(user_port.source)
             ]
 
             self.users += [internal_port]

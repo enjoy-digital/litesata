@@ -154,7 +154,7 @@ class LiteSATACRCInserter(Module):
         fsm.act("COPY",
             crc.ce.eq(sink.stb & source.ack),
             crc.data.eq(sink.data),
-            Record.connect(sink, source),
+            sink.connect(source),
             source.eop.eq(0),
             If(sink.stb & sink.eop & source.ack,
                 NextState("INSERT"),
@@ -213,7 +213,7 @@ class LiteSATACRCChecker(Module):
             fifo_in.eq(sink.stb & (~fifo_full | fifo_out)),
             fifo_out.eq(source.stb & source.ack),
 
-            Record.connect(sink, fifo.sink),
+            sink.connect(fifo.sink),
             fifo.sink.stb.eq(fifo_in),
             self.sink.ack.eq(fifo_in),
 
@@ -328,7 +328,7 @@ class LiteSATAScrambler(Module):
         self.submodules += scrambler
         self.comb += [
             scrambler.ce.eq(sink.stb & sink.ack),
-            Record.connect(sink, source),
+            sink.connect(source),
             source.data.eq(sink.data ^ scrambler.value)
         ]
 
@@ -383,7 +383,7 @@ class LiteSATACONTInserter(Module):
 
         # Datapath
         self.comb += [
-            Record.connect(sink, source),
+            sink.connect(source),
             If(sink.stb,
                 If(~change,
                     counter_ce.eq(sink.ack & (counter != 2)),
@@ -449,7 +449,7 @@ class LiteSATACONTRemover(Module):
             )
         ]
         self.comb += [
-            Record.connect(sink, source),
+            sink.connect(source),
             If(cont_ongoing,
                 source.charisk.eq(0b0001),
                 source.data.eq(last_primitive)
@@ -710,5 +710,5 @@ class LiteSATALink(Module):
         self.submodules.rx_pipeline = Pipeline(phy, self.rx_cont, self.rx, self.rx_buffer)
 
         # rx --> tx
-        self.comb += Record.connect(self.rx.to_tx, self.tx.from_rx)
+        self.comb += self.rx.to_tx.connect(self.tx.from_rx)
         self.sink, self.source = self.tx_pipeline.sink, self.rx_pipeline.source

@@ -59,8 +59,8 @@ class LiteSATAPHYDatapathRX(Module):
         fifo = ClockDomainsRenamer({"write": "sata_rx", "read": "sys"})(fifo)
         self.submodules += fifo
         self.comb += [
-            Record.connect(converter.source, fifo.sink),
-            Record.connect(fifo.source, source)
+            converter.source.connect(fifo.sink),
+            fifo.source.connect(source)
         ]
 
 
@@ -80,7 +80,7 @@ class LiteSATAPHYDatapathTX(Module):
         fifo = AsyncFIFO(phy_description(32), 8)
         fifo = ClockDomainsRenamer({"write": "sys", "read": "sata_tx"})(fifo)
         self.submodules += fifo
-        self.comb += Record.connect(sink, fifo.sink)
+        self.comb += sink.connect(fifo.sink)
 
         # width convertion
         converter = Converter(phy_description(32),
@@ -89,8 +89,8 @@ class LiteSATAPHYDatapathTX(Module):
         converter = ClockDomainsRenamer("sata_tx")(converter)
         self.submodules += converter
         self.comb += [
-            Record.connect(fifo.source, converter.sink),
-            Record.connect(converter.source, source)
+            fifo.source.connect(converter.sink),
+            converter.source.connect(source)
         ]
 
 
@@ -142,7 +142,7 @@ class LiteSATAPHYAlignRemover(Module):
             If(sink.stb & charisk_match & data_match,
                 sink.ack.eq(1),
             ).Else(
-                Record.connect(sink, source)
+                sink.connect(source)
             )
 
 
@@ -162,11 +162,11 @@ class LiteSATAPHYDatapath(Module):
         self.submodules += align_inserter, mux, tx
         self.comb += [
             mux.sel.eq(ctrl.ready),
-            Record.connect(sink, align_inserter.sink),
-            Record.connect(ctrl.source, mux.sink0),
-            Record.connect(align_inserter.source, mux.sink1),
-            Record.connect(mux.source, tx.sink),
-            Record.connect(tx.source, trx.sink)
+            sink.connect(align_inserter.sink),
+            ctrl.source.connect(mux.sink0),
+            align_inserter.source.connect(mux.sink1),
+            mux.source.connect(tx.sink),
+            tx.source.connect(trx.sink)
         ]
 
         # RX path
@@ -176,11 +176,11 @@ class LiteSATAPHYDatapath(Module):
         self.submodules += rx, demux, align_remover
         self.comb += [
             demux.sel.eq(ctrl.ready),
-            Record.connect(trx.source, rx.sink),
-            Record.connect(rx.source, demux.sink),
-            Record.connect(demux.source0, ctrl.sink),
-            Record.connect(demux.source1, align_remover.sink),
-            Record.connect(align_remover.source, source)
+            trx.source.connect(rx.sink),
+            rx.source.connect(demux.sink),
+            demux.source0.connect(ctrl.sink),
+            demux.source1.connect(align_remover.sink),
+            align_remover.source.connect(source)
         ]
 
         self.comb += self.misalign.eq(rx.source.stb & ((rx.source.charisk & 0xb1110) != 0))

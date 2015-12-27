@@ -45,7 +45,7 @@ class LiteSATAStripingTX(Module):
 
         # split data and ctrl signals (except stb & ack managed in fsm)
         for i, s in enumerate(sources):
-            self.comb += Record.connect(sink, s, leave_out=set(["stb", "ack", "data"]))
+            self.comb += sink.connect(s, leave_out=set(["stb", "ack", "data"]))
             if mirroring_mode:
                 self.comb += s.data.eq(sink.data)
             else:
@@ -88,7 +88,7 @@ class LiteSATAStripingRX(Module):
         )
 
         # use first sink for ctrl signals (except for stb, ack & failed)
-        self.comb += Record.connect(sinks[0], source, leave_out=set(["stb", "ack", "failed", "data"]))
+        self.comb += sinks[0].connect(source, leave_out=set(["stb", "ack", "failed", "data"]))
 		# combine datas
         if mirroring_mode:
             self.comb += source.data.eq(0) # mirroring only used for writes
@@ -131,8 +131,8 @@ class LiteSATAStriping(Module):
         self.submodules.rx = LiteSATAStripingRX(n, dw)
         for i in range(n):
             self.comb += [
-                Record.connect(self.tx.sources[i], controllers[i].sink),
-                Record.connect(controllers[i].source, self.rx.sinks[i])
+                self.tx.sources[i].connect(controllers[i].sink),
+                controllers[i].source.connect(self.rx.sinks[i])
             ]
         self.sink, self.source = self.tx.sink, self.rx.source
 
@@ -192,8 +192,8 @@ class LiteSATAMirroringTX(Module):
             read_status = Status(read)
             self.submodules += read_status
             self.comb += [
-                Record.connect(sink, read, leave_out=set(["stb", "ack"])),
-                Record.connect(sink, write, leave_out=set(["stb", "ack"])),
+                sink.connect(read, leave_out=set(["stb", "ack"])),
+                sink.connect(write, leave_out=set(["stb", "ack"])),
                 read.stb.eq(sink.stb & (sink.read | sink.identify) & ~read_stall),
                 write.stb.eq(sink.stb & sink.write),
                 If(sink.read | sink.identify,
@@ -218,9 +218,9 @@ class LiteSATAMirroringTX(Module):
             self.submodules += source_status
             self.comb += [
                 If(ctrl.reading,
-                    Record.connect(reads[i], sources[i]) # independent reads
+                    reads[i].connect(sources[i]) # independent reads
                 ).Elif(ctrl.writing,
-                    Record.connect(write_striper.sources[i], sources[i]) # identical writes
+                    write_striper.sources[i].connect(sources[i]) # identical writes
                 ),
                 ctrl.new_cmds[i].eq(source_status.eop)
             ]
@@ -248,7 +248,7 @@ class LiteSATAMirroringRX(Module):
         for mux, source in zip(muxs, sources):
             self.comb += [
                 mux.sel.eq(ctrl.reading),
-                Record.connect(mux.source, source)
+                mux.source.connect(source)
             ]
 
         write_striper = LiteSATAStripingRX(n, dw, mirroring_mode=True)
@@ -260,8 +260,8 @@ class LiteSATAMirroringRX(Module):
             sink_status = Status(sinks[i])
             self.submodules += sink_status
             self.comb += [
-                Record.connect(sinks[i], reads[i], leave_out=set(["stb", "ack"])),
-                Record.connect(sinks[i], write_striper.sinks[i], leave_out=set(["stb", "ack"])),
+                sinks[i].connect(reads[i], leave_out=set(["stb", "ack"])),
+                sinks[i].connect(write_striper.sinks[i], leave_out=set(["stb", "ack"])),
                 reads[i].stb.eq(sinks[i].stb & ctrl.reading),
                 write_striper.sinks[i].stb.eq(sinks[i].stb & ctrl.writing),
                 sinks[i].ack.eq(reads[i].ack | write_striper.sinks[i].ack),
@@ -307,9 +307,9 @@ class LiteSATAMirroring(Module):
         self.submodules.rx = LiteSATAMirroringRX(n, dw, self.ctrl)
         for i in range(n):
             self.comb += [
-                Record.connect(self.ports[i].sink, self.tx.sinks[i]),
-                Record.connect(self.tx.sources[i], controllers[i].sink),
+                self.ports[i].sink.connect(self.tx.sinks[i]),
+                self.tx.sources[i].connect(controllers[i].sink),
 
-                Record.connect(controllers[i].source, self.rx.sinks[i]),
-                Record.connect(self.rx.sources[i], self.ports[i].source)
+                controllers[i].source.connect(self.rx.sinks[i]),
+                self.rx.sources[i].connect(self.ports[i].source)
             ]

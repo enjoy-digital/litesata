@@ -39,7 +39,7 @@ class TRX(Module):
         self.dw = dw
         self.sink = Sink(phy_description(32))
         self.source = Source(phy_description(32))
-        self.comb += Record.connect(self.sink, self.source)
+        self.comb += self.sink.connect(self.source)
 
 
 class CTRL(Module):
