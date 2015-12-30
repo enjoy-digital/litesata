@@ -1,6 +1,5 @@
 from litesata.common import *
 
-from litex.gen.genlib.misc import WaitTimer
 
 class LiteSATAPHYDatapathRX(Module):
     def __init__(self, trx_dw):
@@ -130,13 +129,11 @@ class LiteSATAPHYAlignInserter(Module):
 
 
 class LiteSATAPHYAlignRemover(Module):
-    def __init__(self, ctrl_ready):
+    def __init__(self):
         self.sink = sink = Sink(phy_description(32))
         self.source = source = Source(phy_description(32))
 
         # # #
-
-        self.submodules.idle_timer = WaitTimer(256*16)
 
         charisk_match = sink.charisk == 0b0001
         data_match = sink.data == primitives["ALIGN"]
@@ -145,7 +142,6 @@ class LiteSATAPHYAlignRemover(Module):
             If(sink.stb & charisk_match & data_match,
                 sink.ack.eq(1),
             ).Else(
-                self.idle_timer.wait.eq(ctrl_ready),
                 sink.connect(source)
             )
 
@@ -154,6 +150,8 @@ class LiteSATAPHYDatapath(Module):
     def __init__(self, trx, ctrl):
         self.sink = sink = Sink(phy_description(32))
         self.source = source = Source(phy_description(32))
+
+        self.misalign = Signal()
 
         # # #
 
@@ -174,7 +172,7 @@ class LiteSATAPHYDatapath(Module):
         # RX path
         rx = LiteSATAPHYDatapathRX(trx.dw)
         demux = Demultiplexer(phy_description(32), 2)
-        align_remover = LiteSATAPHYAlignRemover(ctrl.ready)
+        align_remover = LiteSATAPHYAlignRemover()
         self.submodules += rx, demux, align_remover
         self.comb += [
             demux.sel.eq(ctrl.ready),
@@ -185,7 +183,4 @@ class LiteSATAPHYDatapath(Module):
             align_remover.source.connect(source)
         ]
 
-        self.comb += [
-            ctrl.misalign.eq(rx.source.stb & ((rx.source.charisk & 0xb1110) != 0)),
-            ctrl.rx_idle.eq(align_remover.idle_timer.done)
-        ]
+        self.comb += self.misalign.eq(rx.source.stb & ((rx.source.charisk & 0xb1110) != 0))
