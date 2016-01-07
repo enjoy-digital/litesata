@@ -251,6 +251,7 @@ class LiteSATACommandRX(Module):
                 transport.source.ack.eq(0),
                 If(test_type("PIO_SETUP_D2H"),
                     NextState("PRESENT_PIO_SETUP_D2H")
+                ).Else(NextState("FLUSH")
                 )
             )
         )
@@ -296,6 +297,12 @@ class LiteSATACommandRX(Module):
             )
         )
 
+        fsm.act("FLUSH",
+            transport.source.ack.eq(1),
+            If(transport.source.stb & transport.source.eop,
+               NextState("WAIT_PIO_SETUP_D2H")
+            )
+        )
         self.comb += [
             to_tx.dma_activate.eq(is_dma_activate),
             to_tx.d2h_error.eq(d2h_error)
