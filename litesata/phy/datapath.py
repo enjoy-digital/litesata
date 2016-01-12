@@ -183,4 +183,4 @@ class LiteSATAPHYDatapath(Module):
             align_remover.source.connect(source)
         ]
 
-        self.comb += self.misalign.eq(rx.source.stb & ((rx.source.charisk & 0xb1110) != 0))
+        self.comb += self.misalign.eq(rx.source.stb & ((rx.source.charisk & 0b1110) != 0))
