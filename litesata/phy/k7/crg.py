@@ -101,7 +101,7 @@ class K7LiteSATAPHYCRG(Module):
 
         # TX Startup FSM
         self.tx_ready = Signal()
-        tx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
+        self.tx_startup_fsm = tx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.submodules += tx_startup_fsm
         # Wait 500ns of AR43482
         tx_startup_fsm.act("IDLE",
@@ -168,7 +168,7 @@ class K7LiteSATAPHYCRG(Module):
 
         # RX Startup FSM
         self.rx_ready = Signal()
-        rx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
+        self.rx_startup_fsm = rx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.submodules += rx_startup_fsm
 
         cdr_stable_timer = WaitTimer(2048)
