@@ -471,6 +471,8 @@ class LiteSATALinkTX(Module):
         self.source = source = Source(phy_description(32))
         self.from_rx = Sink(from_rx)
 
+        self.error = Signal()
+
         # # #
 
         # CRC / Scrambler
@@ -506,7 +508,7 @@ class LiteSATALinkTX(Module):
             If(self.from_rx.idle,
                 insert.eq(primitives["SYNC"]),
                 If(pipeline.source.stb & pipeline.source.sop,
-                    If(self.from_rx.primitive_stb & 
+                    If(self.from_rx.primitive_stb &
                        (self.from_rx.primitive == primitives["SYNC"]),
                         NextState("RDY")
                     )
@@ -517,7 +519,7 @@ class LiteSATALinkTX(Module):
             insert.eq(primitives["X_RDY"]),
             If(~self.from_rx.idle,
                 NextState("IDLE")
-            ).Elif(self.from_rx.primitive_stb & 
+            ).Elif(self.from_rx.primitive_stb &
                    (self.from_rx.primitive == primitives["R_RDY"]),
                 NextState("SOF")
             )
@@ -534,7 +536,7 @@ class LiteSATALinkTX(Module):
                pipeline.source.eop &
                pipeline.source.ack,
                 NextState("EOF")
-            ).Elif(self.from_rx.primitive_stb & 
+            ).Elif(self.from_rx.primitive_stb &
                (self.from_rx.primitive == primitives["HOLD"]),
                NextState("HOLDA")
             ).Elif(~pipeline.source.stb,
@@ -543,7 +545,7 @@ class LiteSATALinkTX(Module):
         )
         fsm.act("HOLDA",
             insert.eq(primitives["HOLDA"]),
-            If(self.from_rx.primitive_stb & 
+            If(self.from_rx.primitive_stb &
                (self.from_rx.primitive == primitives["R_IP"]),
                 NextState("COPY")
             )
@@ -564,6 +566,15 @@ class LiteSATALinkTX(Module):
                 )
             )
         )
+
+        # error detection
+        self.comb += [
+            # generate error if receiving SYNC during transfer (disk returns to IDLE)
+            If(~fsm.ongoing("IDLE"),
+                self.error.eq(self.from_rx.primitive_stb &
+                              (self.from_rx.primitive == primitives["SYNC"]))
+            )
+        ]
 
 # link rx
 
@@ -614,7 +625,7 @@ class LiteSATALinkRX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             descrambler.reset.eq(1),
-            If(primitive_stb & 
+            If(primitive_stb &
                (primitive == primitives["X_RDY"]),
                 NextState("RDY")
             )
@@ -643,7 +654,7 @@ class LiteSATALinkRX(Module):
                     insert.eq(primitives["HOLDA"])
                 ).Elif(primitive == primitives["EOF"],
                     # 1 clock cycle latency
-                    pipeline.sink.stb.eq(1), 
+                    pipeline.sink.stb.eq(1),
                     pipeline.sink.eop.eq(1),
                     NextState("WTRM")
                 )
@@ -677,7 +688,7 @@ class LiteSATALinkRX(Module):
         )
         fsm.act("R_ERR",
             insert.eq(primitives["R_ERR"]),
-            If(primitive_stb & 
+            If(primitive_stb &
                (primitive == primitives["SYNC"]),
                 NextState("IDLE")
             )
