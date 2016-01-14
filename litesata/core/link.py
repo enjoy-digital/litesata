@@ -666,7 +666,7 @@ class LiteSATALinkRX(Module):
         sop_set = Signal()
         self.sync += If(sop_clr, sop.eq(0)).Elif(sop_set, sop.eq(1))
 
-        crc_error = Signal()
+        self.crc_error = crc_error = Signal()
         self.sync += \
             If(crc.source.stb & crc.source.eop & crc.source.ack,
                 crc_error.eq(crc.source.error)
