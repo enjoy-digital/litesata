@@ -456,6 +456,57 @@ class LiteSATACONTRemover(Module):
             )
         ]
 
+# link align
+
+class LiteSATAALIGNInserter(Module):
+    def __init__(self, description):
+        self.sink = sink = Sink(description)
+        self.source = source = Source(description)
+
+        # # #
+
+        # send 2 ALIGN every 256 DWORDs
+        # used for clock compensation between
+        # HOST and device
+        cnt = Signal(8)
+        send = Signal()
+        self.sync += \
+            If(source.stb & source.ack,
+                cnt.eq(cnt+1)
+            )
+        self.comb += [
+            send.eq(cnt < 2),
+            If(send,
+                source.stb.eq(1),
+                source.charisk.eq(0b0001),
+                source.data.eq(primitives["ALIGN"]),
+                sink.ack.eq(0)
+            ).Else(
+                source.stb.eq(sink.stb),
+                source.data.eq(sink.data),
+                source.charisk.eq(sink.charisk),
+                sink.ack.eq(source.ack)
+            )
+        ]
+
+
+class LiteSATAALIGNRemover(Module):
+    def __init__(self, description):
+        self.sink = sink = Sink(description)
+        self.source = source = Source(description)
+
+        # # #
+
+        charisk_match = sink.charisk == 0b0001
+        data_match = sink.data == primitives["ALIGN"]
+
+        self.comb += \
+            If(sink.stb & charisk_match & data_match,
+                sink.ack.eq(1),
+            ).Else(
+                sink.connect(source)
+            )
+
 # link tx
 
 from_rx = [
@@ -709,16 +760,26 @@ class LiteSATALink(Module):
         # tx
         self.submodules.tx_buffer = Buffer(link_description(32), buffer_depth)
         self.submodules.tx = BufferizeEndpoints("source")(LiteSATALinkTX())
+        self.submodules.tx_align = LiteSATAALIGNInserter(phy_description(32))
         self.submodules.tx_cont = LiteSATACONTInserter(phy_description(32))
-        self.submodules.tx_pipeline = Pipeline(self.tx_buffer, self.tx, self.tx_cont, phy)
+        self.submodules.tx_pipeline = Pipeline(self.tx_buffer,
+                                               self.tx,
+                                               self.tx_align,
+                                               self.tx_cont,
+                                               phy)
 
         # rx
         self.submodules.rx_cont = LiteSATACONTRemover(phy_description(32))
+        self.submodules.rx_align = LiteSATAALIGNRemover(phy_description(32))
         self.submodules.rx = BufferizeEndpoints("sink")(LiteSATALinkRX())
         self.submodules.rx_buffer = Buffer(link_description(32), buffer_depth,
                                                  almost_full=3*buffer_depth//4)
         self.comb += self.rx.hold.eq(self.rx_buffer.almost_full)
-        self.submodules.rx_pipeline = Pipeline(phy, self.rx_cont, self.rx, self.rx_buffer)
+        self.submodules.rx_pipeline = Pipeline(phy,
+                                               self.rx_cont,
+                                               self.rx_align,
+                                               self.rx,
+                                               self.rx_buffer)
 
         # rx --> tx
         self.comb += self.rx.to_tx.connect(self.tx.from_rx)

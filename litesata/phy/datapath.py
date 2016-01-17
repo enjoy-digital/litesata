@@ -94,58 +94,6 @@ class LiteSATAPHYDatapathTX(Module):
         ]
 
 
-class LiteSATAPHYAlignInserter(Module):
-    def __init__(self, ctrl):
-        self.sink = sink = Sink(phy_description(32))
-        self.source = source = Source(phy_description(32))
-
-        # # #
-
-        # send 2 ALIGN every 256 DWORDs
-        # used for clock compensation between
-        # HOST and device
-        cnt = Signal(8)
-        send = Signal()
-        self.sync += \
-            If(~ctrl.ready,
-                cnt.eq(0)
-            ).Elif(source.stb & source.ack,
-                cnt.eq(cnt+1)
-            )
-        self.comb += [
-            send.eq(cnt < 2),
-            If(send,
-                source.stb.eq(1),
-                source.charisk.eq(0b0001),
-                source.data.eq(primitives["ALIGN"]),
-                sink.ack.eq(0)
-            ).Else(
-                source.stb.eq(sink.stb),
-                source.data.eq(sink.data),
-                source.charisk.eq(sink.charisk),
-                sink.ack.eq(source.ack)
-            )
-        ]
-
-
-class LiteSATAPHYAlignRemover(Module):
-    def __init__(self):
-        self.sink = sink = Sink(phy_description(32))
-        self.source = source = Source(phy_description(32))
-
-        # # #
-
-        charisk_match = sink.charisk == 0b0001
-        data_match = sink.data == primitives["ALIGN"]
-
-        self.comb += \
-            If(sink.stb & charisk_match & data_match,
-                sink.ack.eq(1),
-            ).Else(
-                sink.connect(source)
-            )
-
-
 class LiteSATAPHYDatapath(Module):
     def __init__(self, trx, ctrl):
         self.sink = sink = Sink(phy_description(32))
@@ -156,15 +104,13 @@ class LiteSATAPHYDatapath(Module):
         # # #
 
         # TX path
-        align_inserter = LiteSATAPHYAlignInserter(ctrl)
         mux = Multiplexer(phy_description(32), 2)
         tx = LiteSATAPHYDatapathTX(trx.dw)
-        self.submodules += align_inserter, mux, tx
+        self.submodules += mux, tx
         self.comb += [
             mux.sel.eq(ctrl.ready),
-            sink.connect(align_inserter.sink),
             ctrl.source.connect(mux.sink0),
-            align_inserter.source.connect(mux.sink1),
+            sink.connect(mux.sink1),
             mux.source.connect(tx.sink),
             tx.source.connect(trx.sink)
         ]
@@ -172,15 +118,13 @@ class LiteSATAPHYDatapath(Module):
         # RX path
         rx = LiteSATAPHYDatapathRX(trx.dw)
         demux = Demultiplexer(phy_description(32), 2)
-        align_remover = LiteSATAPHYAlignRemover()
-        self.submodules += rx, demux, align_remover
+        self.submodules += rx, demux
         self.comb += [
             demux.sel.eq(ctrl.ready),
             trx.source.connect(rx.sink),
             rx.source.connect(demux.sink),
             demux.source0.connect(ctrl.sink),
-            demux.source1.connect(align_remover.sink),
-            align_remover.source.connect(source)
+            demux.source1.connect(source)
         ]
 
         self.comb += self.misalign.eq(rx.source.stb & ((rx.source.charisk & 0b1110) != 0))
