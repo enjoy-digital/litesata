@@ -4,7 +4,7 @@ from litesata.core.link import Scrambler
 from litex.soc.interconnect.csr import *
 
 class LiteSATABISTGenerator(Module):
-    def __init__(self, user_port):
+    def __init__(self, user_port, counter_width):
         self.start = Signal()
         self.sector = Signal(48)
         self.count = Signal(16)
@@ -21,7 +21,7 @@ class LiteSATABISTGenerator(Module):
 
         source, sink = user_port.sink, user_port.source
 
-        counter = Signal(32)
+        counter = Signal(counter_width)
         counter_reset = Signal()
         counter_ce = Signal()
         self.sync += \
@@ -78,7 +78,7 @@ class LiteSATABISTGenerator(Module):
 
 
 class LiteSATABISTChecker(Module):
-    def __init__(self, user_port):
+    def __init__(self, user_port, counter_width):
         self.start = Signal()
         self.sector = Signal(48)
         self.count = Signal(16)
@@ -86,7 +86,7 @@ class LiteSATABISTChecker(Module):
 
         self.done = Signal()
         self.aborted = Signal()
-        self.errors = Signal(32)
+        self.errors = Signal(counter_width)
 
         # # #
 
@@ -95,7 +95,7 @@ class LiteSATABISTChecker(Module):
 
         source, sink = user_port.sink, user_port.source
 
-        counter = Signal(32)
+        counter = Signal(counter_width)
         counter_ce = Signal()
         counter_reset = Signal()
         self.sync += \
@@ -105,7 +105,7 @@ class LiteSATABISTChecker(Module):
                 counter.eq(counter + 1)
             )
 
-        error_counter = Signal(32)
+        error_counter = Signal(counter_width)
         error_counter_ce = Signal()
         error_counter_reset = Signal()
         self.sync += \
@@ -336,9 +336,9 @@ class LiteSATABISTIdentifyCSR(Module, AutoCSR):
 
 
 class LiteSATABIST(Module, AutoCSR):
-    def __init__(self, crossbar, with_csr=False):
-        generator = LiteSATABISTGenerator(crossbar.get_port())
-        checker = LiteSATABISTChecker(crossbar.get_port())
+    def __init__(self, crossbar, with_csr=False, counter_width=32):
+        generator = LiteSATABISTGenerator(crossbar.get_port(), counter_width)
+        checker = LiteSATABISTChecker(crossbar.get_port(), counter_width)
         identify = LiteSATABISTIdentify(crossbar.get_port())
         if with_csr:
             generator = LiteSATABISTUnitCSR(generator)
@@ -350,7 +350,7 @@ class LiteSATABIST(Module, AutoCSR):
 
 
 class LiteSATABISTRobustness(Module):
-    def __init__(self, crossbar, fifo_depth=512):
+    def __init__(self, crossbar, fifo_depth=512, counter_width=32):
         self.crossbar = crossbar
         self.fifo_depth = fifo_depth
 
@@ -370,8 +370,10 @@ class LiteSATABISTRobustness(Module):
 
         # # #
 
-        generator = LiteSATABISTGenerator(crossbar.get_port())
-        checker = LiteSATABISTChecker(crossbar.get_port())
+        generator = LiteSATABISTGenerator(crossbar.get_port(),
+                                          counter_width=counter_width)
+        checker = LiteSATABISTChecker(crossbar.get_port(),
+                                      counter_width=counter_width)
         self.submodules.generator = generator
         self.submodules.checker = checker
 
