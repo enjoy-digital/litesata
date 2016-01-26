@@ -599,6 +599,8 @@ class LiteSATALinkTX(Module):
             If(self.from_rx.primitive_stb &
                (self.from_rx.primitive == primitives["R_IP"]),
                 NextState("COPY")
+            ).Elif(self.error,
+                NextState("IDLE")
             )
         )
         fsm.act("EOF",
@@ -615,13 +617,15 @@ class LiteSATALinkTX(Module):
                 ).Elif(self.from_rx.primitive == primitives["R_ERR"],
                     NextState("IDLE")
                 )
+            ).Elif(self.error,
+                NextState("IDLE")
             )
         )
 
         # error detection
-        self.comb += [
+        self.sync += [
             # generate error if receiving SYNC during transfer (disk returns to IDLE)
-            If(~fsm.ongoing("IDLE"),
+            If(~(fsm.ongoing("IDLE") | fsm.ongoing("RDY")),
                 self.error.eq(self.from_rx.primitive_stb &
                               (self.from_rx.primitive == primitives["SYNC"]))
             )
