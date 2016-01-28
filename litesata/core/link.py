@@ -777,7 +777,7 @@ class LiteSATALink(Module):
         self.submodules.rx_align = LiteSATAALIGNRemover(phy_description(32))
         self.submodules.rx = BufferizeEndpoints("sink")(LiteSATALinkRX())
         self.submodules.rx_buffer = Buffer(link_description(32), buffer_depth,
-                                                 almost_full=3*buffer_depth//4)
+                                                 almost_full=3*buffer_depth//4-1)
         self.comb += self.rx.hold.eq(self.rx_buffer.almost_full)
         self.submodules.rx_pipeline = Pipeline(phy,
                                                self.rx_cont,
