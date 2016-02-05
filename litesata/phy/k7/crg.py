@@ -118,7 +118,9 @@ class K7LiteSATAPHYCRG(Module):
             gtx.cpllreset.eq(1),
             mmcm_reset.eq(1),
             gtx.gttxreset.eq(1),
-            NextState("RELEASE_CPLL"),
+            If(~self.cplllock,
+               NextState("RELEASE_CPLL"),
+            )
         )
         # Release CPLL reset and wait for lock
         tx_startup_fsm.act("RELEASE_CPLL",
