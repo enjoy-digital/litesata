@@ -117,7 +117,6 @@ class LiteSATAPHYCtrl(Module):
             source.charisk.eq(0b0000),
             align_timer.wait.eq(1),
             If(align_det & ~trx.rx_idle,
-                crg.rx_reset.eq(1),
                 NextState("SEND_ALIGN")
             )
         )
