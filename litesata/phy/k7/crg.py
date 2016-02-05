@@ -1,5 +1,6 @@
 from litesata.common import *
 
+from litex.gen.genlib.cdc import MultiReg
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 from litex.gen.genlib.misc import WaitTimer
 
@@ -9,6 +10,7 @@ class K7LiteSATAPHYCRG(Module):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
         self.ready = Signal()
+        self.cplllock = Signal()
 
         self.clock_domains.cd_sata_tx = ClockDomain()
         self.clock_domains.cd_sata_rx = ClockDomain()
@@ -46,6 +48,7 @@ class K7LiteSATAPHYCRG(Module):
 
         if use_mmcm:
             mmcm_reset = Signal()
+            mmcm_locked_async = Signal()
             mmcm_locked = Signal()
             mmcm_fb = Signal()
             mmcm_clk_i = Signal()
@@ -53,7 +56,7 @@ class K7LiteSATAPHYCRG(Module):
             self.specials += [
                 Instance("BUFG", i_I=gtx.txoutclk, o_O=mmcm_clk_i),
                 Instance("MMCME2_ADV",
-                     p_BANDWIDTH="HIGH", p_COMPENSATION="ZHOLD", i_RST=mmcm_reset, o_LOCKED=mmcm_locked,
+                     p_BANDWIDTH="HIGH", p_COMPENSATION="ZHOLD", i_RST=mmcm_reset, o_LOCKED=mmcm_locked_async,
 
                      # DRP
                      i_DCLK=0, i_DEN=0, i_DWE=0, #o_DRDY=,
@@ -68,6 +71,7 @@ class K7LiteSATAPHYCRG(Module):
                      p_CLKOUT0_DIVIDE_F=mmcm_div, p_CLKOUT0_PHASE=0.000, o_CLKOUT0=mmcm_clk0_o,
                 ),
                 Instance("BUFG", i_I=mmcm_clk0_o, o_O=self.cd_sata_tx.clk),
+                MultiReg(mmcm_locked_async, mmcm_locked, "sys"),
             ]
         else:
             mmcm_locked = Signal(reset=1)
@@ -120,7 +124,7 @@ class K7LiteSATAPHYCRG(Module):
         tx_startup_fsm.act("RELEASE_CPLL",
             mmcm_reset.eq(1),
             gtx.gttxreset.eq(1),
-            If(gtx.cplllock,
+            If(self.cplllock,
                 NextState("RELEASE_MMCM"),
             )
         )
@@ -188,7 +192,7 @@ class K7LiteSATAPHYCRG(Module):
         # Wait for CPLL lock
         rx_startup_fsm.act("WAIT_CPLL",
             gtx.gtrxreset.eq(1),
-            If(gtx.cplllock,
+            If(self.cplllock,
                 NextState("RELEASE_GTX")
             )
         )
@@ -234,4 +238,5 @@ class K7LiteSATAPHYCRG(Module):
         self.specials += [
             AsyncResetSynchronizer(self.cd_sata_tx, ~(gtx.cplllock & mmcm_locked) | self.tx_reset),
             AsyncResetSynchronizer(self.cd_sata_rx, ~gtx.cplllock | self.rx_reset),
+            MultiReg(gtx.cplllock, self.cplllock, "sys"),
         ]
