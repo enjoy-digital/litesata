@@ -189,7 +189,9 @@ class K7LiteSATAPHYCRG(Module):
         # Reset GTX
         rx_startup_fsm.act("RESET_GTX",
             gtx.gtrxreset.eq(1),
-            NextState("WAIT_CPLL")
+            If(~gtx.gttxreset | ~self.cplllock,
+               NextState("WAIT_CPLL")
+            )
         )
         # Wait for CPLL lock
         rx_startup_fsm.act("WAIT_CPLL",
