@@ -269,7 +269,7 @@ class LiteSATABISTIdentify(Module):
         self.done  = Signal()
         self.data_width = user_port.dw
 
-        fifo = SyncFIFO([("data", 32)], 512, buffered=True)
+        fifo = ResetInserter()(SyncFIFO([("data", 32)], 512, buffered=True))
         self.submodules += fifo
         self.source = fifo.source
 
@@ -291,6 +291,7 @@ class LiteSATABISTIdentify(Module):
             source.identify.eq(1),
         ]
         fsm.act("SEND_CMD",
+            fifo.reset.eq(1),
             source.stb.eq(1),
             If(source.stb & source.ack,
                 NextState("WAIT_ACK")
