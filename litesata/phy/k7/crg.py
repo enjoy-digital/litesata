@@ -177,7 +177,7 @@ class K7LiteSATAPHYCRG(Module):
         self.rx_startup_fsm = rx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.submodules += rx_startup_fsm
 
-        cdr_stable_timer = WaitTimer(2048)
+        cdr_stable_timer = WaitTimer(1024)
         self.submodules += cdr_stable_timer
 
         # Wait 500ns of AR43482
