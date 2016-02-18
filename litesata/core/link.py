@@ -597,7 +597,7 @@ class LiteSATALinkTX(Module):
         fsm.act("HOLDA",
             insert.eq(primitives["HOLDA"]),
             If(self.from_rx.primitive_stb &
-               (self.from_rx.primitive == primitives["R_IP"]),
+               (self.from_rx.primitive != primitives["HOLD"]),
                 NextState("COPY")
             ).Elif(self.error,
                 NextState("IDLE")
@@ -762,26 +762,22 @@ class LiteSATALinkRX(Module):
 class LiteSATALink(Module):
     def __init__(self, phy, buffer_depth):
         # tx
-        self.submodules.tx_buffer = Buffer(link_description(32), buffer_depth)
         self.submodules.tx = BufferizeEndpoints("source")(LiteSATALinkTX())
         self.submodules.tx_align = LiteSATAALIGNInserter(phy_description(32))
-        self.submodules.tx_cont = LiteSATACONTInserter(phy_description(32))
-        self.submodules.tx_pipeline = Pipeline(self.tx_buffer,
-                                               self.tx,
+        self.submodules.tx_pipeline = Pipeline(self.tx,
                                                self.tx_align,
-                                               self.tx_cont,
                                                phy)
 
         # rx
-        self.submodules.rx_cont = LiteSATACONTRemover(phy_description(32))
         self.submodules.rx_align = LiteSATAALIGNRemover(phy_description(32))
+        self.submodules.rx_cont = LiteSATACONTRemover(phy_description(32))
         self.submodules.rx = BufferizeEndpoints("sink")(LiteSATALinkRX())
         self.submodules.rx_buffer = Buffer(link_description(32), buffer_depth,
                                                  almost_full=3*buffer_depth//4-1)
         self.comb += self.rx.hold.eq(self.rx_buffer.almost_full)
         self.submodules.rx_pipeline = Pipeline(phy,
-                                               self.rx_cont,
                                                self.rx_align,
+                                               self.rx_cont,
                                                self.rx,
                                                self.rx_buffer)
 
