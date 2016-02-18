@@ -107,10 +107,16 @@ class K7LiteSATAPHYCRG(Module):
         self.tx_ready = Signal()
         self.tx_startup_fsm = tx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.submodules += tx_startup_fsm
+
+        txphaligndone = Signal()
+        txphaligndone_rising = Signal()
+        self.sync += txphaligndone.eq(gtx.txphaligndone)
+        self.comb += txphaligndone_rising.eq(gtx.txphaligndone & ~txphaligndone)
+
         # Wait 500ns of AR43482
         tx_startup_fsm.act("IDLE",
             If(startup_timer.done,
-                NextState("RESET_ALL"),
+                NextState("RESET_ALL")
             )
         )
         # Reset CPLL, MMCM, GTX
@@ -119,7 +125,7 @@ class K7LiteSATAPHYCRG(Module):
             mmcm_reset.eq(1),
             gtx.gttxreset.eq(1),
             If(~self.cplllock,
-               NextState("RELEASE_CPLL"),
+               NextState("RELEASE_CPLL")
             )
         )
         # Release CPLL reset and wait for lock
@@ -127,7 +133,7 @@ class K7LiteSATAPHYCRG(Module):
             mmcm_reset.eq(1),
             gtx.gttxreset.eq(1),
             If(self.cplllock,
-                NextState("RELEASE_MMCM"),
+                NextState("RELEASE_MMCM")
             )
         )
         # Release MMCM reset and wait for lock
@@ -156,7 +162,21 @@ class K7LiteSATAPHYCRG(Module):
         tx_startup_fsm.act("WAIT_ALIGN",
             gtx.txuserrdy.eq(1),
             If(gtx.txdlyresetdone,
-                NextState("READY")
+                NextState("WAIT_FIRST_ALIGN_DONE")
+            )
+        )
+        # Wait 2 rising edges of txphaligndone
+        # (from UG476 in buffer bypass config)
+        tx_startup_fsm.act("WAIT_FIRST_ALIGN_DONE",
+            gtx.txuserrdy.eq(1),
+            If(txphaligndone_rising,
+               NextState("WAIT_SECOND_ALIGN_DONE")
+            )
+        )
+        tx_startup_fsm.act("WAIT_SECOND_ALIGN_DONE",
+            gtx.txuserrdy.eq(1),
+            If(txphaligndone_rising,
+               NextState("READY")
             )
         )
         tx_startup_fsm.act("READY",
@@ -180,10 +200,15 @@ class K7LiteSATAPHYCRG(Module):
         cdr_stable_timer = WaitTimer(1024)
         self.submodules += cdr_stable_timer
 
+        rxphaligndone = Signal()
+        rxphaligndone_rising = Signal()
+        self.sync += rxphaligndone.eq(gtx.rxphaligndone)
+        self.comb += rxphaligndone_rising.eq(gtx.rxphaligndone & ~rxphaligndone)
+
         # Wait 500ns of AR43482
         rx_startup_fsm.act("IDLE",
             If(startup_timer.done,
-                NextState("RESET_GTX"),
+                NextState("RESET_GTX")
             )
         )
         # Reset GTX
@@ -220,7 +245,21 @@ class K7LiteSATAPHYCRG(Module):
         rx_startup_fsm.act("WAIT_ALIGN",
             gtx.rxuserrdy.eq(1),
             If(gtx.rxdlyresetdone,
-                NextState("READY")
+                NextState("WAIT_FIRST_ALIGN_DONE")
+            )
+        )
+        # Wait 2 rising edges of rxphaligndone
+        # (from UG476 in buffer bypass config)
+        rx_startup_fsm.act("WAIT_FIRST_ALIGN_DONE",
+            gtx.rxuserrdy.eq(1),
+            If(rxphaligndone_rising,
+               NextState("WAIT_SECOND_ALIGN_DONE")
+            )
+        )
+        rx_startup_fsm.act("WAIT_SECOND_ALIGN_DONE",
+            gtx.rxuserrdy.eq(1),
+            If(rxphaligndone_rising,
+               NextState("READY")
             )
         )
         rx_startup_fsm.act("READY",
