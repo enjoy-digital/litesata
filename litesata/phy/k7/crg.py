@@ -143,7 +143,7 @@ class K7LiteSATAPHYCRG(Module):
         tx_startup_fsm.act("RELEASE_GTX",
             gtx.txuserrdy.eq(1),
             If(gtx.txresetdone,
-                NextState("READY")
+                NextState("ALIGN")
             )
         )
         # Start Delay alignment (Pulse)
