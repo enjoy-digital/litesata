@@ -57,7 +57,7 @@ class K7LiteSATAPHYTRX(Module):
         self.rx_cominit_stb = Signal()  #o
         self.rx_comwake_stb = Signal()  #o
 
-        self.rxdisperr = Signal(dw//8)      #o 
+        self.rxdisperr = Signal(dw//8)      #o
         self.rxnotintable = Signal(dw//8)   #o
 
         # datapath
@@ -92,6 +92,7 @@ class K7LiteSATAPHYTRX(Module):
         self.rxresetdone = Signal()
         self.rxdlyreset = Signal()
         self.rxdlyresetdone = Signal()
+        self.rxphaligndone = Signal()
 
         # Receive Ports - RX Ports for SATA
         self.rxcominitdet = Signal()
@@ -114,6 +115,7 @@ class K7LiteSATAPHYTRX(Module):
         self.txresetdone = Signal()
         self.txdlyreset = Signal()
         self.txdlyresetdone = Signal()
+        self.txphaligndone = Signal()
 
         # Transmit Ports - TX Ports for PCI Express
         self.txelecidle = Signal(reset=1)
@@ -186,17 +188,18 @@ class K7LiteSATAPHYTRX(Module):
         txcomwake = Signal()
         txdlyreset = Signal()
         txdlyresetdone = Signal()
+        txphaligndone = Signal()
         gttxreset = Signal()
 
         self.specials += [
             MultiReg(self.txuserrdy, txuserrdy, "sata_tx"),
             MultiReg(self.txelecidle, txelecidle, "sata_tx"),
-            MultiReg(self.gttxreset, gttxreset, "sata_tx"),
+            MultiReg(self.gttxreset, gttxreset, "sata_tx")
         ]
         self.submodules += [
             _PulseSynchronizer(self.txcominit, "sys", txcominit, "sata_tx"),
             _PulseSynchronizer(self.txcomwake, "sys", txcomwake, "sata_tx"),
-            _PulseSynchronizer(self.txdlyreset, "sys", txdlyreset, "sata_tx"),
+            _PulseSynchronizer(self.txdlyreset, "sys", txdlyreset, "sata_tx")
         ]
 
         # sata_tx clk --> sys clk
@@ -206,10 +209,11 @@ class K7LiteSATAPHYTRX(Module):
         self.specials += [
             MultiReg(txresetdone, self.txresetdone, "sys"),
             MultiReg(txdlyresetdone, self.txdlyresetdone, "sys"),
+            MultiReg(txphaligndone, self.txphaligndone, "sys")
         ]
 
         self.submodules += [
-            _PulseSynchronizer(txcomfinish, "sata_tx", self.txcomfinish, "sys"),
+            _PulseSynchronizer(txcomfinish, "sata_tx", self.txcomfinish, "sys")
         ]
 
         # sys clk --> sata_rx clk
@@ -217,11 +221,11 @@ class K7LiteSATAPHYTRX(Module):
         rxdlyreset = Signal()
 
         self.specials += [
-            MultiReg(self.rxuserrdy, rxuserrdy, "sata_rx"),
+            MultiReg(self.rxuserrdy, rxuserrdy, "sata_rx")
         ]
 
         self.submodules += [
-            _PulseSynchronizer(self.rxdlyreset, "sys", rxdlyreset, "sata_rx"),
+            _PulseSynchronizer(self.rxdlyreset, "sys", rxdlyreset, "sata_rx")
         ]
 
         # sata_rx clk --> sys clk
@@ -232,6 +236,7 @@ class K7LiteSATAPHYTRX(Module):
         rxcomwakedet = Signal()
         rxratedone = Signal()
         rxdlyresetdone = Signal()
+        rxphaligndone = Signal()
         rxdisperr = Signal(dw//8)
         rxnotintable = Signal(dw//8)
 
@@ -241,8 +246,9 @@ class K7LiteSATAPHYTRX(Module):
             MultiReg(rxcominitdet, self.rxcominitdet, "sys"),
             MultiReg(rxcomwakedet, self.rxcomwakedet, "sys"),
             MultiReg(rxdlyresetdone, self.rxdlyresetdone, "sys"),
+            MultiReg(rxphaligndone, self.rxphaligndone, "sys"),
             MultiReg(rxdisperr, self.rxdisperr, "sys"),
-            MultiReg(rxnotintable, self.rxnotintable, "sys"),
+            MultiReg(rxnotintable, self.rxnotintable, "sys")
         ]
 
         rxelecidle_filter = _LowPassFilter(rxelecidle_i, self.rxelecidle, 256)
@@ -657,7 +663,7 @@ class K7LiteSATAPHYTRX(Module):
                     i_RXDLYSRESET=rxdlyreset,
                     o_RXDLYSRESETDONE=rxdlyresetdone,
                     i_RXPHALIGN=0,
-                    #o_RXPHALIGNDONE=,
+                    o_RXPHALIGNDONE=rxphaligndone,
                     i_RXPHALIGNEN=0,
                     i_RXPHDLYPD=0,
                     i_RXPHDLYRESET=0,
@@ -824,7 +830,7 @@ class K7LiteSATAPHYTRX(Module):
                     o_TXDLYSRESETDONE=txdlyresetdone,
                     i_TXDLYUPDOWN=0,
                     i_TXPHALIGN=0,
-                    #o_TXPHALIGNDONE=txphaligndone,
+                    o_TXPHALIGNDONE=txphaligndone,
                     i_TXPHALIGNEN=0,
                     i_TXPHDLYPD=0,
                     i_TXPHDLYRESET=0,
