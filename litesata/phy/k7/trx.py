@@ -365,7 +365,7 @@ class K7LiteSATAPHYTRX(Module):
                     "p_PCS_PCIE_EN": "FALSE",
 
                 # PCS Attributes
-                    "p_PCS_RSVD_ATTR": 0x108,
+                    "p_PCS_RSVD_ATTR": 0x108 if revision == "sata_gen1" else 0x100,
 
                 # RX Buffer Attributes
                     "p_RXBUF_ADDR_MODE": "FAST",
