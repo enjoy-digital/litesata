@@ -251,7 +251,8 @@ class LiteSATACommandRX(Module):
                 transport.source.ack.eq(0),
                 If(test_type("PIO_SETUP_D2H"),
                     NextState("PRESENT_PIO_SETUP_D2H")
-                ).Else(NextState("FLUSH")
+                ).Else(
+                    NextState("FLUSH")
                 )
             )
         )
