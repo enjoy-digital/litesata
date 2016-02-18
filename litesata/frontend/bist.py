@@ -31,7 +31,7 @@ class LiteSATABISTGenerator(Module):
         		counter.eq(counter + 1)
         	)
 
-        scrambler = scrambler = ResetInserter()(Scrambler())
+        scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler
         self.comb += [
             scrambler.reset.eq(counter_reset),
@@ -74,7 +74,13 @@ class LiteSATABISTGenerator(Module):
                 NextState("IDLE")
             )
         )
-        self.sync += If(sink.stb & sink.ack, self.aborted.eq(sink.failed))
+
+        self.sync += \
+            If(self.start,
+                self.aborted.eq(0)
+            ).Elif(sink.stb & sink.ack,
+                self.aborted.eq(self.aborted | sink.failed)
+            )
 
 
 class LiteSATABISTChecker(Module):
@@ -176,7 +182,13 @@ class LiteSATABISTChecker(Module):
                 )
             )
         )
-        self.sync += If(sink.stb & sink.ack, self.aborted.eq(sink.failed))
+
+        self.sync += \
+            If(self.start,
+                self.aborted.eq(0)
+            ).Elif(sink.stb & sink.ack,
+                self.aborted.eq(self.aborted | sink.failed)
+            )
 
 
 class LiteSATABISTUnitCSR(Module, AutoCSR):
