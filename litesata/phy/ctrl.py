@@ -117,6 +117,7 @@ class LiteSATAPHYCtrl(Module):
             source.charisk.eq(0b0000),
             align_timer.wait.eq(1),
             If(align_det & ~trx.rx_idle,
+                crg.rx_reset.eq(1),
                 NextState("SEND_ALIGN")
             )
         )
@@ -124,7 +125,7 @@ class LiteSATAPHYCtrl(Module):
             align_timer.wait.eq(1),
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
-            If(sink.stb & 
+            If(sink.stb &
 			   (sink.charisk == 0b0001),
                If(sink.data[0:8] == 0x7C,
                    non_align_counter_ce.eq(1)
