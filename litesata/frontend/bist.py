@@ -4,7 +4,7 @@ from litesata.core.link import Scrambler
 from litex.soc.interconnect.csr import *
 
 class LiteSATABISTGenerator(Module):
-    def __init__(self, user_port, counter_width):
+    def __init__(self, user_port, counter_width=32):
         self.start = Signal()
         self.sector = Signal(48)
         self.count = Signal(16)
@@ -84,7 +84,7 @@ class LiteSATABISTGenerator(Module):
 
 
 class LiteSATABISTChecker(Module):
-    def __init__(self, user_port, counter_width):
+    def __init__(self, user_port, counter_width=32):
         self.start = Signal()
         self.sector = Signal(48)
         self.count = Signal(16)
@@ -383,10 +383,8 @@ class LiteSATABISTRobustness(Module):
 
         # # #
 
-        generator = LiteSATABISTGenerator(crossbar.get_port(),
-                                          counter_width=counter_width)
-        checker = LiteSATABISTChecker(crossbar.get_port(),
-                                      counter_width=counter_width)
+        generator = LiteSATABISTGenerator(crossbar.get_port(), counter_width)
+        checker = LiteSATABISTChecker(crossbar.get_port(), counter_width)
         self.submodules.generator = generator
         self.submodules.checker = checker
 
