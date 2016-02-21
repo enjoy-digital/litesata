@@ -539,16 +539,21 @@ class LiteSATALinkTX(Module):
             If(self.from_rx.insert,
                 source.stb.eq(1),
                 source.data.eq(self.from_rx.insert),
-                source.charisk.eq(0x0001),
+                source.charisk.eq(0b0001),
             ).Elif(insert,
                 source.stb.eq(1),
                 source.data.eq(insert),
-                source.charisk.eq(0x0001),
+                source.charisk.eq(0b0001),
             ).Elif(copy,
-                source.stb.eq(pipeline.source.stb),
-                source.data.eq(pipeline.source.data),
+                source.stb.eq(1),
                 pipeline.source.ack.eq(source.ack),
-                source.charisk.eq(0)
+                If(pipeline.source.stb,
+                    source.data.eq(pipeline.source.data),
+                    source.charisk.eq(0b0000)
+                ).Else(
+                    source.data.eq(primitives["HOLD"]),
+                    source.charisk.eq(0b0001)
+                )
             )
         ]
 
@@ -590,8 +595,6 @@ class LiteSATALinkTX(Module):
             ).Elif(self.from_rx.primitive_stb &
                (self.from_rx.primitive == primitives["HOLD"]),
                NextState("HOLDA")
-            ).Elif(~pipeline.source.stb,
-                insert.eq(primitives["HOLD"])
             )
         )
         fsm.act("HOLDA",
