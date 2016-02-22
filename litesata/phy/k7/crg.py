@@ -108,7 +108,7 @@ class K7LiteSATAPHYCRG(Module):
         self.tx_startup_fsm = tx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.submodules += tx_startup_fsm
 
-        txphaligndone = Signal()
+        txphaligndone = Signal(reset=1)
         txphaligndone_rising = Signal()
         self.sync += txphaligndone.eq(gtx.txphaligndone)
         self.comb += txphaligndone_rising.eq(gtx.txphaligndone & ~txphaligndone)
@@ -184,10 +184,10 @@ class K7LiteSATAPHYCRG(Module):
             self.tx_ready.eq(1)
         )
 
-        tx_ready_timer = WaitTimer(1*clk_freq//1000)
+        tx_ready_timer = WaitTimer(2*clk_freq//1000)
         self.submodules += tx_ready_timer
         self.comb += [
-            tx_ready_timer.wait.eq(~self.tx_ready),
+            tx_ready_timer.wait.eq(~self.tx_ready & ~tx_startup_fsm.reset),
             tx_startup_fsm.reset.eq(self.tx_reset | tx_ready_timer.done),
         ]
 
@@ -200,7 +200,7 @@ class K7LiteSATAPHYCRG(Module):
         cdr_stable_timer = WaitTimer(1024)
         self.submodules += cdr_stable_timer
 
-        rxphaligndone = Signal()
+        rxphaligndone = Signal(reset=1)
         rxphaligndone_rising = Signal()
         self.sync += rxphaligndone.eq(gtx.rxphaligndone)
         self.comb += rxphaligndone_rising.eq(gtx.rxphaligndone & ~rxphaligndone)
@@ -267,10 +267,10 @@ class K7LiteSATAPHYCRG(Module):
             self.rx_ready.eq(1)
         )
 
-        rx_ready_timer = WaitTimer(1*clk_freq//1000)
+        rx_ready_timer = WaitTimer(2*clk_freq//1000)
         self.submodules += rx_ready_timer
         self.comb += [
-            rx_ready_timer.wait.eq(~self.rx_ready),
+            rx_ready_timer.wait.eq(~self.rx_ready & ~rx_startup_fsm.reset),
             rx_startup_fsm.reset.eq(self.rx_reset | rx_ready_timer.done),
         ]
 
