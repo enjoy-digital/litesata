@@ -48,7 +48,6 @@ class LiteSATABISTGenerator(Module):
             )
         )
         self.comb += [
-            source.sop.eq(counter == 0),
             source.eop.eq(counter == (logical_sector_size//4*self.count)-1),
             source.write.eq(1),
             source.sector.eq(self.sector),
@@ -141,7 +140,6 @@ class LiteSATABISTChecker(Module):
             )
         )
         self.comb += [
-            source.sop.eq(1),
             source.eop.eq(1),
             source.read.eq(1),
             source.sector.eq(self.sector),
@@ -298,7 +296,6 @@ class LiteSATABISTIdentify(Module):
             )
         )
         self.comb += [
-            source.sop.eq(1),
             source.eop.eq(1),
             source.identify.eq(1),
         ]

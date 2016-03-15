@@ -72,7 +72,6 @@ for i in range(2):
     _io += [
         ("user_port", i+1,
             Subsignal("sink_stb",      Pins(1)),
-            Subsignal("sink_sop",      Pins(1)),
             Subsignal("sink_eop",      Pins(1)),
             Subsignal("sink_ack",      Pins(1)),
             Subsignal("sink_write",    Pins(1)),
@@ -83,7 +82,6 @@ for i in range(2):
             Subsignal("sink_data",     Pins(128)), # FIXME
 
             Subsignal("source_stb",      Pins(1)),
-            Subsignal("source_sop",      Pins(1)),
             Subsignal("source_eop",      Pins(1)),
             Subsignal("source_ack",      Pins(1)),
             Subsignal("source_write",    Pins(1)),
@@ -218,7 +216,6 @@ class Core(Module):
             user_port_pads = platform.request("user_port", i+1)
             self.comb += [
                 user_port.sink.stb.eq(user_port_pads.sink_stb),
-                user_port.sink.sop.eq(user_port_pads.sink_sop),
                 user_port.sink.eop.eq(user_port_pads.sink_eop),
                 user_port.sink.write.eq(user_port_pads.sink_write),
                 user_port.sink.read.eq(user_port_pads.sink_read),
@@ -230,7 +227,6 @@ class Core(Module):
             ]
             self.comb += [
                 user_port_pads.source_stb.eq(user_port.source.stb),
-                user_port_pads.source_sop.eq(user_port.source.sop),
                 user_port_pads.source_eop.eq(user_port.source.eop),
                 user_port_pads.source_write.eq(user_port.source.write),
                 user_port_pads.source_read.eq(user_port.source.read),

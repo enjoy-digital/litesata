@@ -44,7 +44,7 @@ class CommandLogger(PacketLogger):
 
     def do_simulation(self, selfp):
         selfp.sink.ack = 1
-        if selfp.sink.stb == 1 and selfp.sink.sop == 1:
+        if selfp.sink.stb == 1 and selfp.sink.sop == 1: # TODO: adapt sop
             self.packet = CommandRXPacket()
             self.packet.write = selfp.sink.write
             self.packet.read = selfp.sink.read

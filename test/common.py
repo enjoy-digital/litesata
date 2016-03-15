@@ -69,7 +69,7 @@ class PacketStreamer(Module):
         if len(self.packets) and self.packet.done:
             self.packet = self.packets.pop(0)
         if not self.packet.ongoing and not self.packet.done:
-            selfp.source.stb = 1
+            selfp.source.stb = 1 # TODO adapt sop
             if self.source.description.packetized:
                 selfp.source.sop = 1
             if len(self.packet) > 0:
@@ -81,7 +81,7 @@ class PacketStreamer(Module):
             self.packet.ongoing = True
         elif selfp.source.stb == 1 and selfp.source.ack == 1:
             if self.source.description.packetized:
-                selfp.source.sop = 0
+                selfp.source.sop = 0 # TODO adapt sop
                 selfp.source.eop = (len(self.packet) == 1)
             if len(self.packet) > 0:
                 selfp.source.stb = 1
@@ -116,7 +116,7 @@ class PacketLogger(Module):
     def do_simulation(self, selfp):
         selfp.sink.ack = 1
         if self.sink.description.packetized:
-            if selfp.sink.stb == 1 and selfp.sink.sop == 1:
+            if selfp.sink.stb == 1 and selfp.sink.sop == 1: # TODO adapt sop
                 self.packet = self.packet_class()
         if selfp.sink.stb:
             if hasattr(selfp.sink, "data"):

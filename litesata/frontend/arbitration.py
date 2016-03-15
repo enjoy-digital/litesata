@@ -43,7 +43,7 @@ class LiteSATAArbiter(Module):
             done = Signal()
             ongoing = Signal()
             self.comb += [
-                start.eq(sink.stb & sink.sop),
+                start.eq(sink.stb & sink.sop), # TODO remove sop
                 done.eq(source.stb & source.last & source.eop & source.ack)
             ]
             self.sync += \

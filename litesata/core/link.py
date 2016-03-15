@@ -146,7 +146,7 @@ class LiteSATACRCInserter(Module):
         fsm.act("IDLE",
             crc.reset.eq(1),
             sink.ack.eq(1),
-            If(sink.stb & sink.sop,
+            If(sink.stb,
                 sink.ack.eq(0),
                 NextState("COPY"),
             )
@@ -218,7 +218,6 @@ class LiteSATACRCChecker(Module):
             self.sink.ack.eq(fifo_in),
 
             source.stb.eq(sink.stb & fifo_full),
-            source.sop.eq(fifo.source.sop),
             source.eop.eq(sink.eop),
             fifo.source.ack.eq(fifo_out),
             source.payload.eq(fifo.source.payload),
@@ -233,7 +232,7 @@ class LiteSATACRCChecker(Module):
         )
         fsm.act("IDLE",
             crc.data.eq(sink.data),
-            If(sink.stb & sink.sop & sink.ack,
+            If(sink.stb & sink.ack,
                 crc.ce.eq(1),
                 NextState("COPY")
             )
@@ -563,7 +562,7 @@ class LiteSATALinkTX(Module):
             scrambler.reset.eq(1),
             If(self.from_rx.idle,
                 insert.eq(primitives["SYNC"]),
-                If(pipeline.source.stb & pipeline.source.sop,
+                If(pipeline.source.stb,
                     If(self.from_rx.primitive_stb &
                        (self.from_rx.primitive == primitives["SYNC"]),
                         NextState("RDY")
@@ -668,11 +667,6 @@ class LiteSATALinkRX(Module):
         self.submodules += descrambler, crc, pipeline
 
         # internal logic
-        sop = Signal()
-        sop_clr = Signal()
-        sop_set = Signal()
-        self.sync += If(sop_clr, sop.eq(0)).Elif(sop_set, sop.eq(1))
-
         self.crc_error = crc_error = Signal()
         self.sync += \
             If(crc.source.stb & crc.source.eop & crc.source.ack,
@@ -696,16 +690,13 @@ class LiteSATALinkRX(Module):
             )
         )
         fsm.act("WAIT_FIRST",
-            sop_set.eq(1),
             insert.eq(primitives["R_IP"]),
             If(data_stb,
                 NextState("COPY")
             )
         )
         fsm.act("COPY",
-            sop_clr.eq(data_stb),
             pipeline.sink.stb.eq(data_stb),
-            pipeline.sink.sop.eq(sop),
             insert.eq(primitives["R_IP"]),
             If(primitive_stb,
                 If(primitive == primitives["HOLD"],

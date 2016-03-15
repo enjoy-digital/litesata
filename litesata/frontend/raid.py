@@ -36,7 +36,7 @@ class LiteSATAStripingTX(Module):
         self.submodules += fsm
         fsm.act("IDLE",
             sink.ack.eq(0),
-            If(sink.stb & sink.sop,
+            If(sink.stb,
                 NextState("SPLIT")
             ).Else(
                 sink.ack.eq(1)
@@ -76,13 +76,13 @@ class LiteSATAStripingRX(Module):
 
         # # #
 
-        sop = Signal()
-        self.comb += sop.eq(reduce(and_, [s.stb & s.sop for s in sinks]))
+        stb_all = Signal()
+        self.comb += stb_all.eq(reduce(and_, [s.stb for s in sinks]))
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
         fsm.act("IDLE",
-            If(sop,
+            If(stb_all,
                 NextState("COMBINE")
             )
         )

@@ -51,7 +51,7 @@ class LiteSATACommandTX(Module):
         self.submodules += fsm
         fsm.act("IDLE",
             sink.ack.eq(0),
-            If(sink.stb & sink.sop,
+            If(sink.stb,
                 NextState("SEND_CMD")
             ).Else(
                 sink.ack.eq(1)
@@ -66,7 +66,6 @@ class LiteSATACommandTX(Module):
 
         fsm.act("SEND_CMD",
             transport.sink.stb.eq(sink.stb),
-            transport.sink.sop.eq(1),
             transport.sink.eop.eq(1),
             transport.sink.c.eq(1),
             If(transport.sink.stb & transport.sink.ack,
@@ -91,7 +90,6 @@ class LiteSATACommandTX(Module):
             dwords_counter_ce.eq(sink.stb & sink.ack),
 
             transport.sink.stb.eq(sink.stb),
-            transport.sink.sop.eq(dwords_counter == 0),
             transport.sink.eop.eq((dwords_counter == (fis_max_dwords-1)) |
                                   sink.eop),
 
@@ -223,7 +221,6 @@ class LiteSATACommandRX(Module):
         )
         fsm.act("PRESENT_WRITE_RESPONSE",
             source.stb.eq(1),
-            source.sop.eq(1),
             source.eop.eq(1),
             source.write.eq(1),
             source.last.eq(1),
@@ -266,7 +263,6 @@ class LiteSATACommandRX(Module):
         fsm.act("PRESENT_READ_DATA",
             set_read_error.eq(transport.source.error),
             source.stb.eq(transport.source.stb),
-            source.sop.eq(transport.source.sop),
             source.eop.eq(transport.source.eop),
             source.read.eq(~is_identify),
             source.identify.eq(is_identify),
@@ -288,7 +284,6 @@ class LiteSATACommandRX(Module):
 
         fsm.act("PRESENT_READ_RESPONSE",
             source.stb.eq(1),
-            source.sop.eq(1),
             source.eop.eq(1),
             source.read.eq(1),
             source.last.eq(1),

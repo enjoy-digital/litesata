@@ -45,7 +45,7 @@ class LiteSATATransportTX(Module):
             sink.ack.eq(0),
             counter_reset.eq(1),
             update_fis_type.eq(1),
-            If(sink.stb & sink.sop,
+            If(sink.stb,
                 If(test_type_tx("REG_H2D"),
                     NextState("SEND_CTRL_CMD")
                 ).Elif(test_type_tx("DATA"),
@@ -98,12 +98,10 @@ class LiteSATATransportTX(Module):
                         link.sink.ack),
             If(cmd_send,
                 link.sink.stb.eq(sink.stb),
-                link.sink.sop.eq(counter == 0),
                 link.sink.eop.eq((counter == cmd_len) & ~cmd_with_data),
                 Case(counter, cmd_cases)
             ).Elif(data_send,
                 link.sink.stb.eq(sink.stb),
-                link.sink.sop.eq(0),
                 link.sink.eop.eq(sink.eop),
                 link.sink.data.eq(sink.data)
             )
@@ -146,7 +144,6 @@ class LiteSATATransportRX(Module):
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
 
-        data_sop = Signal()
         fis_type = Signal(8)
         update_fis_type = Signal()
 
@@ -154,7 +151,7 @@ class LiteSATATransportRX(Module):
             link.source.ack.eq(0),
             counter_reset.eq(1),
             update_fis_type.eq(1),
-            If(link.source.stb & link.source.sop,
+            If(link.source.stb,
                 If(test_type_rx("REG_D2H"),
                     NextState("RECEIVE_CTRL_CMD")
                 ).Elif(test_type_rx("DMA_ACTIVATE_D2H"),
@@ -189,7 +186,6 @@ class LiteSATATransportRX(Module):
         )
         fsm.act("PRESENT_CTRL_CMD",
             source.stb.eq(1),
-            source.sop.eq(1),
             source.eop.eq(1),
             If(test_type("REG_D2H", fis_type),
                 fis_reg_d2h_header.decode(encoded_cmd, source)
@@ -214,7 +210,6 @@ class LiteSATATransportRX(Module):
             data_receive.eq(1),
             source.stb.eq(link.source.stb),
             fis_data_header.decode(encoded_cmd, source),
-            source.sop.eq(data_sop),
             source.eop.eq(link.source.eop),
             source.error.eq(link.source.error),
             source.data.eq(link.source.data),
@@ -223,15 +218,6 @@ class LiteSATATransportRX(Module):
                 NextState("IDLE")
             )
         )
-
-        self.sync += \
-            If(fsm.ongoing("RECEIVE_DATA_CMD"),
-                data_sop.eq(1)
-            ).Elif(fsm.ongoing("PRESENT_DATA"),
-                If(source.stb & source.ack,
-                    data_sop.eq(0)
-                )
-            )
 
         cmd_cases = {}
         for i in range(cmd_ndwords):

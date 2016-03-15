@@ -158,7 +158,6 @@ class BISTSoCDevel(BISTSoC):
             self.sata_phy.sink.charisk,
 
             self.sata_core.command.sink.stb,
-            self.sata_core.command.sink.sop,
             self.sata_core.command.sink.eop,
             self.sata_core.command.sink.ack,
             self.sata_core.command.sink.write,
@@ -166,7 +165,6 @@ class BISTSoCDevel(BISTSoC):
             self.sata_core.command.sink.identify,
 
             self.sata_core.command.source.stb,
-            self.sata_core.command.source.sop,
             self.sata_core.command.source.eop,
             self.sata_core.command.source.ack,
             self.sata_core.command.source.write,
