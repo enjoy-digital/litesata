@@ -37,15 +37,15 @@ class DataLogger(PacketLogger):
 class TRX(Module):
     def __init__(self, dw=16):
         self.dw = dw
-        self.sink = Sink(phy_description(32))
-        self.source = Source(phy_description(32))
+        self.sink = stream.Endpoint(phy_description(32))
+        self.source = stream.Endpoint(phy_description(32))
         self.comb += self.sink.connect(self.source)
 
 
 class CTRL(Module):
     def __init__(self):
-        self.sink = Sink(phy_description(32))
-        self.source = Source(phy_description(32))
+        self.sink = stream.Endpoint(phy_description(32))
+        self.source = stream.Endpoint(phy_description(32))
         self.ready = Signal(reset=1)
 
 

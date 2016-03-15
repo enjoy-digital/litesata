@@ -8,7 +8,7 @@ def test_type(name, signal):
 
 class LiteSATATransportTX(Module):
     def __init__(self, link):
-        self.sink = sink = Sink(transport_tx_description(32))
+        self.sink = sink = stream.Endpoint(transport_tx_description(32))
 
         # # #
 
@@ -113,7 +113,7 @@ class LiteSATATransportTX(Module):
 
 class LiteSATATransportRX(Module):
     def __init__(self, link):
-        self.source = source = Source(transport_rx_description(32))
+        self.source = source = stream.Endpoint(transport_rx_description(32))
 
         # # #
 

@@ -61,8 +61,8 @@ class K7LiteSATAPHYTRX(Module):
         self.rxnotintable = Signal(dw//8)   #o
 
         # datapath
-        self.sink = Sink(phy_description(dw))
-        self.source = Source(phy_description(dw))
+        self.sink = stream.Endpoint(phy_description(dw))
+        self.source = stream.Endpoint(phy_description(dw))
 
     # K7 specific signals
         # Channel - Ref Clock Ports

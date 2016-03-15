@@ -16,9 +16,9 @@ rx_to_tx = [
 
 class LiteSATACommandTX(Module):
     def __init__(self, transport):
-        self.sink = sink = Sink(command_tx_description(32))
-        self.to_rx = to_rx = Source(tx_to_rx)
-        self.from_rx = from_rx = Sink(rx_to_tx)
+        self.sink = sink = stream.Endpoint(command_tx_description(32))
+        self.to_rx = to_rx = stream.Endpoint(tx_to_rx)
+        self.from_rx = from_rx = stream.Endpoint(rx_to_tx)
 
         # # #
 
@@ -130,9 +130,9 @@ class LiteSATACommandTX(Module):
 
 class LiteSATACommandRX(Module):
     def __init__(self, transport):
-        self.source = source = Source(command_rx_description(32))
-        self.to_tx = to_tx = Source(rx_to_tx)
-        self.from_tx = from_tx = Sink(tx_to_rx)
+        self.source = source = stream.Endpoint(command_rx_description(32))
+        self.to_tx = to_tx = stream.Endpoint(rx_to_tx)
+        self.from_tx = from_tx = stream.Endpoint(tx_to_rx)
 
         # debug
         self.d2h_status = Signal(8)

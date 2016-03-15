@@ -19,8 +19,8 @@ class LiteSATAStripingTX(Module):
     is dw (same as controllers)
     """
     def __init__(self, n, dw, mirroring_mode=False):
-        self.sink = sink = Sink(command_tx_description(dw*n if not mirroring_mode else dw))
-        self.sources = sources = [Source(command_tx_description(dw)) for i in range(n)]
+        self.sink = sink = stream.Endpoint(command_tx_description(dw*n if not mirroring_mode else dw))
+        self.sources = sources = [stream.Endpoint(command_tx_description(dw)) for i in range(n)]
 
         # # #
 
@@ -71,8 +71,8 @@ class LiteSATAStripingRX(Module):
     is dw (same as controllers)
     """
     def __init__(self, n, dw, mirroring_mode=False):
-        self.sinks = sinks = [Sink(command_rx_description(dw)) for i in range(n)]
-        self.source = source = Source(command_rx_description(dw*n if not mirroring_mode else dw))
+        self.sinks = sinks = [stream.Endpoint(command_rx_description(dw)) for i in range(n)]
+        self.source = source = stream.Endpoint(command_rx_description(dw*n if not mirroring_mode else dw))
 
         # # #
 
@@ -175,8 +175,8 @@ class LiteSATAMirroringCtrl(Module):
 
 class LiteSATAMirroringTX(Module):
     def __init__(self, n, dw, ctrl):
-        self.sinks = sinks = [Sink(command_tx_description(dw)) for i in range(n)]
-        self.sources = sources = [Source(command_tx_description(dw)) for i in range(n)]
+        self.sinks = sinks = [stream.Endpoint(command_tx_description(dw)) for i in range(n)]
+        self.sources = sources = [stream.Endpoint(command_tx_description(dw)) for i in range(n)]
 
         # # #
 
@@ -185,8 +185,8 @@ class LiteSATAMirroringTX(Module):
         reading = Signal()
         writing = Signal()
 
-        reads = [Sink(command_tx_description(dw)) for i in range(dw)]
-        writes = [Sink(command_tx_description(dw)) for i in range(dw)]
+        reads = [stream.Endpoint(command_tx_description(dw)) for i in range(dw)]
+        writes = [stream.Endpoint(command_tx_description(dw)) for i in range(dw)]
         for sink, read, write in zip(sinks, reads, writes):
             read_stall = Signal()
             read_status = Status(read)
@@ -234,8 +234,8 @@ class LiteSATAMirroringTX(Module):
 
 class LiteSATAMirroringRX(Module):
     def __init__(self, n, dw, ctrl):
-        self.sinks = sinks = [Sink(command_rx_description(dw)) for i in range(n)]
-        self.sources = sources = [Source(command_rx_description(dw)) for i in range(n)]
+        self.sinks = sinks = [stream.Endpoint(command_rx_description(dw)) for i in range(n)]
+        self.sources = sources = [stream.Endpoint(command_rx_description(dw)) for i in range(n)]
 
         # # #
 

@@ -6,8 +6,8 @@ from litex.gen.genlib.roundrobin import *
 class LiteSATAMasterPort:
     def __init__(self, dw):
         self.dw = dw
-        self.source = Source(command_tx_description(dw))
-        self.sink = Sink(command_rx_description(dw))
+        self.source = stream.Endpoint(command_tx_description(dw))
+        self.sink = stream.Endpoint(command_rx_description(dw))
 
     def connect(self, slave):
         return [self.source.connect(slave.sink),
@@ -17,8 +17,8 @@ class LiteSATAMasterPort:
 class LiteSATASlavePort:
     def __init__(self, dw):
         self.dw = dw
-        self.sink = Sink(command_tx_description(dw))
-        self.source = Source(command_rx_description(dw))
+        self.sink = stream.Endpoint(command_tx_description(dw))
+        self.source = stream.Endpoint(command_rx_description(dw))
 
     def connect(self, master):
         return [self.sink.connect(master.source),

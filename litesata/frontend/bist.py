@@ -281,7 +281,7 @@ class LiteSATABISTIdentify(Module):
         self.done  = Signal()
         self.data_width = user_port.dw
 
-        fifo = ResetInserter()(SyncFIFO([("data", 32)], 512, buffered=True))
+        fifo = ResetInserter()(stream.SyncFIFO([("data", 32)], 512, buffered=True))
         self.submodules += fifo
         self.source = fifo.source
 
@@ -393,7 +393,7 @@ class LiteSATABISTRobustness(Module):
                        ("count", 16),
                        ("write_read_n", 1),
                        ("start", 1)]
-        fifo = SyncFIFO(fifo_layout, fifo_depth)
+        fifo = stream.SyncFIFO(fifo_layout, fifo_depth)
         self.submodules += ResetInserter()(fifo)
         self.comb += fifo.reset.eq(self.flush)
 

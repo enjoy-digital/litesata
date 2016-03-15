@@ -3,8 +3,8 @@ from litesata.common import *
 
 class LiteSATAPHYDatapathRX(Module):
     def __init__(self, trx_dw):
-        self.sink = sink = Sink(phy_description(trx_dw))
-        self.source = source = Source(phy_description(32))
+        self.sink = sink = stream.Endpoint(phy_description(trx_dw))
+        self.source = source = stream.Endpoint(phy_description(32))
 
         # # #
 
@@ -55,7 +55,7 @@ class LiteSATAPHYDatapathRX(Module):
         #   requirements:
         #     due to the convertion ratio of 2, sys_clk need to be > sata_rx/2
         #     source destination is always able to accept data (ack always 1)
-        fifo = AsyncFIFO(phy_description(32), 8)
+        fifo = stream.AsyncFIFO(phy_description(32), 8)
         fifo = ClockDomainsRenamer({"write": "sata_rx", "read": "sys"})(fifo)
         self.submodules += fifo
         self.comb += [
@@ -66,8 +66,8 @@ class LiteSATAPHYDatapathRX(Module):
 
 class LiteSATAPHYDatapathTX(Module):
     def __init__(self, trx_dw):
-        self.sink = sink = Sink(phy_description(32))
-        self.source = source = Source(phy_description(trx_dw))
+        self.sink = sink = stream.Endpoint(phy_description(32))
+        self.source = source = stream.Endpoint(phy_description(trx_dw))
 
         # # #
 
@@ -77,7 +77,7 @@ class LiteSATAPHYDatapathTX(Module):
         #   (sata_gen1) sys_clk to 75MHz (16 bits) / 37.5MHz (32 bits) sata_tx clk
         #   requirements:
         #     source destination is always able to accept data (ack always 1)
-        fifo = AsyncFIFO(phy_description(32), 8)
+        fifo = stream.AsyncFIFO(phy_description(32), 8)
         fifo = ClockDomainsRenamer({"write": "sys", "read": "sata_tx"})(fifo)
         self.submodules += fifo
         self.comb += sink.connect(fifo.sink)
@@ -96,8 +96,8 @@ class LiteSATAPHYDatapathTX(Module):
 
 class LiteSATAPHYDatapath(Module):
     def __init__(self, trx, ctrl):
-        self.sink = sink = Sink(phy_description(32))
-        self.source = source = Source(phy_description(32))
+        self.sink = sink = stream.Endpoint(phy_description(32))
+        self.source = source = stream.Endpoint(phy_description(32))
 
         self.misalign = Signal()
 

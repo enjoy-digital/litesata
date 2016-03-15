@@ -133,8 +133,8 @@ class LiteSATACRCInserter(Module):
         Packets output with CRC.
     """
     def __init__(self, description):
-        self.sink = sink = Sink(description)
-        self.source = source = Source(description)
+        self.sink = sink = stream.Endpoint(description)
+        self.source = source = stream.Endpoint(description)
         self.busy = Signal()
 
         # # #
@@ -188,8 +188,8 @@ class LiteSATACRCChecker(Module):
         on eop when CRC OK / set to 1 when CRC KO.
     """
     def __init__(self, description):
-        self.sink = sink = Sink(description)
-        self.source = source = Source(description)
+        self.sink = sink = stream.Endpoint(description)
+        self.source = source = stream.Endpoint(description)
         self.busy = Signal()
 
         # # #
@@ -198,7 +198,7 @@ class LiteSATACRCChecker(Module):
         self.submodules += crc
 
         error = Signal()
-        fifo = ResetInserter()(SyncFIFO(description, 2))
+        fifo = ResetInserter()(stream.SyncFIFO(description, 2))
         self.submodules += fifo
 
         fsm = FSM(reset_state="RESET")
@@ -319,8 +319,8 @@ class Scrambler(Module):
 @ResetInserter()
 class LiteSATAScrambler(Module):
     def __init__(self, description):
-        self.sink = sink = Sink(description)
-        self.source = source = Source(description)
+        self.sink = sink = stream.Endpoint(description)
+        self.source = source = stream.Endpoint(description)
 
         # # #
 
@@ -336,8 +336,8 @@ class LiteSATAScrambler(Module):
 
 class LiteSATACONTInserter(Module):
     def __init__(self, description):
-        self.sink = sink = Sink(description)
-        self.source = source = Source(description)
+        self.sink = sink = stream.Endpoint(description)
+        self.source = source = stream.Endpoint(description)
 
         # # #
 
@@ -415,8 +415,8 @@ class LiteSATACONTInserter(Module):
 
 class LiteSATACONTRemover(Module):
     def __init__(self, description):
-        self.sink = sink = Sink(description)
-        self.source = source = Source(description)
+        self.sink = sink = stream.Endpoint(description)
+        self.source = source = stream.Endpoint(description)
 
         # # #
 
@@ -460,8 +460,8 @@ class LiteSATACONTRemover(Module):
 
 class LiteSATAALIGNInserter(Module):
     def __init__(self, description):
-        self.sink = sink = Sink(description)
-        self.source = source = Source(description)
+        self.sink = sink = stream.Endpoint(description)
+        self.source = source = stream.Endpoint(description)
 
         # # #
 
@@ -492,8 +492,8 @@ class LiteSATAALIGNInserter(Module):
 
 class LiteSATAALIGNRemover(Module):
     def __init__(self, description):
-        self.sink = sink = Sink(description)
-        self.source = source = Source(description)
+        self.sink = sink = stream.Endpoint(description)
+        self.source = source = stream.Endpoint(description)
 
         # # #
 
@@ -518,9 +518,9 @@ from_rx = [
 
 class LiteSATALinkTX(Module):
     def __init__(self):
-        self.sink = sink = Sink(link_description(32))
-        self.source = source = Source(phy_description(32))
-        self.from_rx = Sink(from_rx)
+        self.sink = sink = stream.Endpoint(link_description(32))
+        self.source = source = stream.Endpoint(phy_description(32))
+        self.from_rx = stream.Endpoint(from_rx)
 
         self.error = Signal()
 
@@ -638,10 +638,10 @@ class LiteSATALinkTX(Module):
 
 class LiteSATALinkRX(Module):
     def __init__(self):
-        self.sink = sink = Sink(phy_description(32))
-        self.source = source = Source(link_description(32))
+        self.sink = sink = stream.Endpoint(phy_description(32))
+        self.source = source = stream.Endpoint(link_description(32))
         self.hold = Signal()
-        self.to_tx = Source(from_rx)
+        self.to_tx = stream.Endpoint(from_rx)
 
         # # #
 

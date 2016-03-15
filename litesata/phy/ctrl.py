@@ -7,8 +7,8 @@ class LiteSATAPHYCtrl(Module):
     def __init__(self, trx, crg, clk_freq):
         self.clk_freq = clk_freq
         self.ready = Signal()
-        self.sink = sink = Sink(phy_description(32))
-        self.source = source = Source(phy_description(32))
+        self.sink = sink = stream.Endpoint(phy_description(32))
+        self.source = source = stream.Endpoint(phy_description(32))
         self.misalign = Signal()
 
         # # #

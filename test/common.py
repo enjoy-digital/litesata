@@ -48,7 +48,7 @@ def randn(max_n):
 
 class PacketStreamer(Module):
     def __init__(self, description, packet_class):
-        self.source = Source(description)
+        self.source = stream.Endpoint(description)
 
         # # #
 
@@ -97,7 +97,7 @@ class PacketStreamer(Module):
 
 class PacketLogger(Module):
     def __init__(self, description, packet_class):
-        self.sink = Sink(description)
+        self.sink = stream.Endpoint(description)
 
         # # #
 
@@ -132,8 +132,8 @@ class Randomizer(Module):
     def __init__(self, description, level=0):
         self.level = level
 
-        self.sink = Sink(description)
-        self.source = Source(description)
+        self.sink = stream.Endpoint(description)
+        self.source = stream.Endpoint(description)
 
         self.run = Signal()
 
