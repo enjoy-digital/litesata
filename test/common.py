@@ -69,8 +69,7 @@ class PacketStreamer(Module):
         if len(self.packets) and self.packet.done:
             self.packet = self.packets.pop(0)
         if not self.packet.ongoing and not self.packet.done:
-            selfp.source.stb = 1 # TODO adapt sop
-            selfp.source.sop = 1
+            selfp.source.stb = 1
             if len(self.packet) > 0:
                 self.source_data = self.packet.pop(0)
                 if hasattr(selfp.source, "data"):
@@ -79,7 +78,6 @@ class PacketStreamer(Module):
                     selfp.source.d = self.source_data
             self.packet.ongoing = True
         elif selfp.source.stb == 1 and selfp.source.ack == 1:
-            selfp.source.sop = 0 # TODO adapt sop
             selfp.source.eop = (len(self.packet) == 1)
             if len(self.packet) > 0:
                 selfp.source.stb = 1
@@ -101,6 +99,7 @@ class PacketLogger(Module):
 
         self.packet_class = packet_class
         self.packet = packet_class()
+        self.first = True
 
     def receive(self, length=None):
         self.packet.done = 0
@@ -113,8 +112,9 @@ class PacketLogger(Module):
 
     def do_simulation(self, selfp):
         selfp.sink.ack = 1
-        if selfp.sink.stb == 1 and selfp.sink.sop == 1: # TODO adapt sop
+        if selfp.sink.stb == 1 and self.first == 1:
             self.packet = self.packet_class()
+            self.first = False
         if selfp.sink.stb:
             if hasattr(selfp.sink, "data"):
                 self.packet.append(selfp.sink.data)
@@ -122,6 +122,7 @@ class PacketLogger(Module):
                 self.packet.append(selfp.sink.d)
         if selfp.sink.stb == 1 and selfp.sink.eop == 1:
             self.packet.done = True
+            self.first = True
 
 
 class Randomizer(Module):

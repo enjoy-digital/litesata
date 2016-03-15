@@ -16,11 +16,9 @@ phy_datapath_tb:
 	$(CMD) phy_datapath_tb.py
 
 link_crc_tb: crc
-	$(CC) $(CFLAGS) $(INC) -o crc crc.c
 	$(CMD) link_crc_tb.py
 
 link_scrambler_tb: crc scrambler
-	$(CC) $(CFLAGS) $(INC) -o scrambler scrambler.c
 	$(CMD) link_scrambler_tb.py
 
 link_cont_tb:

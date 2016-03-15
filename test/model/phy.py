@@ -9,9 +9,9 @@ class PHYDword:
         self.done = 0
 
 
-class PHYstream.Endpoint(Module):
+class PHYSource(Module):
     def __init__(self):
-        self.source = stream.Endpoint(phy_description(32))
+        self.source = Source(phy_description(32))
 
         # # #
 
@@ -29,9 +29,9 @@ class PHYstream.Endpoint(Module):
         selfp.source.data = self.dword.dat
 
 
-class PHYstream.Endpoint(Module):
+class PHYSink(Module):
     def __init__(self):
-        self.sink = stream.Endpoint(phy_description(32))
+        self.sink = Sink(phy_description(32))
 
         # # #
 
@@ -53,8 +53,8 @@ class PHYstream.Endpoint(Module):
 class PHYLayer(Module):
     def __init__(self):
 
-        self.submodules.rx = PHYstream.Endpoint()
-        self.submodules.tx = PHYstream.Endpoint()
+        self.submodules.rx = PHYSink()
+        self.submodules.tx = PHYSource()
 
         self.source = self.tx.source
         self.sink = self.rx.sink

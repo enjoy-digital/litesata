@@ -39,20 +39,16 @@ class LiteSATAArbiter(Module):
         cases = {}
         for i, slave in enumerate(users):
             sink, source = slave.sink, slave.source
-            start = Signal()
             done = Signal()
             ongoing = Signal()
-            self.comb += [
-                start.eq(sink.stb & sink.sop), # TODO remove sop
-                done.eq(source.stb & source.last & source.eop & source.ack)
-            ]
+            self.comb += done.eq(source.stb & source.last & source.eop & source.ack)
             self.sync += \
-                If(start,
-                    ongoing.eq(1)
-                ).Elif(done,
+                If(done,
                     ongoing.eq(0)
+                ).Elif(sink.stb,
+                    ongoing.eq(1)
                 )
-            self.comb += self.rr.request[i].eq((start | ongoing) & ~done)
+            self.comb += self.rr.request[i].eq((sink.stb | ongoing) & ~done)
             cases[i] = [users[i].connect(master)]
         self.comb += Case(self.grant, cases)
 
@@ -67,7 +63,8 @@ class LiteSATACrossbar(Module):
             controller.source.connect(self.master.sink)
         ]
 
-    def get_port(self, dw=32):
+    def get_port(self, dw=None):
+        dw = self.dw if dw is None else dw
         user_port = LiteSATAUserPort(dw, self.dw)
         internal_port = LiteSATAUserPort(self.dw, self.dw)
 
@@ -94,7 +91,8 @@ class LiteSATACrossbar(Module):
 
         return user_port
 
-    def get_ports(self, n, dw=32):
+    def get_ports(self, n, dw=None):
+        dw = self.dw if dw is None else dw
         ports = []
         for i in range(n):
             ports.append(self.get_port(dw))

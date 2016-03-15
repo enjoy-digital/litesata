@@ -18,6 +18,8 @@ class LiteSATABISTGenerator(Module):
 
         n = user_port.dw//32
         count_mult = user_port.dw//user_port.controller_dw
+        if count_mult == 0:
+            raise ValueError
 
         source, sink = user_port.sink, user_port.source
 
@@ -97,6 +99,8 @@ class LiteSATABISTChecker(Module):
 
         n = user_port.dw//32
         count_mult = user_port.dw//user_port.controller_dw
+        if count_mult == 0:
+            raise ValueError
 
         source, sink = user_port.sink, user_port.source
 

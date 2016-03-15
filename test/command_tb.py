@@ -41,19 +41,22 @@ class CommandRXPacket(list):
 class CommandLogger(PacketLogger):
     def __init__(self):
         PacketLogger.__init__(self, command_rx_description(32), CommandRXPacket)
+        self.first = True
 
     def do_simulation(self, selfp):
         selfp.sink.ack = 1
-        if selfp.sink.stb == 1 and selfp.sink.sop == 1: # TODO: adapt sop
+        if selfp.sink.stb == 1 and self.first:
             self.packet = CommandRXPacket()
             self.packet.write = selfp.sink.write
             self.packet.read = selfp.sink.read
             self.packet.failed = selfp.sink.failed
             self.packet.append(selfp.sink.data)
+            self.first = False
         elif selfp.sink.stb:
             self.packet.append(selfp.sink.data)
         if selfp.sink.stb == 1 and selfp.sink.eop == 1:
             self.packet.done = True
+            self.first = True
 
 
 class TB(Module):

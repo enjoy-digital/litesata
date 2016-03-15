@@ -53,4 +53,4 @@ class TB(Module):
 
 if __name__ == "__main__":
     run_simulation(TB(32), ncycles=8192*2, vcd_name="my.vcd", keep_files=True)
-    run_simulation(TB(64), ncycles=8192*2, vcd_name="my.vcd", keep_files=True)
+    #run_simulation(TB(64), ncycles=8192*2, vcd_name="my.vcd", keep_files=True)
