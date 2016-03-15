@@ -57,7 +57,7 @@ def phy_description(dw):
         ("data", dw),
         ("charisk", dw//8),
     ]
-    return EndpointDescription(layout, packetized=False)
+    return EndpointDescription(layout)
 
 
 def link_description(dw):
@@ -65,7 +65,7 @@ def link_description(dw):
         ("data", dw),
         ("error", 1)
     ]
-    return EndpointDescription(layout, packetized=True)
+    return EndpointDescription(layout)
 
 
 # Transport Layer
@@ -172,7 +172,7 @@ def transport_tx_description(dw):
         ("control",   8)
     ]
     payload_layout = [("data", dw)]
-    return EndpointDescription(payload_layout, param_layout, packetized=True)
+    return EndpointDescription(payload_layout, param_layout)
 
 
 def transport_rx_description(dw):
@@ -191,7 +191,7 @@ def transport_rx_description(dw):
         ("error",           1)
     ]
     payload_layout = [("data", dw)]
-    return EndpointDescription(payload_layout, param_layout, packetized=True)
+    return EndpointDescription(payload_layout, param_layout)
 
 
 # Command Layer
@@ -223,7 +223,7 @@ def command_tx_description(dw):
         ("count",   16)
     ]
     payload_layout = [("data", dw)]
-    return EndpointDescription(payload_layout, param_layout, packetized=True)
+    return EndpointDescription(payload_layout, param_layout)
 
 
 def command_rx_description(dw):
@@ -235,7 +235,7 @@ def command_rx_description(dw):
         ("failed",   1)
     ]
     payload_layout = [("data", dw)]
-    return EndpointDescription(payload_layout, param_layout, packetized=True)
+    return EndpointDescription(payload_layout, param_layout)
 
 
 def command_rx_cmd_description(dw):
@@ -247,12 +247,12 @@ def command_rx_cmd_description(dw):
         ("failed",   1)
     ]
     payload_layout = [("dummy", 1)]
-    return EndpointDescription(payload_layout, param_layout, packetized=False)
+    return EndpointDescription(payload_layout, param_layout)
 
 
 def command_rx_data_description(dw):
     payload_layout = [("data", dw)]
-    return EndpointDescription(payload_layout, packetized=True)
+    return EndpointDescription(payload_layout)
 
 
 # HDD

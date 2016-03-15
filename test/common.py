@@ -70,8 +70,7 @@ class PacketStreamer(Module):
             self.packet = self.packets.pop(0)
         if not self.packet.ongoing and not self.packet.done:
             selfp.source.stb = 1 # TODO adapt sop
-            if self.source.description.packetized:
-                selfp.source.sop = 1
+            selfp.source.sop = 1
             if len(self.packet) > 0:
                 self.source_data = self.packet.pop(0)
                 if hasattr(selfp.source, "data"):
@@ -80,9 +79,8 @@ class PacketStreamer(Module):
                     selfp.source.d = self.source_data
             self.packet.ongoing = True
         elif selfp.source.stb == 1 and selfp.source.ack == 1:
-            if self.source.description.packetized:
-                selfp.source.sop = 0 # TODO adapt sop
-                selfp.source.eop = (len(self.packet) == 1)
+            selfp.source.sop = 0 # TODO adapt sop
+            selfp.source.eop = (len(self.packet) == 1)
             if len(self.packet) > 0:
                 selfp.source.stb = 1
                 self.source_data = self.packet.pop(0)
@@ -115,17 +113,15 @@ class PacketLogger(Module):
 
     def do_simulation(self, selfp):
         selfp.sink.ack = 1
-        if self.sink.description.packetized:
-            if selfp.sink.stb == 1 and selfp.sink.sop == 1: # TODO adapt sop
-                self.packet = self.packet_class()
+        if selfp.sink.stb == 1 and selfp.sink.sop == 1: # TODO adapt sop
+            self.packet = self.packet_class()
         if selfp.sink.stb:
             if hasattr(selfp.sink, "data"):
                 self.packet.append(selfp.sink.data)
             else:
                 self.packet.append(selfp.sink.d)
-        if self.sink.description.packetized:
-            if selfp.sink.stb == 1 and selfp.sink.eop == 1:
-                self.packet.done = True
+        if selfp.sink.stb == 1 and selfp.sink.eop == 1:
+            self.packet.done = True
 
 
 class Randomizer(Module):
