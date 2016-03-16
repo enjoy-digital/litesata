@@ -69,16 +69,16 @@ class LiteSATACrossbar(Module):
         internal_port = LiteSATAUserPort(self.dw, self.dw)
 
         if dw != self.dw:
-            converter = Converter(command_tx_description(user_port.dw),
-                                  command_tx_description(self.dw))
+            converter = StrideConverter(command_tx_description(user_port.dw),
+                                        command_tx_description(self.dw))
             self.submodules += converter
             self.comb += [
                 user_port.sink.connect(converter.sink),
                 converter.source.connect(internal_port.sink)
             ]
 
-            converter = Converter(command_rx_description(self.dw),
-                                  command_rx_description(user_port.dw))
+            converter = StrideConverter(command_rx_description(self.dw),
+                                        command_rx_description(user_port.dw))
             self.submodules += converter
             self.comb += [
                 internal_port.source.connect(converter.sink),

@@ -28,9 +28,9 @@ class LiteSATAPHYDatapathRX(Module):
         ]
 
 
-        converter = Converter(phy_description(trx_dw),
-                              phy_description(32),
-                              reverse=False)
+        converter = StrideConverter(phy_description(trx_dw),
+                                    phy_description(32),
+                                    reverse=False)
         if trx_dw == 16: # when trx_dw=32, converter is just direct connection
             converter = ResetInserter()(ClockDomainsRenamer("sata_rx")(converter))
         self.submodules += converter
@@ -83,9 +83,9 @@ class LiteSATAPHYDatapathTX(Module):
         self.comb += sink.connect(fifo.sink)
 
         # width convertion
-        converter = Converter(phy_description(32),
-                              phy_description(trx_dw),
-                              reverse=False)
+        converter = StrideConverter(phy_description(32),
+                                    phy_description(trx_dw),
+                                    reverse=False)
         converter = ClockDomainsRenamer("sata_tx")(converter)
         self.submodules += converter
         self.comb += [
