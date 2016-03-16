@@ -5,8 +5,8 @@ from litesata.core.command import LiteSATACommand
 
 
 class LiteSATACore(Module):
-    def __init__(self, phy, buffer_depth=2*fis_max_dwords):
-        self.submodules.link = LiteSATALink(phy, buffer_depth)
+    def __init__(self, phy):
+        self.submodules.link = LiteSATALink(phy)
         self.submodules.transport = LiteSATATransport(self.link)
         self.submodules.command = LiteSATACommand(self.transport)
         self.sink, self.source = self.command.sink, self.command.source

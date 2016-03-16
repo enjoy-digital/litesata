@@ -11,7 +11,7 @@ class PHYDword:
 
 class PHYSource(Module):
     def __init__(self):
-        self.source = Source(phy_description(32))
+        self.source = stream.Endpoint(phy_description(32))
 
         # # #
 
@@ -31,7 +31,7 @@ class PHYSource(Module):
 
 class PHYSink(Module):
     def __init__(self):
-        self.sink = Sink(phy_description(32))
+        self.sink = stream.Endpoint(phy_description(32))
 
         # # #
 

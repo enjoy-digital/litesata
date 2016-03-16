@@ -34,7 +34,7 @@ bist_tb: crc scrambler
 	$(CMD) bist_tb.py
 
 bist_robustness_tb: crc scrambler
-	$(CMD) bist_robustness_tb.py	
+	$(CMD) bist_robustness_tb.py
 
 striping_tb: crc scrambler
 	$(CMD) striping_tb.py
@@ -57,7 +57,7 @@ example_designs:
 	cd ../example_designs && $(PYTHON) make.py -t core -Ot design striping build-core
 
 
-all: phy_datapath_tb link_crc_tb link_scrambler_tb link_cont_tb link_tb command_tb bist_tb striping_tb mirroring_tb
+all: phy_datapath_tb link_crc_tb link_scrambler_tb link_cont_tb link_tb command_tb bist_tb striping_tb mirroring_tb example_designs
 
 clean:
 	rm -f crc scrambler *.v *.vvp *.vcd
