@@ -231,7 +231,7 @@ def command_rx_description(dw):
         ("write",    1),
         ("read",     1),
         ("identify", 1),
-        ("last",     1),
+        ("end",      1),
         ("failed",   1)
     ]
     payload_layout = [("data", dw)]
@@ -243,7 +243,7 @@ def command_rx_cmd_description(dw):
         ("write",    1),
         ("read",     1),
         ("identify", 1),
-        ("last",     1),
+        ("end",      1),
         ("failed",   1)
     ]
     payload_layout = [("dummy", 1)]

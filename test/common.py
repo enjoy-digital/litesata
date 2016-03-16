@@ -69,7 +69,7 @@ class PacketStreamer(Module):
         if len(self.packets) and self.packet.done:
             self.packet = self.packets.pop(0)
         if not self.packet.ongoing and not self.packet.done:
-            selfp.source.stb = 1
+            selfp.source.valid = 1
             if len(self.packet) > 0:
                 self.source_data = self.packet.pop(0)
                 if hasattr(selfp.source, "data"):
@@ -77,10 +77,10 @@ class PacketStreamer(Module):
                 else:
                     selfp.source.d = self.source_data
             self.packet.ongoing = True
-        elif selfp.source.stb == 1 and selfp.source.ack == 1:
-            selfp.source.eop = (len(self.packet) == 1)
+        elif selfp.source.valid == 1 and selfp.source.ready == 1:
+            selfp.source.last = (len(self.packet) == 1)
             if len(self.packet) > 0:
-                selfp.source.stb = 1
+                selfp.source.valid = 1
                 self.source_data = self.packet.pop(0)
                 if hasattr(selfp.source, "data"):
                     selfp.source.data = self.source_data
@@ -88,7 +88,7 @@ class PacketStreamer(Module):
                     selfp.source.d = self.source_data
             else:
                 self.packet.done = 1
-                selfp.source.stb = 0
+                selfp.source.valid = 0
 
 
 class PacketLogger(Module):
@@ -111,16 +111,16 @@ class PacketLogger(Module):
                 yield
 
     def do_simulation(self, selfp):
-        selfp.sink.ack = 1
-        if selfp.sink.stb == 1 and self.first == 1:
+        selfp.sink.ready = 1
+        if selfp.sink.valid == 1 and self.first == 1:
             self.packet = self.packet_class()
             self.first = False
-        if selfp.sink.stb:
+        if selfp.sink.valid:
             if hasattr(selfp.sink, "data"):
                 self.packet.append(selfp.sink.data)
             else:
                 self.packet.append(selfp.sink.d)
-        if selfp.sink.stb == 1 and selfp.sink.eop == 1:
+        if selfp.sink.valid == 1 and selfp.sink.last == 1:
             self.packet.done = True
             self.first = True
 
@@ -138,8 +138,8 @@ class Randomizer(Module):
             If(self.run,
                 self.sink.connect(self.source)
             ).Else(
-                self.source.stb.eq(0),
-                self.sink.ack.eq(0),
+                self.source.valid.eq(0),
+                self.sink.ready.eq(0),
             )
 
     def do_simulation(self, selfp):

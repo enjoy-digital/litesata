@@ -41,14 +41,14 @@ class LiteSATAArbiter(Module):
             sink, source = slave.sink, slave.source
             done = Signal()
             ongoing = Signal()
-            self.comb += done.eq(source.stb & source.last & source.eop & source.ack)
+            self.comb += done.eq(source.valid & source.last & source.end & source.ready)
             self.sync += \
                 If(done,
                     ongoing.eq(0)
-                ).Elif(sink.stb,
+                ).Elif(sink.valid,
                     ongoing.eq(1)
                 )
-            self.comb += self.rr.request[i].eq((sink.stb | ongoing) & ~done)
+            self.comb += self.rr.request[i].eq((sink.valid | ongoing) & ~done)
             cases[i] = [users[i].connect(master)]
         self.comb += Case(self.grant, cases)
 

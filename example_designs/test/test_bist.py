@@ -72,18 +72,18 @@ class LiteSATABISTIdentifyDriver:
     def __init__(self, regs, constants, name):
         self.regs = regs
         self.name = name
-        for s in ["start", "done", "data_width", "source_stb", "source_ack", "source_data"]:
+        for s in ["start", "done", "data_width", "source_valid", "source_ready", "source_data"]:
             setattr(self, s, getattr(regs, name + "_identify_" + s))
         self.data = []
 
     def read_fifo(self):
         self.data = []
-        while self.source_stb.read():
+        while self.source_valid.read():
             dword = self.source_data.read()
             word_lsb = dword & 0xffff
             word_msb = (dword >> 16) & 0xffff
             self.data += [word_lsb, word_msb]
-            self.source_ack.write(1)
+            self.source_ready.write(1)
 
     def run(self, blocking=True):
         self.read_fifo()  # flush the fifo before we start

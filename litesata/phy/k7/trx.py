@@ -170,7 +170,7 @@ class K7LiteSATAPHYTRX(Module):
         ]
 
         self.sync.sata_rx += [
-            self.source.stb.eq(1),
+            self.source.valid.eq(1),
             self.source.charisk.eq(self.rxcharisk),
             self.source.data.eq(self.rxdata)
         ]
@@ -178,7 +178,7 @@ class K7LiteSATAPHYTRX(Module):
         self.sync.sata_tx += [
             self.txcharisk.eq(self.sink.charisk),
             self.txdata.eq(self.sink.data),
-            self.sink.ack.eq(1),
+            self.sink.ready.eq(1),
         ]
     # Internals and clock domain crossing
         # sys_clk --> sata_tx clk

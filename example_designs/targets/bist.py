@@ -149,24 +149,24 @@ class BISTSoCDevel(BISTSoC):
         debug = (
             self.sata_phy.ctrl.ready,
 
-            self.sata_phy.source.stb,
+            self.sata_phy.source.valid,
             self.sata_phy.source.data,
             self.sata_phy.source.charisk,
 
-            self.sata_phy.sink.stb,
+            self.sata_phy.sink.valid,
             self.sata_phy.sink.data,
             self.sata_phy.sink.charisk,
 
-            self.sata_core.command.sink.stb,
-            self.sata_core.command.sink.eop,
-            self.sata_core.command.sink.ack,
+            self.sata_core.command.sink.valid,
+            self.sata_core.command.sink.last,
+            self.sata_core.command.sink.ready,
             self.sata_core.command.sink.write,
             self.sata_core.command.sink.read,
             self.sata_core.command.sink.identify,
 
-            self.sata_core.command.source.stb,
-            self.sata_core.command.source.eop,
-            self.sata_core.command.source.ack,
+            self.sata_core.command.source.valid,
+            self.sata_core.command.source.last,
+            self.sata_core.command.source.ready,
             self.sata_core.command.source.write,
             self.sata_core.command.source.read,
             self.sata_core.command.source.identify,

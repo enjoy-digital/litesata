@@ -27,25 +27,25 @@ class LiteSATAStripingTX(Module):
         split = Signal()
 
         already_acked = Signal(n)
-        self.sync += If(split & sink.stb,
-                already_acked.eq(already_acked | Cat(*[s.ack for s in sources])),
-                If(sink.ack, already_acked.eq(0))
+        self.sync += If(split & sink.valid,
+                already_acked.eq(already_acked | Cat(*[s.ready for s in sources])),
+                If(sink.ready, already_acked.eq(0))
             )
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
         fsm.act("IDLE",
-            sink.ack.eq(0),
-            If(sink.stb,
+            sink.ready.eq(0),
+            If(sink.valid,
                 NextState("SPLIT")
             ).Else(
-                sink.ack.eq(1)
+                sink.ready.eq(1)
             )
         )
 
-        # split data and ctrl signals (except stb & ack managed in fsm)
+        # split data and ctrl signals (except valid & ready managed in fsm)
         for i, s in enumerate(sources):
-            self.comb += sink.connect(s, leave_out=set(["stb", "ack", "data"]))
+            self.comb += sink.connect(s, leave_out=set(["valid", "ready", "data"]))
             if mirroring_mode:
                 self.comb += s.data.eq(sink.data)
             else:
@@ -53,9 +53,9 @@ class LiteSATAStripingTX(Module):
 
         fsm.act("SPLIT",
             split.eq(1),
-            [s.stb.eq(sink.stb & ~already_acked[i]) for i, s in enumerate(sources)],
-            sink.ack.eq(reduce(and_, [s.ack | already_acked[i] for i, s in enumerate(sources)])),
-            If(sink.stb & sink.eop & sink.ack,
+            [s.valid.eq(sink.valid & ~already_acked[i]) for i, s in enumerate(sources)],
+            sink.ready.eq(reduce(and_, [s.ready | already_acked[i] for i, s in enumerate(sources)])),
+            If(sink.valid & sink.last & sink.ready,
                 NextState("IDLE")
             )
         )
@@ -76,19 +76,19 @@ class LiteSATAStripingRX(Module):
 
         # # #
 
-        stb_all = Signal()
-        self.comb += stb_all.eq(reduce(and_, [s.stb for s in sinks]))
+        valid_all = Signal()
+        self.comb += valid_all.eq(reduce(and_, [s.valid for s in sinks]))
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
         fsm.act("IDLE",
-            If(stb_all,
+            If(valid_all,
                 NextState("COMBINE")
             )
         )
 
-        # use first sink for ctrl signals (except for stb, ack & failed)
-        self.comb += sinks[0].connect(source, leave_out=set(["stb", "ack", "failed", "data"]))
+        # use first sink for ctrl signals (except for valid, ready & failed)
+        self.comb += sinks[0].connect(source, leave_out=set(["valid", "ready", "failed", "data"]))
 		# combine datas
         if mirroring_mode:
             self.comb += source.data.eq(0) # mirroring only used for writes
@@ -99,9 +99,9 @@ class LiteSATAStripingRX(Module):
 
         fsm.act("COMBINE",
             source.failed.eq(reduce(or_, [s.failed for s in sinks])), # XXX verify this is enough
-            source.stb.eq(reduce(and_, [s.stb for s in sinks])),
-            [s.ack.eq(source.stb & source.ack) for s in sinks],
-            If(source.stb & source.eop & source.ack,
+            source.valid.eq(reduce(and_, [s.valid for s in sinks])),
+            [s.ready.eq(source.valid & source.ready) for s in sinks],
+            If(source.valid & source.last & source.ready,
                 NextState("IDLE")
             )
         )
@@ -192,14 +192,14 @@ class LiteSATAMirroringTX(Module):
             read_status = Status(read)
             self.submodules += read_status
             self.comb += [
-                sink.connect(read, leave_out=set(["stb", "ack"])),
-                sink.connect(write, leave_out=set(["stb", "ack"])),
-                read.stb.eq(sink.stb & (sink.read | sink.identify) & ~read_stall),
-                write.stb.eq(sink.stb & sink.write),
+                sink.connect(read, leave_out=set(["valid", "ready"])),
+                sink.connect(write, leave_out=set(["valid", "ready"])),
+                read.valid.eq(sink.valid & (sink.read | sink.identify) & ~read_stall),
+                write.valid.eq(sink.valid & sink.write),
                 If(sink.read | sink.identify,
-                    sink.ack.eq((read.ack & ~read_stall))
+                    sink.ready.eq((read.ready & ~read_stall))
                 ).Else(
-                    sink.ack.eq(write.ack)
+                    sink.ready.eq(write.ready)
                 )
             ]
             self.sync += \
@@ -222,7 +222,7 @@ class LiteSATAMirroringTX(Module):
                 ).Elif(ctrl.writing,
                     write_striper.sources[i].connect(sources[i]) # identical writes
                 ),
-                ctrl.new_cmds[i].eq(source_status.eop)
+                ctrl.new_cmds[i].eq(source_status.last)
             ]
         write_striper_sink_status = Status(write_striper.sink)
         self.submodules += write_striper_sink_status
@@ -260,12 +260,12 @@ class LiteSATAMirroringRX(Module):
             sink_status = Status(sinks[i])
             self.submodules += sink_status
             self.comb += [
-                sinks[i].connect(reads[i], leave_out=set(["stb", "ack"])),
-                sinks[i].connect(write_striper.sinks[i], leave_out=set(["stb", "ack"])),
-                reads[i].stb.eq(sinks[i].stb & ctrl.reading),
-                write_striper.sinks[i].stb.eq(sinks[i].stb & ctrl.writing),
-                sinks[i].ack.eq(reads[i].ack | write_striper.sinks[i].ack),
-                ctrl.ack_cmds[i].eq(sink_status.eop & sinks[i].last)
+                sinks[i].connect(reads[i], leave_out=set(["valid", "ready"])),
+                sinks[i].connect(write_striper.sinks[i], leave_out=set(["valid", "ready"])),
+                reads[i].valid.eq(sinks[i].valid & ctrl.reading),
+                write_striper.sinks[i].valid.eq(sinks[i].valid & ctrl.writing),
+                sinks[i].ready.eq(reads[i].ready | write_striper.sinks[i].ready),
+                ctrl.ack_cmds[i].eq(sink_status.last & sinks[i].end)
             ]
 
 

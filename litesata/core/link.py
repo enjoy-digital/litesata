@@ -143,26 +143,26 @@ class LiteSATACRCInserter(Module):
 
         fsm.act("IDLE",
             crc.reset.eq(1),
-            sink.ack.eq(1),
-            If(sink.stb,
-                sink.ack.eq(0),
+            sink.ready.eq(1),
+            If(sink.valid,
+                sink.ready.eq(0),
                 NextState("COPY"),
             )
         )
         fsm.act("COPY",
-            crc.ce.eq(sink.stb & source.ack),
+            crc.ce.eq(sink.valid & source.ready),
             crc.data.eq(sink.data),
             sink.connect(source),
-            source.eop.eq(0),
-            If(sink.stb & sink.eop & source.ack,
+            source.last.eq(0),
+            If(sink.valid & sink.last & source.ready,
                 NextState("INSERT"),
             )
         )
         fsm.act("INSERT",
-            source.stb.eq(1),
-            source.eop.eq(1),
+            source.valid.eq(1),
+            source.last.eq(1),
             source.data.eq(crc.value),
-            If(source.ack, NextState("IDLE"))
+            If(source.ready, NextState("IDLE"))
         )
         self.comb += self.busy.eq(~fsm.ongoing("IDLE"))
 
@@ -183,7 +183,7 @@ class LiteSATACRCChecker(Module):
         Packets input with CRC.
     source : out
         Packets output without CRC and "error" set to 0
-        on eop when CRC OK / set to 1 when CRC KO.
+        on last when CRC OK / set to 1 when CRC KO.
     """
     def __init__(self, description):
         self.sink = sink = stream.Endpoint(description)
@@ -208,16 +208,16 @@ class LiteSATACRCChecker(Module):
 
         self.comb += [
             fifo_full.eq(fifo.level == 1),
-            fifo_in.eq(sink.stb & (~fifo_full | fifo_out)),
-            fifo_out.eq(source.stb & source.ack),
+            fifo_in.eq(sink.valid & (~fifo_full | fifo_out)),
+            fifo_out.eq(source.valid & source.ready),
 
             sink.connect(fifo.sink),
-            fifo.sink.stb.eq(fifo_in),
-            self.sink.ack.eq(fifo_in),
+            fifo.sink.valid.eq(fifo_in),
+            self.sink.ready.eq(fifo_in),
 
-            source.stb.eq(sink.stb & fifo_full),
-            source.eop.eq(sink.eop),
-            fifo.source.ack.eq(fifo_out),
+            source.valid.eq(sink.valid & fifo_full),
+            source.last.eq(sink.last),
+            fifo.source.ready.eq(fifo_out),
             source.payload.eq(fifo.source.payload),
 
             source.error.eq(sink.error | crc.error),
@@ -230,16 +230,16 @@ class LiteSATACRCChecker(Module):
         )
         fsm.act("IDLE",
             crc.data.eq(sink.data),
-            If(sink.stb & sink.ack,
+            If(sink.valid & sink.ready,
                 crc.ce.eq(1),
                 NextState("COPY")
             )
         )
         fsm.act("COPY",
             crc.data.eq(sink.data),
-            If(sink.stb & sink.ack,
+            If(sink.valid & sink.ready,
                 crc.ce.eq(1),
-                If(sink.eop,
+                If(sink.last,
                     NextState("RESET")
                 )
             )
@@ -324,7 +324,7 @@ class LiteSATAScrambler(Module):
         scrambler = Scrambler()
         self.submodules += scrambler
         self.comb += [
-            scrambler.ce.eq(sink.stb & sink.ack),
+            scrambler.ce.eq(sink.valid & sink.ready),
             sink.connect(source),
             source.data.eq(sink.data ^ scrambler.value)
         ]
@@ -358,7 +358,7 @@ class LiteSATACONTInserter(Module):
         last_primitive = Signal(32)
         last_charisk = Signal(4)
         self.sync += [
-            If(sink.stb & source.ack,
+            If(sink.valid & source.ready,
                 last_data.eq(sink.data),
                 last_charisk.eq(sink.charisk),
                 If(~is_data,
@@ -381,26 +381,26 @@ class LiteSATACONTInserter(Module):
         # Datapath
         self.comb += [
             sink.connect(source),
-            If(sink.stb,
+            If(sink.valid,
                 If(~change,
-                    counter_ce.eq(sink.ack & (counter != 2)),
+                    counter_ce.eq(sink.ready & (counter != 2)),
                     # insert CONT
                     If(counter == 1,
                         source.charisk.eq(0b0001),
                         source.data.eq(primitives["CONT"])
                     # insert scrambled data for EMI
                     ).Elif(counter == 2,
-                        scrambler.ce.eq(sink.ack),
+                        scrambler.ce.eq(sink.ready),
                         source.charisk.eq(0b0000),
                         source.data.eq(scrambler.value)
                     )
                 ).Else(
-                    counter_reset.eq(source.ack),
+                    counter_reset.eq(source.ready),
                     If(counter == 2,
                         # Reinsert last primitive
                         If(is_data | (~is_data & was_hold),
-                            source.stb.eq(1),
-                            sink.ack.eq(0),
+                            source.valid.eq(1),
+                            sink.ready.eq(0),
                             source.charisk.eq(0b0001),
                             source.data.eq(last_primitive)
                         )
@@ -427,7 +427,7 @@ class LiteSATACONTRemover(Module):
             is_cont.eq(~is_data & (sink.data == primitives["CONT"]))
         ]
         self.sync += \
-            If(sink.stb & sink.ack,
+            If(sink.valid & sink.ready,
                 If(is_cont,
                     in_cont.eq(1)
                 ).Elif(~is_data,
@@ -439,7 +439,7 @@ class LiteSATACONTRemover(Module):
         # Datapath
         last_primitive = Signal(32)
         self.sync += [
-            If(sink.stb & sink.ack,
+            If(sink.valid & sink.ready,
                 If(~is_data & ~is_cont,
                     last_primitive.eq(sink.data)
                 )
@@ -468,21 +468,21 @@ class LiteSATAALIGNInserter(Module):
         cnt = Signal(8)
         send = Signal()
         self.sync += \
-            If(source.stb & source.ack,
+            If(source.valid & source.ready,
                 cnt.eq(cnt+1)
             )
         self.comb += [
             send.eq(cnt < 2),
             If(send,
-                source.stb.eq(1),
+                source.valid.eq(1),
                 source.charisk.eq(0b0001),
                 source.data.eq(primitives["ALIGN"]),
-                sink.ack.eq(0)
+                sink.ready.eq(0)
             ).Else(
-                source.stb.eq(sink.stb),
+                source.valid.eq(sink.valid),
                 source.data.eq(sink.data),
                 source.charisk.eq(sink.charisk),
-                sink.ack.eq(source.ack)
+                sink.ready.eq(source.ready)
             )
         ]
 
@@ -498,8 +498,8 @@ class LiteSATAALIGNRemover(Module):
         data_match = sink.data == primitives["ALIGN"]
 
         self.comb += \
-            If(sink.stb & charisk_match & data_match,
-                sink.ack.eq(1),
+            If(sink.valid & charisk_match & data_match,
+                sink.ready.eq(1),
             ).Else(
                 sink.connect(source)
             )
@@ -509,7 +509,7 @@ class LiteSATAALIGNRemover(Module):
 from_rx = [
     ("idle", 1),
     ("insert", 32),
-    ("primitive_stb", 1),
+    ("primitive_valid", 1),
     ("primitive", 32)
 ]
 
@@ -534,17 +534,17 @@ class LiteSATALinkTX(Module):
         copy = Signal()
         self.comb += [
             If(self.from_rx.insert,
-                source.stb.eq(1),
+                source.valid.eq(1),
                 source.data.eq(self.from_rx.insert),
                 source.charisk.eq(0b0001),
             ).Elif(insert,
-                source.stb.eq(1),
+                source.valid.eq(1),
                 source.data.eq(insert),
                 source.charisk.eq(0b0001),
             ).Elif(copy,
-                source.stb.eq(1),
-                pipeline.source.ack.eq(source.ack),
-                If(pipeline.source.stb,
+                source.valid.eq(1),
+                pipeline.source.ready.eq(source.ready),
+                If(pipeline.source.valid,
                     source.data.eq(pipeline.source.data),
                     source.charisk.eq(0b0000)
                 ).Else(
@@ -560,8 +560,8 @@ class LiteSATALinkTX(Module):
             scrambler.reset.eq(1),
             If(self.from_rx.idle,
                 insert.eq(primitives["SYNC"]),
-                If(pipeline.source.stb,
-                    If(self.from_rx.primitive_stb &
+                If(pipeline.source.valid,
+                    If(self.from_rx.primitive_valid &
                        (self.from_rx.primitive == primitives["SYNC"]),
                         NextState("RDY")
                     )
@@ -572,31 +572,31 @@ class LiteSATALinkTX(Module):
             insert.eq(primitives["X_RDY"]),
             If(~self.from_rx.idle,
                 NextState("IDLE")
-            ).Elif(self.from_rx.primitive_stb &
+            ).Elif(self.from_rx.primitive_valid &
                    (self.from_rx.primitive == primitives["R_RDY"]),
                 NextState("SOF")
             )
         )
         fsm.act("SOF",
             insert.eq(primitives["SOF"]),
-            If(source.ack,
+            If(source.ready,
                 NextState("COPY")
             )
         )
         fsm.act("COPY",
             copy.eq(1),
-            If(pipeline.source.stb &
-               pipeline.source.eop &
-               pipeline.source.ack,
+            If(pipeline.source.valid &
+               pipeline.source.last &
+               pipeline.source.ready,
                 NextState("EOF")
-            ).Elif(self.from_rx.primitive_stb &
+            ).Elif(self.from_rx.primitive_valid &
                (self.from_rx.primitive == primitives["HOLD"]),
                NextState("HOLDA")
             )
         )
         fsm.act("HOLDA",
             insert.eq(primitives["HOLDA"]),
-            If(self.from_rx.primitive_stb &
+            If(self.from_rx.primitive_valid &
                (self.from_rx.primitive != primitives["HOLD"]),
                 NextState("COPY")
             ).Elif(self.error,
@@ -605,13 +605,13 @@ class LiteSATALinkTX(Module):
         )
         fsm.act("EOF",
             insert.eq(primitives["EOF"]),
-            If(source.ack,
+            If(source.ready,
                 NextState("WTRM")
             )
         )
         fsm.act("WTRM",
             insert.eq(primitives["WTRM"]),
-            If(self.from_rx.primitive_stb,
+            If(self.from_rx.primitive_valid,
                 If(self.from_rx.primitive == primitives["R_OK"],
                     NextState("IDLE")
                 ).Elif(self.from_rx.primitive == primitives["R_ERR"],
@@ -626,7 +626,7 @@ class LiteSATALinkTX(Module):
         self.sync += [
             # generate error if receiving SYNC during transfer (disk returns to IDLE)
             If(~(fsm.ongoing("IDLE") | fsm.ongoing("RDY")),
-                self.error.eq(self.from_rx.primitive_stb &
+                self.error.eq(self.from_rx.primitive_valid &
                               (self.from_rx.primitive == primitives["SYNC"]))
             )
         ]
@@ -642,18 +642,18 @@ class LiteSATALinkRX(Module):
 
         # # #
 
-        # always ack data from phy
-        self.comb += sink.ack.eq(1)
+        # always ready from phy
+        self.comb += sink.ready.eq(1)
 
         # datas / primitives detection
         insert = Signal(32)
-        data_stb = Signal()
-        primitive_stb = Signal()
+        data_valid = Signal()
+        primitive_valid = Signal()
         primitive = Signal(32)
         self.comb += [
-            If(sink.stb,
-                data_stb.eq(sink.charisk == 0),
-                primitive_stb.eq(sink.charisk == 0b0001)
+            If(sink.valid,
+                data_valid.eq(sink.charisk == 0),
+                primitive_valid.eq(sink.charisk == 0b0001)
             ),
             primitive.eq(sink.data)
         ]
@@ -667,7 +667,7 @@ class LiteSATALinkRX(Module):
         # internal logic
         self.crc_error = crc_error = Signal()
         self.sync += \
-            If(crc.source.stb & crc.source.eop & crc.source.ack,
+            If(crc.source.valid & crc.source.last & crc.source.ready,
                 crc_error.eq(crc.source.error)
             )
 
@@ -675,34 +675,34 @@ class LiteSATALinkRX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             descrambler.reset.eq(1),
-            If(primitive_stb &
+            If(primitive_valid &
                (primitive == primitives["X_RDY"]),
                 NextState("RDY")
             )
         )
         fsm.act("RDY",
             insert.eq(primitives["R_RDY"]),
-            If(primitive_stb &
+            If(primitive_valid &
                (primitive == primitives["SOF"]),
                 NextState("WAIT_FIRST")
             )
         )
         fsm.act("WAIT_FIRST",
             insert.eq(primitives["R_IP"]),
-            If(data_stb,
+            If(data_valid,
                 NextState("COPY")
             )
         )
         fsm.act("COPY",
-            pipeline.sink.stb.eq(data_stb),
+            pipeline.sink.valid.eq(data_valid),
             insert.eq(primitives["R_IP"]),
-            If(primitive_stb,
+            If(primitive_valid,
                 If(primitive == primitives["HOLD"],
                     insert.eq(primitives["HOLDA"])
                 ).Elif(primitive == primitives["EOF"],
                     # 1 clock cycle latency
-                    pipeline.sink.stb.eq(1),
-                    pipeline.sink.eop.eq(1),
+                    pipeline.sink.valid.eq(1),
+                    pipeline.sink.last.eq(1),
                     NextState("WTRM")
                 )
             ).Elif(self.hold,
@@ -710,10 +710,10 @@ class LiteSATALinkRX(Module):
             )
         )
         # 1 clock cycle latency
-        self.sync += If(data_stb, pipeline.sink.data.eq(sink.data))
+        self.sync += If(data_valid, pipeline.sink.data.eq(sink.data))
         fsm.act("EOF",
             insert.eq(primitives["R_IP"]),
-            If(primitive_stb &
+            If(primitive_valid &
                (primitive == primitives["WTRM"]),
                 NextState("WTRM")
             )
@@ -728,14 +728,14 @@ class LiteSATALinkRX(Module):
         )
         fsm.act("R_OK",
             insert.eq(primitives["R_OK"]),
-            If(primitive_stb &
+            If(primitive_valid &
                (primitive == primitives["SYNC"]),
                 NextState("IDLE")
             )
         )
         fsm.act("R_ERR",
             insert.eq(primitives["R_ERR"]),
-            If(primitive_stb &
+            If(primitive_valid &
                (primitive == primitives["SYNC"]),
                 NextState("IDLE")
             )
@@ -745,7 +745,7 @@ class LiteSATALinkRX(Module):
         self.comb += [
             self.to_tx.idle.eq(fsm.ongoing("IDLE")),
             self.to_tx.insert.eq(insert),
-            self.to_tx.primitive_stb.eq(primitive_stb),
+            self.to_tx.primitive_valid.eq(primitive_valid),
             self.to_tx.primitive.eq(primitive)
         ]
 

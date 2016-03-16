@@ -11,8 +11,8 @@ wb.open()
 
 logic_analyzer = LiteScopeLogicAnalyzerDriver(wb.regs, "logic_analyzer", debug=True)
 
-cond = {"bistsocdevel_command_tx_sink_stb" : 1,
-        "bistsocdevel_command_tx_sink_ack" : 1}
+cond = {"bistsocdevel_command_tx_sink_valid" : 1,
+        "bistsocdevel_command_tx_sink_ready" : 1}
 logic_analyzer.configure_term(port=0, cond=cond)
 logic_analyzer.configure_sum("term")
 logic_analyzer.run(offset=128, length=1024)

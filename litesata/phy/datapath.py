@@ -15,7 +15,7 @@ class LiteSATAPHYDatapathRX(Module):
         sr_charisk = Signal(2*trx_dw//8)
         sr_data = Signal(2*trx_dw)
         self.sync.sata_rx += \
-            If(sink.stb & sink.ack,
+            If(sink.valid & sink.ready,
                 If(sink.charisk != 0,
                     byte_alignment.eq(sink.charisk)
                 ),
@@ -41,9 +41,9 @@ class LiteSATAPHYDatapathRX(Module):
                 converter.sink.data.eq(sr_data[trx_dw-8*i:2*trx_dw-8*i])
             ]
         self.comb += [
-            converter.sink.stb.eq(sink.stb),
+            converter.sink.valid.eq(sink.valid),
             Case(byte_alignment, cases),
-            sink.ack.eq(converter.sink.ack)
+            sink.ready.eq(converter.sink.ready)
         ]
         if trx_dw == 16:
             self.comb += converter.reset.eq(converter.source.charisk[2:] != 0)
@@ -54,7 +54,7 @@ class LiteSATAPHYDatapathRX(Module):
         #   (sata_gen1) 75MHz (16 bits) / 37.5MHz (32 bits) sata_rx clk to sys_clk
         #   requirements:
         #     due to the convertion ratio of 2, sys_clk need to be > sata_rx/2
-        #     source destination is always able to accept data (ack always 1)
+        #     source destination is always able to accept data (ready always 1)
         fifo = stream.AsyncFIFO(phy_description(32), 8)
         fifo = ClockDomainsRenamer({"write": "sata_rx", "read": "sys"})(fifo)
         self.submodules += fifo
@@ -76,7 +76,7 @@ class LiteSATAPHYDatapathTX(Module):
         #   (sata_gen2) sys_clk to 150MHz (16 bits) / 75MHz (32 bits) sata_tx clk
         #   (sata_gen1) sys_clk to 75MHz (16 bits) / 37.5MHz (32 bits) sata_tx clk
         #   requirements:
-        #     source destination is always able to accept data (ack always 1)
+        #     source destination is always able to accept data (ready always 1)
         fifo = stream.AsyncFIFO(phy_description(32), 8)
         fifo = ClockDomainsRenamer({"write": "sys", "read": "sata_tx"})(fifo)
         self.submodules += fifo
@@ -127,4 +127,4 @@ class LiteSATAPHYDatapath(Module):
             demux.source1.connect(source)
         ]
 
-        self.comb += self.misalign.eq(rx.source.stb & ((rx.source.charisk & 0b1110) != 0))
+        self.comb += self.misalign.eq(rx.source.valid & ((rx.source.charisk & 0b1110) != 0))

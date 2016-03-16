@@ -42,19 +42,19 @@ class LiteSATATransportTX(Module):
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
         fsm.act("IDLE",
-            sink.ack.eq(0),
+            sink.ready.eq(0),
             counter_reset.eq(1),
             update_fis_type.eq(1),
-            If(sink.stb,
+            If(sink.valid,
                 If(test_type_tx("REG_H2D"),
                     NextState("SEND_CTRL_CMD")
                 ).Elif(test_type_tx("DATA"),
                     NextState("SEND_DATA_CMD")
                 ).Else(
-                    sink.ack.eq(1)
+                    sink.ready.eq(1)
                 )
             ).Else(
-                sink.ack.eq(1)
+                sink.ready.eq(1)
             )
         )
         self.sync += \
@@ -65,12 +65,12 @@ class LiteSATATransportTX(Module):
             cmd_len.eq(fis_reg_h2d_header.length-1),
             cmd_send.eq(1),
             If(cmd_done,
-                sink.ack.eq(1),
+                sink.ready.eq(1),
                 NextState("IDLE")
             )
         )
         fsm.act("SEND_DATA_CMD",
-            sink.ack.eq(0),
+            sink.ready.eq(0),
             fis_data_header.encode(sink, encoded_cmd),
             cmd_len.eq(fis_data_header.length-1),
             cmd_with_data.eq(1),
@@ -81,8 +81,8 @@ class LiteSATATransportTX(Module):
         )
         fsm.act("SEND_DATA",
             data_send.eq(1),
-            sink.ack.eq(link.sink.ack),
-            If(sink.stb & sink.eop & sink.ack,
+            sink.ready.eq(link.sink.ready),
+            If(sink.valid & sink.last & sink.ready,
                 NextState("IDLE")
             )
         )
@@ -92,17 +92,17 @@ class LiteSATATransportTX(Module):
             cmd_cases[i] = [link.sink.data.eq(encoded_cmd[32*i:32*(i+1)])]
 
         self.comb += [
-            counter_ce.eq(sink.stb & link.sink.ack),
+            counter_ce.eq(sink.valid & link.sink.ready),
             cmd_done.eq((counter == cmd_len) &
-                        link.sink.stb &
-                        link.sink.ack),
+                        link.sink.valid &
+                        link.sink.ready),
             If(cmd_send,
-                link.sink.stb.eq(sink.stb),
-                link.sink.eop.eq((counter == cmd_len) & ~cmd_with_data),
+                link.sink.valid.eq(sink.valid),
+                link.sink.last.eq((counter == cmd_len) & ~cmd_with_data),
                 Case(counter, cmd_cases)
             ).Elif(data_send,
-                link.sink.stb.eq(sink.stb),
-                link.sink.eop.eq(sink.eop),
+                link.sink.valid.eq(sink.valid),
+                link.sink.last.eq(sink.last),
                 link.sink.data.eq(sink.data)
             )
         ]
@@ -148,10 +148,10 @@ class LiteSATATransportRX(Module):
         update_fis_type = Signal()
 
         fsm.act("IDLE",
-            link.source.ack.eq(0),
+            link.source.ready.eq(0),
             counter_reset.eq(1),
             update_fis_type.eq(1),
-            If(link.source.stb,
+            If(link.source.valid,
                 If(test_type_rx("REG_D2H"),
                     NextState("RECEIVE_CTRL_CMD")
                 ).Elif(test_type_rx("DMA_ACTIVATE_D2H"),
@@ -161,10 +161,10 @@ class LiteSATATransportRX(Module):
                 ).Elif(test_type_rx("DATA"),
                     NextState("RECEIVE_DATA_CMD"),
                 ).Else(
-                    link.source.ack.eq(1)
+                    link.source.ready.eq(1)
                 )
             ).Else(
-                link.source.ack.eq(1)
+                link.source.ready.eq(1)
             )
         )
         self.sync += \
@@ -179,14 +179,14 @@ class LiteSATATransportRX(Module):
                 cmd_len.eq(fis_pio_setup_d2h_header.length-1)
             ),
             cmd_receive.eq(1),
-            link.source.ack.eq(1),
+            link.source.ready.eq(1),
             If(cmd_done,
                 NextState("PRESENT_CTRL_CMD")
             )
         )
         fsm.act("PRESENT_CTRL_CMD",
-            source.stb.eq(1),
-            source.eop.eq(1),
+            source.valid.eq(1),
+            source.last.eq(1),
             If(test_type("REG_D2H", fis_type),
                 fis_reg_d2h_header.decode(encoded_cmd, source)
             ).Elif(test_type("DMA_ACTIVATE_D2H", fis_type),
@@ -194,27 +194,27 @@ class LiteSATATransportRX(Module):
             ).Else(
                 fis_pio_setup_d2h_header.decode(encoded_cmd, source)
             ),
-            If(source.stb & source.ack,
+            If(source.valid & source.ready,
                 NextState("IDLE")
             )
         )
         fsm.act("RECEIVE_DATA_CMD",
             cmd_len.eq(fis_data_header.length-1),
             cmd_receive.eq(1),
-            link.source.ack.eq(1),
+            link.source.ready.eq(1),
             If(cmd_done,
                 NextState("PRESENT_DATA")
             )
         )
         fsm.act("PRESENT_DATA",
             data_receive.eq(1),
-            source.stb.eq(link.source.stb),
+            source.valid.eq(link.source.valid),
             fis_data_header.decode(encoded_cmd, source),
-            source.eop.eq(link.source.eop),
+            source.last.eq(link.source.last),
             source.error.eq(link.source.error),
             source.data.eq(link.source.data),
-            link.source.ack.eq(source.ack),
-            If(source.stb & source.eop & source.ack,
+            link.source.ready.eq(source.ready),
+            If(source.valid & source.last & source.ready,
                 NextState("IDLE")
             )
         )
@@ -224,14 +224,14 @@ class LiteSATATransportRX(Module):
             cmd_cases[i] = [encoded_cmd[32*i:32*(i+1)].eq(link.source.data)]
 
         self.comb += \
-            If(cmd_receive & link.source.stb,
+            If(cmd_receive & link.source.valid,
                 counter_ce.eq(1)
             )
         self.sync += \
             If(cmd_receive,
                 Case(counter, cmd_cases),
             )
-        self.comb += cmd_done.eq((counter == cmd_len) & link.source.ack)
+        self.comb += cmd_done.eq((counter == cmd_len) & link.source.ready)
 
 # transport
 

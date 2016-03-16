@@ -50,7 +50,7 @@ class LiteSATABISTGenerator(Module):
             )
         )
         self.comb += [
-            source.eop.eq(counter == (logical_sector_size//4*self.count)-1),
+            source.last.eq(counter == (logical_sector_size//4*self.count)-1),
             source.write.eq(1),
             source.sector.eq(self.sector),
             source.count.eq(self.count*count_mult),
@@ -61,17 +61,17 @@ class LiteSATABISTGenerator(Module):
             )
         ]
         fsm.act("SEND_CMD_AND_DATA",
-            source.stb.eq(1),
-            If(source.stb & source.ack,
+            source.valid.eq(1),
+            If(source.valid & source.ready,
                 counter_ce.eq(1),
-                If(source.eop,
+                If(source.last,
                     NextState("WAIT_ACK")
                 )
             )
         )
         fsm.act("WAIT_ACK",
-            sink.ack.eq(1),
-            If(sink.stb,
+            sink.ready.eq(1),
+            If(sink.valid,
                 NextState("IDLE")
             )
         )
@@ -79,7 +79,7 @@ class LiteSATABISTGenerator(Module):
         self.sync += \
             If(self.start,
                 self.aborted.eq(0)
-            ).Elif(sink.stb & sink.ack,
+            ).Elif(sink.valid & sink.ready,
                 self.aborted.eq(self.aborted | sink.failed)
             )
 
@@ -144,20 +144,20 @@ class LiteSATABISTChecker(Module):
             )
         )
         self.comb += [
-            source.eop.eq(1),
+            source.last.eq(1),
             source.read.eq(1),
             source.sector.eq(self.sector),
             source.count.eq(self.count*count_mult),
         ]
         fsm.act("SEND_CMD",
-            source.stb.eq(1),
-            If(source.ack,
+            source.valid.eq(1),
+            If(source.ready,
                 counter_reset.eq(1),
                 NextState("WAIT_ACK")
             )
         )
         fsm.act("WAIT_ACK",
-            If(sink.stb & sink.read,
+            If(sink.valid & sink.read,
                 NextState("RECEIVE_DATA")
             )
         )
@@ -169,13 +169,13 @@ class LiteSATABISTChecker(Module):
                 expected_data.eq(Replicate(counter, n))
             )
         fsm.act("RECEIVE_DATA",
-            sink.ack.eq(1),
-            If(sink.stb,
+            sink.ready.eq(1),
+            If(sink.valid,
                 counter_ce.eq(1),
                 If(sink.data != expected_data,
-                    error_counter_ce.eq(~sink.last)
+                    error_counter_ce.eq(~sink.end)
                 ),
-                If(sink.eop,
+                If(sink.end,
                     If(sink.last,
                         NextState("IDLE")
                     ).Else(
@@ -188,7 +188,7 @@ class LiteSATABISTChecker(Module):
         self.sync += \
             If(self.start,
                 self.aborted.eq(0)
-            ).Elif(sink.stb & sink.ack,
+            ).Elif(sink.valid & sink.ready,
                 self.aborted.eq(self.aborted | sink.failed)
             )
 
@@ -300,27 +300,27 @@ class LiteSATABISTIdentify(Module):
             )
         )
         self.comb += [
-            source.eop.eq(1),
+            source.last.eq(1),
             source.identify.eq(1),
         ]
         fsm.act("SEND_CMD",
             fifo.reset.eq(1),
-            source.stb.eq(1),
-            If(source.stb & source.ack,
+            source.valid.eq(1),
+            If(source.valid & source.ready,
                 NextState("WAIT_ACK")
             )
         )
         fsm.act("WAIT_ACK",
-            If(sink.stb & sink.identify,
+            If(sink.valid & sink.identify,
                 NextState("RECEIVE_DATA")
             )
         )
         self.comb += fifo.sink.data.eq(sink.data)
         fsm.act("RECEIVE_DATA",
-            sink.ack.eq(fifo.sink.ack),
-            If(sink.stb,
-                fifo.sink.stb.eq(1),
-                If(sink.eop,
+            sink.ready.eq(fifo.sink.ready),
+            If(sink.valid,
+                fifo.sink.valid.eq(1),
+                If(sink.last,
                     NextState("IDLE")
                 )
             )
@@ -332,8 +332,8 @@ class LiteSATABISTIdentifyCSR(Module, AutoCSR):
         self._start = CSR()
         self._done = CSRStatus()
         self._data_width = CSRStatus(16, reset=bist_identify.data_width)
-        self._source_stb = CSRStatus()
-        self._source_ack = CSR()
+        self._source_valid = CSRStatus()
+        self._source_ready = CSR()
         self._source_data = CSRStatus(32)
 
         # # #
@@ -343,9 +343,9 @@ class LiteSATABISTIdentifyCSR(Module, AutoCSR):
             bist_identify.start.eq(self._start.r & self._start.re),
             self._done.status.eq(bist_identify.done),
 
-            self._source_stb.status.eq(bist_identify.source.stb),
+            self._source_valid.status.eq(bist_identify.source.valid),
             self._source_data.status.eq(bist_identify.source.data),
-            bist_identify.source.ack.eq(self._source_ack.r & self._source_ack.re)
+            bist_identify.source.ready.eq(self._source_ready.r & self._source_ready.re)
         ]
 
 
@@ -407,15 +407,15 @@ class LiteSATABISTRobustness(Module):
                 fifo.sink.count.eq(fifo.source.count),
                 fifo.sink.write_read_n.eq(fifo.source.write_read_n),
                 fifo.sink.start.eq(fifo.source.start),
-                fifo.sink.stb.eq(fifo.source.ack)
+                fifo.sink.valid.eq(fifo.source.ready)
             # in "program" mode, fifo input is connected
             # to inputs
             ).Else(
                 fifo.sink.sector.eq(self.sector),
                 fifo.sink.count.eq(self.count),
                 fifo.sink.write_read_n.eq(self.write_read_n),
-                fifo.sink.start.eq(~fifo.source.stb),
-                fifo.sink.stb.eq(self.we)
+                fifo.sink.start.eq(~fifo.source.valid),
+                fifo.sink.valid.eq(self.we)
             )
         ]
 
@@ -428,7 +428,7 @@ class LiteSATABISTRobustness(Module):
             )
         )
         fsm.act("CHECK",
-            If(fifo.source.stb,
+            If(fifo.source.valid,
                 If(fifo.source.write_read_n,
                     NextState("WRITE_START")
                 ).Else(
@@ -448,7 +448,7 @@ class LiteSATABISTRobustness(Module):
         )
         fsm.act("WRITE_WAIT",
             If(generator.done,
-                fifo.source.ack.eq(1),
+                fifo.source.ready.eq(1),
                 NextState("CHECK")
             )
         )
@@ -462,7 +462,7 @@ class LiteSATABISTRobustness(Module):
         )
         fsm.act("READ_WAIT",
             If(checker.done,
-                fifo.source.ack.eq(1),
+                fifo.source.ready.eq(1),
                 NextState("CHECK")
             )
         )
@@ -473,7 +473,7 @@ class LiteSATABISTRobustness(Module):
             If(self.flush,
                 self.loop_index.eq(0),
                 self.loop_count.eq(0),
-            ).Elif(fifo.source.stb & fifo.source.ack,
+            ).Elif(fifo.source.valid & fifo.source.ready,
                 If(fifo.source.start,
                     self.loop_index.eq(0),
                     self.loop_count.eq(self.loop_count + 1)

@@ -14,8 +14,8 @@ class LiteSATAPHYCtrl(Module):
         # # #
 
         self.comb += [
-            source.stb.eq(1),
-            sink.ack.eq(1)
+            source.valid.eq(1),
+            sink.ready.eq(1)
         ]
 
         retry_timer = WaitTimer(self.us(10000))
@@ -35,7 +35,7 @@ class LiteSATAPHYCtrl(Module):
             )
 
         self.comb +=  [
-            If(sink.stb,
+            If(sink.valid,
                 align_det.eq((self.sink.charisk == 0b0001) &
                              (self.sink.data == primitives["ALIGN"]))
             )
@@ -125,7 +125,7 @@ class LiteSATAPHYCtrl(Module):
             align_timer.wait.eq(1),
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
-            If(sink.stb &
+            If(sink.valid &
 			   (sink.charisk == 0b0001),
                If(sink.data[0:8] == 0x7C,
                    non_align_counter_ce.eq(1)

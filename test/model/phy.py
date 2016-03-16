@@ -21,7 +21,7 @@ class PHYSource(Module):
         self.dword = dword
 
     def do_simulation(self, selfp):
-        selfp.source.stb = 1
+        selfp.source.valid = 1
         selfp.source.charisk = 0b0000
         for k, v in primitives.items():
             if v == self.dword.dat:
@@ -44,8 +44,8 @@ class PHYSink(Module):
 
     def do_simulation(self, selfp):
         self.dword.done = 0
-        selfp.sink.ack = 1
-        if selfp.sink.stb == 1:
+        selfp.sink.ready = 1
+        if selfp.sink.valid == 1:
             self.dword.done = 1
             self.dword.dat = selfp.sink.data
 

@@ -120,56 +120,56 @@ class StripingSoCDevel(StripingSoC):
             self.sata_core0_link_tx_fsm_state,
             self.sata_core0_link_rx_fsm_state,
 
-            self.sata_core0.sink.stb,
-            self.sata_core0.source.stb,
+            self.sata_core0.sink.valid,
+            self.sata_core0.source.valid,
 
-            self.sata_phy0.source.stb,
+            self.sata_phy0.source.valid,
             self.sata_phy0.source.data,
             self.sata_phy0.source.charisk,
 
-            self.sata_phy0.sink.stb,
+            self.sata_phy0.sink.valid,
             self.sata_phy0.sink.data,
             self.sata_phy0.sink.charisk,
 
             self.sata_core1_link_tx_fsm_state,
             self.sata_core1_link_rx_fsm_state,
 
-            self.sata_core1.sink.stb,
-            self.sata_core1.source.stb,
+            self.sata_core1.sink.valid,
+            self.sata_core1.source.valid,
 
-            self.sata_phy1.source.stb,
+            self.sata_phy1.source.valid,
             self.sata_phy1.source.data,
             self.sata_phy1.source.charisk,
 
-            self.sata_phy1.sink.stb,
+            self.sata_phy1.sink.valid,
             self.sata_phy1.sink.data,
             self.sata_phy1.sink.charisk,
 
             self.sata_core2_link_tx_fsm_state,
             self.sata_core2_link_rx_fsm_state,
 
-            self.sata_core2.sink.stb,
-            self.sata_core2.source.stb,
+            self.sata_core2.sink.valid,
+            self.sata_core2.source.valid,
 
-            self.sata_phy2.source.stb,
+            self.sata_phy2.source.valid,
             self.sata_phy2.source.data,
             self.sata_phy2.source.charisk,
 
-            self.sata_phy2.sink.stb,
+            self.sata_phy2.sink.valid,
             self.sata_phy2.sink.data,
             self.sata_phy2.sink.charisk,
 
             self.sata_core3_link_tx_fsm_state,
             self.sata_core3_link_rx_fsm_state,
 
-            self.sata_core3.sink.stb,
-            self.sata_core3.source.stb,
+            self.sata_core3.sink.valid,
+            self.sata_core3.source.valid,
 
-            self.sata_phy3.source.stb,
+            self.sata_phy3.source.valid,
             self.sata_phy3.source.data,
             self.sata_phy3.source.charisk,
 
-            self.sata_phy3.sink.stb,
+            self.sata_phy3.sink.valid,
             self.sata_phy3.sink.data,
             self.sata_phy3.sink.charisk
         )

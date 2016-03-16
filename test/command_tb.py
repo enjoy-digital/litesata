@@ -44,17 +44,17 @@ class CommandLogger(PacketLogger):
         self.first = True
 
     def do_simulation(self, selfp):
-        selfp.sink.ack = 1
-        if selfp.sink.stb == 1 and self.first:
+        selfp.sink.ready = 1
+        if selfp.sink.valid == 1 and self.first:
             self.packet = CommandRXPacket()
             self.packet.write = selfp.sink.write
             self.packet.read = selfp.sink.read
             self.packet.failed = selfp.sink.failed
             self.packet.append(selfp.sink.data)
             self.first = False
-        elif selfp.sink.stb:
+        elif selfp.sink.valid:
             self.packet.append(selfp.sink.data)
-        if selfp.sink.stb == 1 and selfp.sink.eop == 1:
+        if selfp.sink.valid == 1 and selfp.sink.last == 1:
             self.packet.done = True
             self.first = True
 

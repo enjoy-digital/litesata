@@ -59,11 +59,11 @@ _io += [
 
     # Identify pins
     ("identify", 0,
-        Subsignal("start",       Pins(1)),
-        Subsignal("done",        Pins(1)),
-        Subsignal("source_stb",  Pins(1)),
-        Subsignal("source_ack",  Pins(1)),
-        Subsignal("source_data", Pins(32))
+        Subsignal("start",        Pins(1)),
+        Subsignal("done",         Pins(1)),
+        Subsignal("source_valid", Pins(1)),
+        Subsignal("source_ready", Pins(1)),
+        Subsignal("source_data",  Pins(32))
     ),
 ]
 
@@ -71,9 +71,9 @@ _io += [
 for i in range(2):
     _io += [
         ("user_port", i+1,
-            Subsignal("sink_stb",      Pins(1)),
-            Subsignal("sink_eop",      Pins(1)),
-            Subsignal("sink_ack",      Pins(1)),
+            Subsignal("sink_valid",    Pins(1)),
+            Subsignal("sink_last",     Pins(1)),
+            Subsignal("sink_ready",    Pins(1)),
             Subsignal("sink_write",    Pins(1)),
             Subsignal("sink_read",     Pins(1)),
             Subsignal("sink_identify", Pins(1)),
@@ -81,13 +81,13 @@ for i in range(2):
             Subsignal("sink_count",    Pins(16)),
             Subsignal("sink_data",     Pins(128)), # FIXME
 
-            Subsignal("source_stb",      Pins(1)),
-            Subsignal("source_eop",      Pins(1)),
-            Subsignal("source_ack",      Pins(1)),
+            Subsignal("source_valid",    Pins(1)),
+            Subsignal("source_last",     Pins(1)),
+            Subsignal("source_ready",    Pins(1)),
             Subsignal("source_write",    Pins(1)),
             Subsignal("source_read",     Pins(1)),
             Subsignal("source_identify", Pins(1)),
-            Subsignal("source_last",     Pins(1)),
+            Subsignal("source_end",       Pins(1)),
             Subsignal("source_failed",   Pins(1)),
             Subsignal("source_data",     Pins(128)), #FIXME
         ),
@@ -155,9 +155,9 @@ class Core(Module):
                     identify.start.eq(identify_pads.start),
                     identify_pads.done.eq(identify.done),
 
-                    identify_pads.source_stb.eq(identify.source.stb),
+                    identify_pads.source_valid.eq(identify.source.valid),
                     identify_pads.source_data.eq(identify.source.data),
-                    identify.source.ack.eq(identify_pads.source_ack)
+                    identify.source.ready.eq(identify_pads.source_ready)
                 ]
 
             self.specials += [
@@ -215,27 +215,27 @@ class Core(Module):
         for i, user_port in enumerate(self.user_ports):
             user_port_pads = platform.request("user_port", i+1)
             self.comb += [
-                user_port.sink.stb.eq(user_port_pads.sink_stb),
-                user_port.sink.eop.eq(user_port_pads.sink_eop),
+                user_port.sink.valid.eq(user_port_pads.sink_valid),
+                user_port.sink.last.eq(user_port_pads.sink_last),
                 user_port.sink.write.eq(user_port_pads.sink_write),
                 user_port.sink.read.eq(user_port_pads.sink_read),
                 user_port.sink.identify.eq(user_port_pads.sink_identify),
                 user_port.sink.sector.eq(user_port_pads.sink_sector),
                 user_port.sink.count.eq(user_port_pads.sink_count),
 
-                user_port_pads.sink_ack.eq(user_port.sink.ack),
+                user_port_pads.sink_ready.eq(user_port.sink.ready),
             ]
             self.comb += [
-                user_port_pads.source_stb.eq(user_port.source.stb),
-                user_port_pads.source_eop.eq(user_port.source.eop),
+                user_port_pads.source_valid.eq(user_port.source.valid),
+                user_port_pads.source_last.eq(user_port.source.last),
                 user_port_pads.source_write.eq(user_port.source.write),
                 user_port_pads.source_read.eq(user_port.source.read),
                 user_port_pads.source_identify.eq(user_port.source.identify),
-                user_port_pads.source_last.eq(user_port.source.last),
+                user_port_pads.source_end.eq(user_port.source.end),
                 user_port_pads.source_failed.eq(user_port.source.failed),
                 user_port_pads.source_data.eq(user_port.source.data),
 
-                user_port.source.ack.eq(user_port_pads.source_ack),
+                user_port.source.ready.eq(user_port_pads.source_ready),
             ]
 
 default_subtarget = Core

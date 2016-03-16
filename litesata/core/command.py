@@ -50,11 +50,11 @@ class LiteSATACommandTX(Module):
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
         fsm.act("IDLE",
-            sink.ack.eq(0),
-            If(sink.stb,
+            sink.ready.eq(0),
+            If(sink.valid,
                 NextState("SEND_CMD")
             ).Else(
-                sink.ack.eq(1)
+                sink.ready.eq(1)
             )
         )
         self.sync += \
@@ -65,14 +65,14 @@ class LiteSATACommandTX(Module):
             )
 
         fsm.act("SEND_CMD",
-            transport.sink.stb.eq(sink.stb),
-            transport.sink.eop.eq(1),
+            transport.sink.valid.eq(sink.valid),
+            transport.sink.last.eq(1),
             transport.sink.c.eq(1),
-            If(transport.sink.stb & transport.sink.ack,
+            If(transport.sink.valid & transport.sink.ready,
                 If(is_write,
                     NextState("WAIT_DMA_ACTIVATE")
                 ).Else(
-                    sink.ack.eq(1),
+                    sink.ready.eq(1),
                     NextState("IDLE")
                 )
             )
@@ -82,20 +82,20 @@ class LiteSATACommandTX(Module):
             If(from_rx.dma_activate,
                 NextState("SEND_DATA")
             ).Elif(from_rx.d2h_error,
-                sink.ack.eq(1),
+                sink.ready.eq(1),
                 NextState("IDLE")
             )
         )
         fsm.act("SEND_DATA",
-            dwords_counter_ce.eq(sink.stb & sink.ack),
+            dwords_counter_ce.eq(sink.valid & sink.ready),
 
-            transport.sink.stb.eq(sink.stb),
-            transport.sink.eop.eq((dwords_counter == (fis_max_dwords-1)) |
-                                  sink.eop),
+            transport.sink.valid.eq(sink.valid),
+            transport.sink.last.eq((dwords_counter == (fis_max_dwords-1)) |
+                                  sink.last),
 
-            sink.ack.eq(transport.sink.ack),
-            If(sink.stb & sink.ack,
-                If(sink.eop,
+            sink.ready.eq(transport.sink.ready),
+            If(sink.valid & sink.ready,
+                If(sink.last,
                     NextState("IDLE")
                 ).Elif(dwords_counter == (fis_max_dwords-1),
                     NextState("WAIT_DMA_ACTIVATE")
@@ -116,7 +116,7 @@ class LiteSATACommandTX(Module):
                 )
             )
         self.comb += [
-            If(sink.stb,
+            If(sink.valid,
                 to_rx.write.eq(sink.write),
                 to_rx.read.eq(sink.read),
                 to_rx.identify.eq(sink.identify),
@@ -192,7 +192,7 @@ class LiteSATACommandRX(Module):
         self.submodules += fsm
         fsm.act("IDLE",
             dwords_counter_reset.eq(1),
-            transport.source.ack.eq(1),
+            transport.source.ready.eq(1),
             clr_d2h_error.eq(1),
             clr_read_error.eq(1),
             If(from_tx.write,
@@ -208,8 +208,8 @@ class LiteSATACommandRX(Module):
                 is_identify.eq(from_tx.identify)
             )
         fsm.act("WAIT_WRITE_ACTIVATE_OR_REG_D2H",
-            transport.source.ack.eq(1),
-            If(transport.source.stb,
+            transport.source.ready.eq(1),
+            If(transport.source.valid,
                 If(test_type("DMA_ACTIVATE_D2H"),
                     is_dma_activate.eq(1),
                 ).Elif(test_type("REG_D2H"),
@@ -220,19 +220,19 @@ class LiteSATACommandRX(Module):
             )
         )
         fsm.act("PRESENT_WRITE_RESPONSE",
-            source.stb.eq(1),
-            source.eop.eq(1),
-            source.write.eq(1),
+            source.valid.eq(1),
             source.last.eq(1),
+            source.write.eq(1),
+            source.end.eq(1),
             source.failed.eq(transport.source.error | d2h_error),
-            If(source.stb & source.ack,
+            If(source.valid & source.ready,
                 NextState("IDLE")
             )
         )
         fsm.act("WAIT_READ_DATA_OR_REG_D2H",
-            transport.source.ack.eq(1),
-            If(transport.source.stb,
-                transport.source.ack.eq(0),
+            transport.source.ready.eq(1),
+            If(transport.source.valid,
+                transport.source.ready.eq(0),
                 If(test_type("DATA"),
                     NextState("PRESENT_READ_DATA")
                 ).Elif(test_type("REG_D2H"),
@@ -243,9 +243,9 @@ class LiteSATACommandRX(Module):
             )
         )
         fsm.act("WAIT_PIO_SETUP_D2H",
-            transport.source.ack.eq(1),
-            If(transport.source.stb,
-                transport.source.ack.eq(0),
+            transport.source.ready.eq(1),
+            If(transport.source.valid,
+                transport.source.ready.eq(0),
                 If(test_type("PIO_SETUP_D2H"),
                     NextState("PRESENT_PIO_SETUP_D2H")
                 ).Else(
@@ -254,25 +254,25 @@ class LiteSATACommandRX(Module):
             )
         )
         fsm.act("PRESENT_PIO_SETUP_D2H",
-            transport.source.ack.eq(1),
-            If(transport.source.stb & transport.source.eop,
+            transport.source.ready.eq(1),
+            If(transport.source.valid & transport.source.last,
                 NextState("WAIT_READ_DATA_OR_REG_D2H")
             )
         )
 
         fsm.act("PRESENT_READ_DATA",
             set_read_error.eq(transport.source.error),
-            source.stb.eq(transport.source.stb),
-            source.eop.eq(transport.source.eop),
+            source.valid.eq(transport.source.valid),
+            source.last.eq(transport.source.last),
             source.read.eq(~is_identify),
             source.identify.eq(is_identify),
             source.failed.eq(transport.source.error),
-            source.last.eq(is_identify),
+            source.end.eq(is_identify),
             source.data.eq(transport.source.data),
-            transport.source.ack.eq(source.ack),
-            If(source.stb & source.ack,
+            transport.source.ready.eq(source.ready),
+            If(source.valid & source.ready,
                 dwords_counter_ce.eq(~read_done),
-                If(source.eop,
+                If(source.last,
                     If(is_identify,
                         NextState("IDLE")
                     ).Else(
@@ -283,19 +283,19 @@ class LiteSATACommandRX(Module):
         )
 
         fsm.act("PRESENT_READ_RESPONSE",
-            source.stb.eq(1),
-            source.eop.eq(1),
-            source.read.eq(1),
+            source.valid.eq(1),
             source.last.eq(1),
+            source.read.eq(1),
+            source.end.eq(1),
             source.failed.eq(~read_done | read_error | d2h_error),
-            If(source.stb & source.ack,
+            If(source.valid & source.ready,
                 NextState("IDLE")
             )
         )
 
         fsm.act("FLUSH",
-            transport.source.ack.eq(1),
-            If(transport.source.stb & transport.source.eop,
+            transport.source.ready.eq(1),
+            If(transport.source.valid & transport.source.last,
                NextState("WAIT_PIO_SETUP_D2H")
             )
         )
