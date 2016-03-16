@@ -159,8 +159,8 @@ System Clk: {} MHz (min: {} MHz)
         soc_fragment = soc.get_fragment()
         platform.finalize(soc_fragment)
         so = {
-            NoRetiming:             XilinxNoRetiming,
-            MultiReg:               XilinxMultiReg,
+            NoRetiming:             XilinxNoRetimingVivado,
+            MultiReg:               XilinxMultiRegVivado,
             AsyncResetSynchronizer: XilinxAsyncResetSynchronizer
         }
         v_output = platform.get_verilog(soc_fragment, name="litesata", special_overrides=so)
