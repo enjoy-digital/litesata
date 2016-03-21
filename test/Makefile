@@ -33,9 +33,6 @@ command_tb: crc scrambler
 bist_tb: crc scrambler
 	$(CMD) bist_tb.py
 
-bist_robustness_tb: crc scrambler
-	$(CMD) bist_robustness_tb.py
-
 striping_tb: crc scrambler
 	$(CMD) striping_tb.py
 
