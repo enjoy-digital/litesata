@@ -11,9 +11,6 @@ crc: crc.c
 scrambler: scrambler.c
 	$(CC) $(CFLAGS) $(INC) -o $@ $<
 
-phy_datapath_tb:
-	$(CMD) phy_datapath_tb.py
-
 link_crc_tb: crc
 	$(CMD) link_crc_tb.py
 
@@ -38,9 +35,6 @@ striping_tb: crc scrambler
 mirroring_tb: crc scrambler
 	$(CMD) mirroring_tb.py
 
-robustness_tb: crc scrambler
-	$(CMD) robustness_tb.py
-
 example_designs:
 	cd ../example_designs && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
 	cd ../example_designs && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
@@ -56,4 +50,4 @@ example_designs:
 all: phy_datapath_tb link_crc_tb link_scrambler_tb link_cont_tb link_tb command_tb bist_tb striping_tb mirroring_tb example_designs
 
 clean:
-	rm -f crc scrambler *.v *.vvp *.vcd
+	rm -f crc scrambler *.vcd

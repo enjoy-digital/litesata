@@ -20,33 +20,37 @@ class TB(Module):
             out, err = process.communicate()
         return [int(e, 16) for e in out.decode("ASCII").split("\n")[:-1]]
 
-    def gen_simulation(self, selfp):
-        # init CRC
-        selfp.scrambler.ce = 1
-        selfp.scrambler.reset = 1
+def main_generator(dut):
+    # init CRC
+    yield dut.scrambler.ce.eq(1)
+    yield dut.scrambler.reset.eq(1)
+    yield
+    yield dut.scrambler.reset.eq(0)
+
+    # log results
+    yield
+    sim_values = []
+    for i in range(dut.length):
+        sim_values.append((yield dut.scrambler.value))
         yield
-        selfp.scrambler.reset = 0
 
-        # log results
+    # stop
+    yield dut.scrambler.ce.eq(0)
+    for i in range(32):
         yield
-        sim_values = []
-        for i in range(self.length):
-            sim_values.append(selfp.scrambler.value)
-            yield
 
-        # stop
-        selfp.scrambler.ce = 0
-        for i in range(32):
-            yield
+    # get C code reference
+    c_values = dut.get_c_values(dut.length)
 
-        # get C code reference
-        c_values = self.get_c_values(self.length)
+    # check results
+    s, l, e = check(c_values, sim_values)
+    print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
-        # check results
-        s, l, e = check(c_values, sim_values)
-        print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
 if __name__ == "__main__":
-    from litex.gen.sim.generic import run_simulation
-    length = 8192
-    run_simulation(TB(length), ncycles=length+100, vcd_name="my.vcd")
+    tb = TB(1024)
+    generators = {
+        "sys" :   [main_generator(tb)]
+    }
+    clocks = {"sys": 10}
+    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")

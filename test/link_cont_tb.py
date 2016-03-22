@@ -16,18 +16,17 @@ class ContStreamer(PacketStreamer):
     def __init__(self):
         PacketStreamer.__init__(self, phy_description(32), ContPacket)
 
-    def do_simulation(self, selfp):
-        PacketStreamer.do_simulation(self, selfp)
-        selfp.source.charisk = 0
+    def generator(self):
+        yield self.source.charisk.eq(0)
         # Note: for simplicity we generate charisk by detecting
         # primitives in data
         for k, v in primitives.items():
             try:
                 if self.source_data == v:
-                    selfp.source.charisk = 0b0001
+                    yield self.source.charisk.eq(0b0001)
             except:
                 pass
-
+        yield from PacketStreamer.generator(self)
 
 class ContLogger(PacketLogger):
     def __init__(self):
@@ -52,48 +51,60 @@ class TB(Module):
             self.logger
         )
 
-    def gen_simulation(self, selfp):
-        test_packet = ContPacket([
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["ALIGN"],
-            primitives["ALIGN"],
-            primitives["SYNC"],
-            primitives["SYNC"],
-            #primitives["SYNC"],
-            0x00000000,
-            0x00000001,
-            0x00000002,
-            0x00000003,
-            0x00000004,
-            0x00000005,
-            0x00000006,
-            0x00000007,
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["ALIGN"],
-            primitives["ALIGN"],
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["SYNC"],
-            primitives["SYNC"]]*4
-            )
-        streamer_packet = ContPacket(test_packet)
-        yield from self.streamer.send(streamer_packet)
-        yield from self.logger.receive(len(test_packet))
-        #for d in self.logger.packet:
-        #    print("{:08x}".format(d))
+def main_generator(dut):
+    test_packet = ContPacket([
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["ALIGN"],
+        primitives["ALIGN"],
+        primitives["SYNC"],
+        primitives["SYNC"],
+        #primitives["SYNC"],
+        0x00000000,
+        0x00000001,
+        0x00000002,
+        0x00000003,
+        0x00000004,
+        0x00000005,
+        0x00000006,
+        0x00000007,
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["ALIGN"],
+        primitives["ALIGN"],
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["SYNC"],
+        primitives["SYNC"]]*4
+        )
+    streamer_packet = ContPacket(test_packet)
+    yield from dut.streamer.send_blocking(streamer_packet)
+    yield from dut.logger.receive(len(test_packet))
+    #for d in self.logger.packet:
+    #    print("{:08x}".format(d))
 
-        # check results
-        s, l, e = check(streamer_packet, self.logger.packet)
-        print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
+    # check results
+    s, l, e = check(streamer_packet, dut.logger.packet)
+    print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
+    # XXX: find a way to exit properly
+    import sys
+    sys.exit()
 
 if __name__ == "__main__":
-    run_simulation(TB(), ncycles=1024, vcd_name="my.vcd", keep_files=True)
+    tb = TB()
+    generators = {
+        "sys" :   [main_generator(tb),
+                   tb.streamer.generator(),
+                   tb.streamer_randomizer.generator(),
+                   tb.logger.generator(),
+                   tb.logger_randomizer.generator()]
+    }
+    clocks = {"sys": 10}
+    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")

@@ -1,8 +1,6 @@
 import random
 from copy import deepcopy
 
-from litex.gen.sim.generic import run_simulation
-
 from litesata.common import *
 
 def print_with_prefix(s, prefix=""):
@@ -54,41 +52,35 @@ class PacketStreamer(Module):
 
         self.packets = []
         self.packet = packet_class()
-        self.packet.done = 1
+        self.packet.done = True
 
-        self.source_data = 0
-
-    def send(self, packet, blocking=True):
+    def send(self, packet):
         packet = deepcopy(packet)
         self.packets.append(packet)
-        if blocking:
-            while packet.done == 0:
-                yield
+        return packet
 
-    def do_simulation(self, selfp):
-        if len(self.packets) and self.packet.done:
-            self.packet = self.packets.pop(0)
-        if not self.packet.ongoing and not self.packet.done:
-            selfp.source.valid = 1
-            if len(self.packet) > 0:
-                self.source_data = self.packet.pop(0)
-                if hasattr(selfp.source, "data"):
-                    selfp.source.data = self.source_data
+    def send_blocking(self, packet):
+        packet = self.send(packet)
+        while not packet.done:
+            yield
+
+    def generator(self):
+        while True:
+            if len(self.packets) and self.packet.done:
+                self.packet = self.packets.pop(0)
+            if not self.packet.ongoing and not self.packet.done:
+                yield self.source.valid.eq(1)
+                yield self.source.data.eq(self.packet.pop(0))
+                self.packet.ongoing = True
+            elif (yield self.source.valid) and (yield self.source.ready):
+                yield self.source.last.eq(len(self.packet) == 1)
+                if len(self.packet) > 0:
+                    yield self.source.valid.eq(1)
+                    yield self.source.data.eq(self.packet.pop(0))
                 else:
-                    selfp.source.d = self.source_data
-            self.packet.ongoing = True
-        elif selfp.source.valid == 1 and selfp.source.ready == 1:
-            selfp.source.last = (len(self.packet) == 1)
-            if len(self.packet) > 0:
-                selfp.source.valid = 1
-                self.source_data = self.packet.pop(0)
-                if hasattr(selfp.source, "data"):
-                    selfp.source.data = self.source_data
-                else:
-                    selfp.source.d = self.source_data
-            else:
-                self.packet.done = 1
-                selfp.source.valid = 0
+                    self.packet.done = True
+                    yield self.source.valid.eq(0)
+            yield
 
 
 class PacketLogger(Module):
@@ -110,19 +102,21 @@ class PacketLogger(Module):
             while length > len(self.packet):
                 yield
 
-    def do_simulation(self, selfp):
-        selfp.sink.ready = 1
-        if selfp.sink.valid == 1 and self.first == 1:
-            self.packet = self.packet_class()
-            self.first = False
-        if selfp.sink.valid:
-            if hasattr(selfp.sink, "data"):
-                self.packet.append(selfp.sink.data)
-            else:
-                self.packet.append(selfp.sink.d)
-        if selfp.sink.valid == 1 and selfp.sink.last == 1:
-            self.packet.done = True
-            self.first = True
+    def generator(self):
+        while True:
+            yield self.sink.ready.eq(1)
+            if (yield self.sink.valid) and self.first:
+                self.packet = self.packet_class()
+                self.first = False
+            if (yield self.sink.valid):
+                if hasattr(self.sink, "data"):
+                    self.packet.append((yield self.sink.data))
+                else:
+                    self.packet.append((yield self.sink.d))
+            if (yield self.sink.valid) and (yield self.sink.last):
+                self.packet.done = True
+                self.first = True
+            yield
 
 
 class Randomizer(Module):
@@ -132,19 +126,21 @@ class Randomizer(Module):
         self.sink = stream.Endpoint(description)
         self.source = stream.Endpoint(description)
 
-        self.run = Signal()
+        self.ce = Signal(reset=1)
 
         self.comb += \
-            If(self.run,
-                self.sink.connect(self.source)
+            If(self.ce,
+                Record.connect(self.sink, self.source)
             ).Else(
                 self.source.valid.eq(0),
                 self.sink.ready.eq(0),
             )
 
-    def do_simulation(self, selfp):
-        n = randn(100)
-        if n < self.level:
-            selfp.run = 0
-        else:
-            selfp.run = 1
+    def generator(self):
+        while True:
+            n = randn(100)
+            if n < self.level:
+                yield self.ce.eq(0)
+            else:
+                yield self.ce.eq(1)
+            yield

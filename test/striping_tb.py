@@ -28,40 +28,51 @@ class TB(Module):
         self.submodules.generator = LiteSATABISTGenerator(self.crossbar.get_port())
         self.submodules.checker = LiteSATABISTChecker(self.crossbar.get_port())
 
-    def gen_simulation(self, selfp):
-        hdd0 = self.hdd0
-        hdd0.malloc(0, 64)
-        hdd1 = self.hdd1
-        hdd1.malloc(0, 64)
-        sector = 0
-        count = 1
-        generator = selfp.generator
-        checker = selfp.checker
-        while True:
-            # write data
-            generator.sector = sector
-            generator.count = count
-            generator.start = 1
+def main_generator(dut):
+    dut.hdd0.malloc(0, 64)
+    dut.hdd1.malloc(0, 64)
+    sector = 0
+    count = 1
+    for i in range(2):
+        # write data
+        yield dut.generator.sector.eq(sector)
+        yield dut.generator.count.eq(count)
+        yield dut.generator.start.eq(1)
+        yield
+        yield dut.generator.start.eq(0)
+        yield
+        while not (yield dut.generator.done):
             yield
-            generator.start = 0
-            yield
-            while generator.done == 0:
-                yield
 
-            # verify data
-            checker.sector = sector
-            checker.count = count
-            checker.start = 1
+        # verify data
+        yield dut.checker.sector.eq(sector)
+        yield dut.checker.count.eq(count)
+        yield dut.checker.start.eq(1)
+        yield
+        yield dut.checker.start.eq(0)
+        yield
+        while not (yield dut.checker.done):
             yield
-            checker.start = 0
-            yield
-            while checker.done == 0:
-                yield
-            print("errors {}".format(checker.errors))
+        print("errors {}".format((yield dut.checker.errors)))
 
-            # prepare next iteration
-            sector += 1
-            count = max((count + 1)%8, 1)
+        # prepare next iteration
+        sector += 1
+        count = count + 1
+
+    # XXX: find a way to exit properly
+    import sys
+    sys.exit()
 
 if __name__ == "__main__":
-    run_simulation(TB(), ncycles=4096, vcd_name="my.vcd", keep_files=True)
+    tb = TB()
+    generators = {
+        "sys" :   [main_generator(tb),
+                   tb.hdd0.link.generator(),
+                   tb.hdd0.phy.rx.generator(),
+                   tb.hdd0.phy.tx.generator(),
+                   tb.hdd1.link.generator(),
+                   tb.hdd1.phy.rx.generator(),
+                   tb.hdd1.phy.tx.generator()]
+    }
+    clocks = {"sys": 10}
+    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")

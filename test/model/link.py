@@ -189,7 +189,7 @@ class LinkLayer(Module):
             self.rx_packet = LinkRXPacket()
             self.rx_packet.ongoing = True
 
-    def gen_simulation(self, selfp):
+    def generator(self):
         self.tx_packet.done = True
         self.phy.send(primitives["SYNC"])
         while True:

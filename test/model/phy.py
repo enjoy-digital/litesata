@@ -20,13 +20,15 @@ class PHYSource(Module):
     def send(self, dword):
         self.dword = dword
 
-    def do_simulation(self, selfp):
-        selfp.source.valid = 1
-        selfp.source.charisk = 0b0000
-        for k, v in primitives.items():
-            if v == self.dword.dat:
-                selfp.source.charisk = 0b0001
-        selfp.source.data = self.dword.dat
+    def generator(self):
+        while True:
+            yield self.source.valid.eq(1)
+            yield self.source.charisk.eq(0b0000)
+            for k, v in primitives.items():
+                if v == self.dword.dat:
+                    yield self.source.charisk.eq(0b0001)
+            yield self.source.data.eq(self.dword.dat)
+            yield
 
 
 class PHYSink(Module):
@@ -42,12 +44,14 @@ class PHYSink(Module):
         while self.dword.done == 0:
             yield
 
-    def do_simulation(self, selfp):
-        self.dword.done = 0
-        selfp.sink.ready = 1
-        if selfp.sink.valid == 1:
-            self.dword.done = 1
-            self.dword.dat = selfp.sink.data
+    def generator(self):
+        while True:
+            self.dword.done = 0
+            yield self.sink.ready.eq(1)
+            if (yield self.sink.valid):
+                self.dword.done = 1
+                self.dword.dat = (yield self.sink.data)
+            yield
 
 
 class PHYLayer(Module):

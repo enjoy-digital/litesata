@@ -19,15 +19,47 @@ class CommandTXPacket(list):
 
 class CommandStreamer(PacketStreamer):
     def __init__(self):
-        PacketStreamer.__init__(self, command_tx_description(32), CommandTXPacket)
+        self.source = stream.Endpoint(command_tx_description(32))
 
-    def do_simulation(self, selfp):
-        PacketStreamer.do_simulation(self, selfp)
-        selfp.source.write = self.packet.write
-        selfp.source.read = self.packet.read
-        selfp.source.sector = self.packet.sector
-        selfp.source.count = self.packet.count
+        # # #
 
+        self.packets = []
+        self.packet = CommandTXPacket()
+        self.packet.done = True
+
+    def send(self, packet):
+        packet = deepcopy(packet)
+        self.packets.append(packet)
+        return packet
+
+    def send_blocking(self, packet):
+        packet = self.send(packet)
+        while not packet.done:
+            yield
+
+    def generator(self):
+        while True:
+            if len(self.packets) and self.packet.done:
+                self.packet = self.packets.pop(0)
+            yield self.source.write.eq(self.packet.write)
+            yield self.source.read.eq(self.packet.read)
+            yield self.source.sector.eq(self.packet.sector)
+            yield self.source.count.eq(self.packet.count)
+            if not self.packet.ongoing and not self.packet.done:
+                yield self.source.valid.eq(1)
+                if len(self.packet) > 0:
+                    yield self.source.data.eq(self.packet.pop(0))
+                self.packet.ongoing = True
+            elif (yield self.source.valid) and (yield self.source.ready):
+                yield self.source.last.eq(len(self.packet) == 1)
+                if len(self.packet) > 0:
+                    yield self.source.valid.eq(1)
+                    yield self.source.data.eq(self.packet.pop(0))
+                else:
+                    self.packet.done = True
+                    yield self.source.valid.eq(0)
+
+            yield
 
 class CommandRXPacket(list):
     def __init__(self):
@@ -43,20 +75,22 @@ class CommandLogger(PacketLogger):
         PacketLogger.__init__(self, command_rx_description(32), CommandRXPacket)
         self.first = True
 
-    def do_simulation(self, selfp):
-        selfp.sink.ready = 1
-        if selfp.sink.valid == 1 and self.first:
-            self.packet = CommandRXPacket()
-            self.packet.write = selfp.sink.write
-            self.packet.read = selfp.sink.read
-            self.packet.failed = selfp.sink.failed
-            self.packet.append(selfp.sink.data)
-            self.first = False
-        elif selfp.sink.valid:
-            self.packet.append(selfp.sink.data)
-        if selfp.sink.valid == 1 and selfp.sink.last == 1:
-            self.packet.done = True
-            self.first = True
+    def generator(self):
+        while True:
+            yield self.sink.ready.eq(1)
+            if (yield self.sink.valid) and self.first:
+                self.packet = CommandRXPacket()
+                self.packet.write = (yield self.sink.write)
+                self.packet.read = (yield self.sink.read)
+                self.packet.failed = (yield self.sink.failed)
+                self.packet.append((yield self.sink.data))
+                self.first = False
+            elif (yield self.sink.valid):
+                self.packet.append((yield self.sink.data))
+            if (yield self.sink.valid) and (yield self.sink.last):
+                self.packet.done = True
+                self.first = True
+            yield
 
 
 class TB(Module):
@@ -81,22 +115,39 @@ class TB(Module):
             self.logger
         )
 
-    def gen_simulation(self, selfp):
-        hdd = self.hdd
-        hdd.malloc(0, 64)
-        write_data = [i for i in range(sectors2dwords(2))]
-        write_len = dwords2sectors(len(write_data))
-        write_packet = CommandTXPacket(write=1, sector=2, count=write_len, data=write_data)
-        yield from self.streamer.send(write_packet)
-        yield from self.logger.receive()
-        read_packet = CommandTXPacket(read=1, sector=2, count=write_len)
-        yield from self.streamer.send(read_packet)
-        yield from self.logger.receive()
-        read_data = self.logger.packet
+def main_generator(dut):
+    hdd = dut.hdd
+    hdd.malloc(0, 64)
+    write_data = [i for i in range(sectors2dwords(2))]
+    write_len = dwords2sectors(len(write_data))
+    write_packet = CommandTXPacket(write=1, sector=2, count=write_len, data=write_data)
+    yield from dut.streamer.send_blocking(write_packet)
+    yield from dut.logger.receive()
 
-        # check results
-        s, l, e = check(write_data, read_data)
-        print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
+    read_packet = CommandTXPacket(read=1, sector=2, count=write_len)
+    yield from dut.streamer.send_blocking(read_packet)
+    yield from dut.logger.receive()
+    read_data = dut.logger.packet
+
+    # check results
+    s, l, e = check(write_data, read_data)
+    print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
+
+    # XXX: find a way to exit properly
+    import sys
+    sys.exit()
 
 if __name__ == "__main__":
-    run_simulation(TB(), ncycles=2048, vcd_name="my.vcd", keep_files=True)
+    tb = TB()
+    generators = {
+        "sys" :   [main_generator(tb),
+                   tb.hdd.link.generator(),
+                   tb.streamer.generator(),
+                   tb.streamer_randomizer.generator(),
+                   tb.logger.generator(),
+                   tb.logger_randomizer.generator(),
+                   tb.hdd.phy.rx.generator(),
+                   tb.hdd.phy.tx.generator()]
+    }
+    clocks = {"sys": 10}
+    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")

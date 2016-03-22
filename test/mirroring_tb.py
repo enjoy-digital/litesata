@@ -32,44 +32,57 @@ class TB(Module):
         self.submodules.generator1 = LiteSATABISTGenerator(self.crossbar1.get_port())
         self.submodules.checker1 = LiteSATABISTChecker(self.crossbar1.get_port())
 
-    def gen_simulation(self, selfp):
-        hdd0 = self.hdd0
-        hdd0.malloc(0, 64)
-        hdd1 = self.hdd1
-        hdd1.malloc(0, 64)
-        sector = 0
-        count = 1
-        checker0 = selfp.checker0
-        checker1 = selfp.checker1
-        while True:
-            for generator in [selfp.generator0, selfp.generator1]:
-                # write data (alternate generators)
-                generator.sector = sector
-                generator.count = count
-                generator.start = 1
-                yield
-                generator.start = 0
-                yield
-                while generator.done == 0:
-                    yield
+def main_generator(dut):
+    dut.hdd0.malloc(0, 64)
+    dut.hdd1.malloc(0, 64)
+    sector = 0
+    count = 1
 
-                # verify data on the 2 hdds in //
-                checker0.sector = sector
-                checker0.count = count
-                checker0.start = 1
-                checker1.sector = sector
-                checker1.count = count
-                checker1.start = 1
+    for i in range(2):
+        for dut_generator in [dut.generator0, dut.generator1]:
+            # write data (alternate generators)
+            yield dut_generator.sector.eq(sector)
+            yield dut_generator.count.eq(count)
+            yield dut_generator.start.eq(1)
+            yield
+            yield dut_generator.start.eq(0)
+            yield
+            while not (yield dut_generator.done):
                 yield
-                checker0.start = 0
-                checker1.start = 0
-                yield
-                while (checker0.done == 0) or (checker1.done == 0):
-                    yield
-                print("errors {}".format(checker0.errors + checker1.errors))
 
-                # prepare next iteration
-                sector += 1
+            # verify data on the 2 hdds in //
+            yield dut.checker0.sector.eq(sector)
+            yield dut.checker0.count.eq(count)
+            yield dut.checker0.start.eq(1)
+            yield dut.checker1.sector.eq(sector)
+            yield dut.checker1.count.eq(count)
+            yield dut.checker1.start.eq(1)
+            yield
+            yield dut.checker0.start.eq(0)
+            yield dut.checker1.start.eq(0)
+            yield
+            while not (yield dut.checker0.done) or not (yield dut.checker1.done):
+                yield
+            print("errors {}".format((yield dut.checker0.errors) +
+                                     (yield dut.checker1.errors)))
+
+            # prepare next iteration
+            sector += 1
+
+    # XXX: find a way to exit properly
+    import sys
+    sys.exit()
 
 if __name__ == "__main__":
-    run_simulation(TB(), ncycles=4096, vcd_name="my.vcd", keep_files=True)
+    tb = TB()
+    generators = {
+        "sys" :   [main_generator(tb),
+                   tb.hdd0.link.generator(),
+                   tb.hdd0.phy.rx.generator(),
+                   tb.hdd0.phy.tx.generator(),
+                   tb.hdd1.link.generator(),
+                   tb.hdd1.phy.rx.generator(),
+                   tb.hdd1.phy.tx.generator()]
+    }
+    clocks = {"sys": 10}
+    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
