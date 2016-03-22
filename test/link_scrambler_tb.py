@@ -3,7 +3,7 @@ import subprocess
 from litesata.common import *
 from litesata.core.link import Scrambler
 
-from test.common import *
+from common import *
 
 
 class TB(Module):

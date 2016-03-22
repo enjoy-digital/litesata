@@ -1,7 +1,6 @@
-COREDIR = ../
 PYTHON = python3
 
-CMD = PYTHONPATH=$(COREDIR) $(PYTHON)
+CMD = $(PYTHON)
 
 CC=gcc
 CFLAGS =-Wall -O0

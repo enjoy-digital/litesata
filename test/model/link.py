@@ -3,7 +3,7 @@ import math
 
 from litesata.common import *
 
-from test.common import *
+from common import *
 
 
 def print_link(s, n=None):

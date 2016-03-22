@@ -1,7 +1,7 @@
 from litesata.common import *
 
-from test.common import *
-from test.model.transport import FIS_REG_H2D, FIS_DATA
+from common import *
+from model.transport import FIS_REG_H2D, FIS_DATA
 
 
 class CommandLayer(Module):

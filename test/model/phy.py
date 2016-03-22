@@ -1,6 +1,6 @@
 from litesata.common import *
 
-from test.common import *
+from common import *
 
 class PHYDword:
     def __init__(self, dat=0):

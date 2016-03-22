@@ -3,8 +3,8 @@ from litesata.core import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABISTGenerator, LiteSATABISTChecker
 
-from test.common import *
-from test.model.hdd import *
+from common import *
+from model.hdd import *
 
 
 class TB(Module):

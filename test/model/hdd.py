@@ -2,11 +2,11 @@ import math
 
 from litesata.common import *
 
-from test.common import *
-from test.model.phy import *
-from test.model.link import *
-from test.model.transport import *
-from test.model.command import *
+from common import *
+from model.phy import *
+from model.link import *
+from model.transport import *
+from model.command import *
 
 
 def print_hdd(s, n=None):
@@ -92,7 +92,7 @@ class HDD(Module):
     def write_dma_callback(self, fis):
         self.wr_sector = fis.lba_lsb + (fis.lba_msb << 32)
         self.wr_end_sector = self.wr_sector + fis.count
-        return [FIS_DMA_ACTIVATE_D2H()] if not self.busy else [self.get_reg_d2h()] 
+        return [FIS_DMA_ACTIVATE_D2H()] if not self.busy else [self.get_reg_d2h()]
 
     def read_dma_callback(self, fis):
         self.rd_sector = fis.lba_lsb + (fis.lba_msb << 32)

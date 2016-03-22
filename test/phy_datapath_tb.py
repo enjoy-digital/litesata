@@ -1,7 +1,7 @@
 from litesata.common import *
 from litesata.phy.datapath import LiteSATAPHYDatapath
 
-from test.common import *
+from common import *
 
 
 class DataPacket(list):

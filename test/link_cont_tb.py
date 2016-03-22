@@ -1,7 +1,7 @@
 from litesata.common import *
 from litesata.core.link import LiteSATACONTInserter, LiteSATACONTRemover
 
-from test.common import *
+from common import *
 
 
 class ContPacket(list):

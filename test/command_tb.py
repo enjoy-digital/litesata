@@ -1,8 +1,8 @@
 from litesata.common import *
 from litesata.core import LiteSATACore
 
-from test.common import *
-from test.model.hdd import *
+from common import *
+from model.hdd import *
 
 
 class CommandTXPacket(list):
