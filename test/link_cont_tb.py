@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from litesata.common import *
 from litesata.core.link import LiteSATACONTInserter, LiteSATACONTRemover
 

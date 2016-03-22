@@ -47,7 +47,7 @@ example_designs:
 	cd ../example_designs && $(PYTHON) make.py -t core -Ot design striping build-core
 
 
-all: phy_datapath_tb link_crc_tb link_scrambler_tb link_cont_tb link_tb command_tb bist_tb striping_tb mirroring_tb example_designs
+all: link_crc_tb link_scrambler_tb link_cont_tb link_tb command_tb bist_tb striping_tb mirroring_tb example_designs
 
 clean:
 	rm -f crc scrambler *.vcd
