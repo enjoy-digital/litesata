@@ -47,10 +47,6 @@ def main_generator(dut):
         s, l, e = check(streamer_packet, dut.logger.packet)
         print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
-
 if __name__ == "__main__":
     tb = TB()
     generators = {

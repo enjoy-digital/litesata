@@ -38,6 +38,7 @@ class CommandStreamer(PacketStreamer):
         while not packet.done:
             yield
 
+    @passive
     def generator(self):
         while True:
             if len(self.packets) and self.packet.done:
@@ -76,6 +77,7 @@ class CommandLogger(PacketLogger):
         PacketLogger.__init__(self, command_rx_description(32), CommandRXPacket)
         self.first = True
 
+    @passive
     def generator(self):
         while True:
             yield self.sink.ready.eq(1)
@@ -133,10 +135,6 @@ def main_generator(dut):
     # check results
     s, l, e = check(write_data, read_data)
     print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
-
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
 
 if __name__ == "__main__":
     tb = TB()

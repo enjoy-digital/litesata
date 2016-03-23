@@ -52,10 +52,6 @@ def main_generator(dut):
         sector += 1
         count = max((count + 1)%8, 1)
 
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
-
 if __name__ == "__main__":
     tb = TB()
     generators = {

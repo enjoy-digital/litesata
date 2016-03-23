@@ -70,10 +70,6 @@ def main_generator(dut):
             # prepare next iteration
             sector += 1
 
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
-
 if __name__ == "__main__":
     tb = TB()
     generators = {

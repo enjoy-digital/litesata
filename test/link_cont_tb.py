@@ -17,6 +17,7 @@ class ContStreamer(PacketStreamer):
     def __init__(self):
         PacketStreamer.__init__(self, phy_description(32), ContPacket)
 
+    @passive
     def generator(self):
         yield self.source.charisk.eq(0)
         # Note: for simplicity we generate charisk by detecting
@@ -93,10 +94,6 @@ def main_generator(dut):
     # check results
     s, l, e = check(streamer_packet, dut.logger.packet)
     print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
-
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
 
 if __name__ == "__main__":
     tb = TB()

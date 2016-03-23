@@ -20,6 +20,7 @@ class PHYSource(Module):
     def send(self, dword):
         self.dword = dword
 
+    @passive
     def generator(self):
         while True:
             yield self.source.valid.eq(1)
@@ -44,6 +45,7 @@ class PHYSink(Module):
         while self.dword.done == 0:
             yield
 
+    @passive
     def generator(self):
         while True:
             self.dword.done = 0
