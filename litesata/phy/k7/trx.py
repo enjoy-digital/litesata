@@ -23,19 +23,6 @@ class _RisingEdge(Module):
         self.comb += o.eq(i & ~i_d)
 
 
-class _LowPassFilter(Module):
-    def __init__(self, i, o, cycles):
-        i_d = Signal()
-        self.submodules.timer = WaitTimer(cycles)
-        self.sync += [
-            i_d.eq(i),
-            If(self.timer.done,
-                o.eq(i_d)
-            )
-        ]
-        self.comb += self.timer.wait.eq(i == i_d)
-
-
 class K7LiteSATAPHYTRX(Module):
     def __init__(self, pads, revision, dw=16):
     # Common signals
@@ -84,9 +71,6 @@ class K7LiteSATAPHYTRX(Module):
         self.rxoutclk = Signal()
         self.rxusrclk = Signal()
         self.rxusrclk2 = Signal()
-
-        # Receive Ports - RX Driver,OOB signalling,Coupling and Eq.,CDR
-        self.rxelecidle = Signal()
 
         # Receive Ports - RX PLL Ports
         self.rxresetdone = Signal()
@@ -160,7 +144,6 @@ class K7LiteSATAPHYTRX(Module):
             self.txelecidle.eq(self.tx_idle | self.txpd),
             self.tx_cominit_ack.eq(self.tx_cominit_stb & self.txcomfinish),
             self.tx_comwake_ack.eq(self.tx_comwake_stb & self.txcomfinish),
-            self.rx_idle.eq(self.rxelecidle),
             self.rx_cominit_stb.eq(self.rxcominitdet),
             self.rx_comwake_stb.eq(self.rxcomwakedet),
         ]
@@ -229,8 +212,6 @@ class K7LiteSATAPHYTRX(Module):
         ]
 
         # sata_rx clk --> sys clk
-        rxelecidle = Signal()
-        rxelecidle_i = Signal()
         rxresetdone = Signal()
         rxcominitdet = Signal()
         rxcomwakedet = Signal()
@@ -241,7 +222,6 @@ class K7LiteSATAPHYTRX(Module):
         rxnotintable = Signal(dw//8)
 
         self.specials += [
-            MultiReg(rxelecidle, rxelecidle_i, "sys"),
             MultiReg(rxresetdone, self.rxresetdone, "sys"),
             MultiReg(rxcominitdet, self.rxcominitdet, "sys"),
             MultiReg(rxcomwakedet, self.rxcomwakedet, "sys"),
@@ -250,9 +230,6 @@ class K7LiteSATAPHYTRX(Module):
             MultiReg(rxdisperr, self.rxdisperr, "sys"),
             MultiReg(rxnotintable, self.rxnotintable, "sys")
         ]
-
-        rxelecidle_filter = _LowPassFilter(rxelecidle_i, self.rxelecidle, 256)
-        self.submodules += rxelecidle_filter
 
     # QPLL input clock
         self.qpllclk = Signal()
@@ -758,7 +735,7 @@ class K7LiteSATAPHYTRX(Module):
                     o_RXCOMINITDET=rxcominitdet,
 
                 # Receive Ports - RX OOB signalling Ports
-                    o_RXELECIDLE=rxelecidle,
+                    #o_RXELECIDLE=,
                     i_RXELECIDLEMODE=0b00,
 
                 # Receive Ports - RX Polarity Control Ports

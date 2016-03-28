@@ -1,5 +1,7 @@
 from litesata.common import *
 
+from litex.gen.genlib.misc import WaitTimer
+
 
 class LiteSATAPHYDatapathRX(Module):
     def __init__(self, trx_dw):
@@ -94,12 +96,33 @@ class LiteSATAPHYDatapathTX(Module):
         ]
 
 
+class LiteSATAPHYAlignTimer(Module):
+    def __init__(self):
+        self.sink = sink = stream.Endpoint(phy_description(32))
+
+        # # #
+
+        self.submodules.timer = WaitTimer(256*16)
+
+        charisk_match = sink.charisk == 0b0001
+        data_match = sink.data == primitives["ALIGN"]
+
+        self.comb += \
+            If(sink.valid &
+              (sink.charisk == 0b0001) &
+              (sink.data == primitives["ALIGN"]),
+                self.timer.wait.eq(0)
+            ).Else(
+                self.timer.wait.eq(1),
+            )
+
 class LiteSATAPHYDatapath(Module):
     def __init__(self, trx, ctrl):
         self.sink = sink = stream.Endpoint(phy_description(32))
         self.source = source = stream.Endpoint(phy_description(32))
 
         self.misalign = Signal()
+        self.rx_idle = Signal()
 
         # # #
 
@@ -118,13 +141,18 @@ class LiteSATAPHYDatapath(Module):
         # RX path
         rx = LiteSATAPHYDatapathRX(trx.dw)
         demux = Demultiplexer(phy_description(32), 2)
-        self.submodules += rx, demux
+        align_timer = LiteSATAPHYAlignTimer()
+        self.submodules += rx, demux, align_timer
         self.comb += [
             demux.sel.eq(ctrl.ready),
             trx.source.connect(rx.sink),
             rx.source.connect(demux.sink),
+            rx.source.connect(align_timer.sink, leave_out=set(["ready"])),
             demux.source0.connect(ctrl.sink),
-            demux.source1.connect(source)
+            demux.source1.connect(source),
         ]
 
-        self.comb += self.misalign.eq(rx.source.valid & ((rx.source.charisk & 0b1110) != 0))
+        self.comb += [
+            self.misalign.eq(rx.source.valid & ((rx.source.charisk & 0b1110) != 0)),
+            self.rx_idle.eq(align_timer.timer.done)
+        ]

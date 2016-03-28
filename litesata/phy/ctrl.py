@@ -10,6 +10,7 @@ class LiteSATAPHYCtrl(Module):
         self.sink = sink = stream.Endpoint(phy_description(32))
         self.source = source = stream.Endpoint(phy_description(32))
         self.misalign = Signal()
+        self.rx_idle = Signal()
 
         # # #
 
@@ -148,7 +149,7 @@ class LiteSATAPHYCtrl(Module):
             source.charisk.eq(0b0001),
             stability_timer.wait.eq(1),
             self.ready.eq(stability_timer.done),
-            If(trx.rx_idle,
+            If(self.rx_idle,
                 NextState("RESET"),
             ).Elif(self.misalign,
                 crg.rx_reset.eq(1),
