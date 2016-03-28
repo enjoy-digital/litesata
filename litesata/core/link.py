@@ -220,7 +220,7 @@ class LiteSATACRCChecker(Module):
             fifo.source.ready.eq(fifo_out),
             source.payload.eq(fifo.source.payload),
 
-            source.error.eq(sink.error | crc.error),
+            source.error.eq(sink.error | (crc.error & source.last)),
         ]
 
         fsm.act("RESET",
