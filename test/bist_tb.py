@@ -4,7 +4,8 @@ from litesata.core import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABISTGenerator, LiteSATABISTChecker
 
-from common import *
+from litex.soc.interconnect.stream_sim import *
+
 from model.hdd import *
 
 

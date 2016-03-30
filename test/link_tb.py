@@ -2,18 +2,19 @@
 from litesata.common import *
 from litesata.core.link import LiteSATALink
 
+from litex.soc.interconnect.stream_sim import *
+
 from model.hdd import *
-from common import *
 
 
 class LinkStreamer(PacketStreamer):
     def __init__(self):
-        PacketStreamer.__init__(self, link_description(32), LinkTXPacket)
+        PacketStreamer.__init__(self, link_description(32), packet_cls=LinkTXPacket)
 
 
 class LinkLogger(PacketLogger):
     def __init__(self):
-        PacketLogger.__init__(self, link_description(32), LinkRXPacket)
+        PacketLogger.__init__(self, link_description(32), packet_cls=LinkRXPacket)
 
 
 class TB(Module):

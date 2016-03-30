@@ -2,7 +2,8 @@ import math
 
 from litesata.common import *
 
-from common import *
+from litex.soc.interconnect.stream_sim import *
+
 from model.phy import *
 from model.link import *
 from model.transport import *

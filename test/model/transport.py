@@ -1,6 +1,6 @@
 from litesata.common import *
+from litex.soc.interconnect.stream_sim import *
 
-from common import *
 from model.link import LinkTXPacket
 
 

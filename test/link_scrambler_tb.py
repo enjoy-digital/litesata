@@ -4,7 +4,7 @@ import subprocess
 from litesata.common import *
 from litesata.core.link import Scrambler
 
-from common import *
+from litex.soc.interconnect.stream_sim import *
 
 
 class TB(Module):

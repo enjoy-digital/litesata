@@ -1,6 +1,6 @@
 from litesata.common import *
 
-from common import *
+from litex.soc.interconnect.stream_sim import *
 
 class PHYDword:
     def __init__(self, dat=0):

@@ -2,7 +2,8 @@
 from litesata.common import *
 from litesata.core import LiteSATACore
 
-from common import *
+from litex.soc.interconnect.stream_sim import *
+
 from model.hdd import *
 
 

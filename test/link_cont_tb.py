@@ -2,7 +2,7 @@
 from litesata.common import *
 from litesata.core.link import LiteSATACONTInserter, LiteSATACONTRemover
 
-from common import *
+from litex.soc.interconnect.stream_sim import *
 
 
 class ContPacket(list):
@@ -15,7 +15,7 @@ class ContPacket(list):
 
 class ContStreamer(PacketStreamer):
     def __init__(self):
-        PacketStreamer.__init__(self, phy_description(32), ContPacket)
+        PacketStreamer.__init__(self, phy_description(32), packet_cls=ContPacket)
 
     @passive
     def generator(self):
@@ -32,7 +32,7 @@ class ContStreamer(PacketStreamer):
 
 class ContLogger(PacketLogger):
     def __init__(self):
-        PacketLogger.__init__(self, phy_description(32), ContPacket)
+        PacketLogger.__init__(self, phy_description(32), packet_cls=ContPacket)
 
 
 class TB(Module):

@@ -3,7 +3,7 @@ import math
 
 from litesata.common import *
 
-from common import *
+from litex.soc.interconnect.stream_sim import *
 
 
 def print_link(s, n=None):
