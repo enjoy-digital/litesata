@@ -126,12 +126,11 @@ set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
 
 class BISTSoCDevel(BISTSoC):
     csr_map = {
-        "logic_analyzer": 17
+        "analyzer": 17
     }
     csr_map.update(BISTSoC.csr_map)
     def __init__(self, platform):
-        from litescope.frontend.logic_analyzer import LiteScopeLogicAnalyzer
-        from litescope.core.port import LiteScopeTerm
+        from litescope import LiteScopeAnalyzer
         BISTSoC.__init__(self, platform)
 
         self.sata_core_link_rx_fsm_state = Signal(4)
@@ -141,7 +140,7 @@ class BISTSoCDevel(BISTSoC):
         self.sata_core_command_rx_fsm_state = Signal(4)
         self.sata_core_command_tx_fsm_state = Signal(4)
 
-        debug = (
+        debug = [
             self.sata_phy.ctrl.ready,
 
             self.sata_phy.source.valid,
@@ -174,10 +173,9 @@ class BISTSoCDevel(BISTSoC):
             self.sata_core_transport_tx_fsm_state,
             self.sata_core_command_rx_fsm_state,
             self.sata_core_command_tx_fsm_state,
-        )
+        ]
 
-        self.submodules.logic_analyzer = LiteScopeLogicAnalyzer(debug, 2048)
-        self.logic_analyzer.trigger.add_port(LiteScopeTerm(self.logic_analyzer.dw))
+        self.submodules.analyzer = LiteScopeAnalyzer(debug, 2048)
 
     def do_finalize(self):
         BISTSoC.do_finalize(self)
@@ -191,6 +189,6 @@ class BISTSoCDevel(BISTSoC):
         ]
 
     def do_exit(self, vns):
-        self.logic_analyzer.export(vns, "test/logic_analyzer.csv")
+        self.analyzer.export_csv(vns, "test/analyzer.csv")
 
 default_subtarget = BISTSoC

@@ -91,12 +91,11 @@ set_false_path -from [get_clocks {sata_tx_clk}] -to [get_clocks sys_clk]
 
 class StripingSoCDevel(StripingSoC):
     csr_map = {
-        "logic_analyzer": 17
+        "analyzer": 17
     }
     csr_map.update(StripingSoC.csr_map)
     def __init__(self, platform):
-        from litescope.frontend.logic_analyzer import LiteScopeLogicAnalyzer
-        from litescope.core.port import LiteScopeTerm
+        from litescope import LiteScopeAnalyzer
         StripingSoC.__init__(self, platform)
 
         self.sata_core0_link_tx_fsm_state = Signal(4)
@@ -111,7 +110,7 @@ class StripingSoCDevel(StripingSoC):
         self.sata_core3_link_tx_fsm_state = Signal(4)
         self.sata_core3_link_rx_fsm_state = Signal(4)
 
-        debug = (
+        debug = [
             self.sata_phy0.ctrl.ready,
             self.sata_phy1.ctrl.ready,
             self.sata_phy2.ctrl.ready,
@@ -172,10 +171,9 @@ class StripingSoCDevel(StripingSoC):
             self.sata_phy3.sink.valid,
             self.sata_phy3.sink.data,
             self.sata_phy3.sink.charisk
-        )
+        ]
 
-        self.submodules.logic_analyzer = LiteScopeLogicAnalyzer(debug, 2048)
-        self.logic_analyzer.trigger.add_port(LiteScopeTerm(self.logic_analyzer.dw))
+        self.submodules.analyzer = LiteScopeAnalyzer(debug, 2048)
 
     def do_finalize(self):
         StripingSoC.do_finalize(self)
@@ -191,7 +189,7 @@ class StripingSoCDevel(StripingSoC):
         ]
 
     def do_exit(self, vns):
-        self.logic_analyzer.export(vns, "test/logic_analyzer.csv")
+        self.analyzer.export_csv(vns, "test/analyzer.csv")
 
 
 default_subtarget = StripingSoC

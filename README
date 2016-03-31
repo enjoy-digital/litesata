@@ -13,7 +13,7 @@
 ---------
 LiteSATA provides a small footprint and configurable SATA gen1/2/3 core.
 
-LiteScope is part of LiteX libraries whose aims are to lower entry level of
+LiteSATA is part of LiteX libraries whose aims are to lower entry level of
 complex FPGA cores by providing simple, elegant and efficient implementations
 of components used in today's SoC such as Ethernet, SATA, PCIe, SDRAM Controller...
 
@@ -121,7 +121,7 @@ devel [AT] lists.m-labs.hk.
 [> Tests
 ---------
   A synthetizable BIST is provided and can be controlled with the bist.py script.
-  By using LiteScope and the provided test_logic_analyzer.py example you are able to
+  By using LiteScope and the provided test_analyzer.py example you are able to
   visualize the internal logic of the design and even inject the captured data in
   the HDD model!
 

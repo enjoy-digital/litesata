@@ -1,5 +1,5 @@
 from litex.soc.tools.remote import RemoteClient
-from litescope.software.driver.logic_analyzer import LiteScopeLogicAnalyzerDriver
+from litescope.software.driver.analyzer import LiteScopeAnalyzerDriver
 from litescope.software.dump import *
 
 from test_bist import *
@@ -9,22 +9,21 @@ wb.open()
 
 # # #
 
-logic_analyzer = LiteScopeLogicAnalyzerDriver(wb.regs, "logic_analyzer", debug=True)
+analyzer = LiteScopeLogicAnalyzerDriver(wb.regs, "analyzer", debug=True)
 
 cond = {"bistsocdevel_command_tx_sink_valid" : 1,
         "bistsocdevel_command_tx_sink_ready" : 1}
-logic_analyzer.configure_term(port=0, cond=cond)
-logic_analyzer.configure_sum("term")
-logic_analyzer.run(offset=128, length=1024)
+analyzer.configure_trigger(cond=cond)
+analyzer.run(offset=128, length=1024)
 
 generator = LiteSATABISTGeneratorDriver(wb.regs, wb.constants, "sata_bist")
 generator.run(0, 1, 1, 0, True)
 
-while not logic_analyzer.done():
+while not analyzer.done():
     pass
-logic_analyzer.upload()
+analyzer.upload()
 
-logic_analyzer.save("dump.vcd")
+analyzer.save("dump.vcd")
 
 # analyze link layer
 
@@ -51,10 +50,10 @@ def decode_primitive(dword):
             return k
     return ""
 
-def analyze_link_layer(logic_analyzer, tx_data_name, rx_data_name):
+def analyze_link_layer(analyzer, tx_data_name, rx_data_name):
     r = ""
     dump = Dump()
-    dump.add_from_layout(logic_analyzer.layout, logic_analyzer.data)
+    dump.add_from_layout(analyzer.layout, analyzer.data)
 
     for variable in dump.variables:
         if variable.name == tx_data_name:
@@ -77,7 +76,7 @@ def analyze_link_layer(logic_analyzer, tx_data_name, rx_data_name):
 
 
 f = open("link_layer.txt", "w")
-data = analyze_link_layer(logic_analyzer,
+data = analyze_link_layer(analyzer,
         tx_data_name="bistsocdevel_datapath_sink_sink_payload_data",
         rx_data_name="bistsocdevel_datapath_source_source_payload_data"
    		)
