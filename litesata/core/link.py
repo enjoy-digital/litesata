@@ -35,21 +35,21 @@ class CRCEngine(Module):
 
         # # #
 
-        def _optimize_eq(l):
+        def _optimize_xors(l):
             """
             Replace even numbers of XORs in the equation
             with an equivalent XOR
             """
             d = OrderedDict()
             for e in l:
-                if e in d:
-                    d[e] += 1
-                else:
-                    d[e] = 1
+            	try:
+            		d[e] += 1
+            	except:
+            		d[e] = 1
             r = []
-            for key, value in d.items():
-                if value%2 != 0:
-                    r.append(key)
+            for k, v in d.items():
+                if v%2:
+                    r.append(k)
             return r
 
         new = Signal(32)
@@ -62,7 +62,7 @@ class CRCEngine(Module):
             for j in range(width-1):
                 if (polynom & (1<<(j+1))):
                     curval[j] += feedback
-                curval[j] = _optimize_eq(curval[j])
+                curval[j] = _optimize_xors(curval[j])
             curval.insert(0, feedback)
 
         # implement logic
