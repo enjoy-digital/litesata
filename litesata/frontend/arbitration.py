@@ -4,6 +4,14 @@ from litex.gen.genlib.roundrobin import *
 
 
 class LiteSATAMasterPort:
+    """SATA master port
+
+    A port encapsulates 2 endpoints: A sink and a source.
+    The sink if used to send command to the device an write data.
+    The source is used to receive commands and data from the device.
+
+    A master port drive command_tx and receive on command_rx.
+    """
     def __init__(self, dw):
         self.dw = dw
         self.source = stream.Endpoint(command_tx_description(dw))
@@ -15,6 +23,14 @@ class LiteSATAMasterPort:
 
 
 class LiteSATASlavePort:
+    """SATA slave port
+
+    A port encapsulates 2 endpoints: A sink and a source.
+    The sink if used to send command to the device an write data.
+    The source is used to receive commands and data from the device.
+
+    A master port drive command_rx and receive on command_tx.
+    """
     def __init__(self, dw):
         self.dw = dw
         self.sink = stream.Endpoint(command_tx_description(dw))
@@ -26,12 +42,20 @@ class LiteSATASlavePort:
 
 
 class LiteSATAUserPort(LiteSATASlavePort):
+    """SATA user port
+
+    A user port is simply a slave port exposed to the user.
+    """
     def __init__(self, dw, controller_dw=None):
         self.controller_dw = dw if controller_dw is None else controller_dw
         LiteSATASlavePort.__init__(self, dw)
 
 
 class LiteSATAArbiter(Module):
+    """SATA arbiter
+
+    Round robin arbiter between SATA user ports.
+    """
     def __init__(self, users, master):
         self.rr = RoundRobin(len(users))
         self.submodules += self.rr
@@ -54,6 +78,13 @@ class LiteSATAArbiter(Module):
 
 
 class LiteSATACrossbar(Module):
+    """SATA Crossbar
+
+    This module provides a crossbar between a SATA master port from a controller
+    and user ports requested with the get_port method.
+
+    The controller be a PHY but also a RAID (Striping, Mirroring) module.
+    """
     def __init__(self, controller):
         self.dw = len(controller.sink.data)
         self.users = []
