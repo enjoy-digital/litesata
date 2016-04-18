@@ -4,6 +4,20 @@ from litex.gen.genlib.misc import WaitTimer
 
 
 class LiteSATAPHYDatapathRX(Module):
+    """SATA PHY RX datapath
+
+    Manages the RX datapath between the transceiver and the SATA core.
+
+    This modules receives data/special characters from the transceiver and needs
+    to:
+    - realign received data on 32 bits word boundaries.
+    - change clock domain from "sata_rx" to "sys".
+
+    It handles both 32 bits and 16 bits transceiver data width. The realignment is
+    done by storing two complete words from the transceiver, detecting the byte
+    alignement with the special character and use this information to select the
+    data we will output.
+    """
     def __init__(self, trx_dw):
         self.sink = sink = stream.Endpoint(phy_description(trx_dw))
         self.source = source = stream.Endpoint(phy_description(32))
@@ -67,6 +81,15 @@ class LiteSATAPHYDatapathRX(Module):
 
 
 class LiteSATAPHYDatapathTX(Module):
+    """SATA PHY TX Datapath
+
+    Manages the TX Datapath between SATA core and the transceiver.
+
+    This modules receives datas / special characters from the core and needs
+    to:
+    - convert 32 bits data to the transceiver data width (32 bits or 16 bits)
+    - change clock domain from "sys" to "sata_rx".
+    """
     def __init__(self, trx_dw):
         self.sink = sink = stream.Endpoint(phy_description(32))
         self.source = source = stream.Endpoint(phy_description(trx_dw))
@@ -97,6 +120,12 @@ class LiteSATAPHYDatapathTX(Module):
 
 
 class LiteSATAPHYAlignTimer(Module):
+    """SATA PHY align timer
+
+    This modules detects ALIGN primitives that we receive from the device and
+    decide whether or not our device is returning valid data (Using RX idle
+    signal from the transceiver is not recommended by vendors).
+    """
     def __init__(self):
         self.sink = sink = stream.Endpoint(phy_description(32))
 
@@ -117,6 +146,20 @@ class LiteSATAPHYAlignTimer(Module):
             )
 
 class LiteSATAPHYDatapath(Module):
+    """SATA PHY datapath
+
+    Manages the datapath between the core and the transceiver.
+
+    This modules does mainly data width convertion (core is always 32 bits,
+    transceiver can either be 16 bits or 32 bits depending on the FPGA speedgrade)
+    and the cross domain crossing:
+    - "sys" to "sata_tx" for the TX datapath.
+    - "sata_rx" to "sys" for the RX datapath.
+
+    Misalign and Idle signals are also generated to have a state of the link and
+    are used by the SATA PHY controller
+
+    """
     def __init__(self, trx, ctrl):
         self.sink = sink = stream.Endpoint(phy_description(32))
         self.source = source = stream.Endpoint(phy_description(32))

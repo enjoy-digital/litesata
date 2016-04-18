@@ -4,6 +4,19 @@ from litex.gen.genlib.misc import WaitTimer
 
 
 class LiteSATAPHYCtrl(Module):
+    """SATA PHY Controller
+
+    Manages link reset/initialization and OOB sequence.
+
+    This modules is mainly a state machine that:
+    - Commands and checks transceivers reset/initialization.
+    - Manages the SATA OOB sequence with the device.
+    - Wait for link to be stable before declaring it ready.
+    - Re-initialize the link when invalid data are received.
+
+    The state machine is robust enough to handle hot plug/ power off/on
+    sequences of the device without reseting the FPGA core.
+    """
     def __init__(self, trx, crg, clk_freq):
         self.clk_freq = clk_freq
         self.ready = Signal()
@@ -127,7 +140,7 @@ class LiteSATAPHYCtrl(Module):
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
             If(sink.valid &
-			   (sink.charisk == 0b0001),
+               (sink.charisk == 0b0001),
                If(sink.data[0:8] == 0x7C,
                    non_align_counter_ce.eq(1)
                ).Else(
@@ -161,8 +174,6 @@ class LiteSATAPHYCtrl(Module):
                 NextState("READY")
             )
         )
-
-
 
     def us(self, t):
         clk_period_us = 1000000/self.clk_freq
