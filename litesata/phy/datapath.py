@@ -190,7 +190,7 @@ class LiteSATAPHYDatapath(Module):
             demux.sel.eq(ctrl.ready),
             trx.source.connect(rx.sink),
             rx.source.connect(demux.sink),
-            rx.source.connect(align_timer.sink, leave_out=set(["ready"])),
+            rx.source.connect(align_timer.sink, omit=set(["ready"])),
             demux.source0.connect(ctrl.sink),
             demux.source1.connect(source),
         ]

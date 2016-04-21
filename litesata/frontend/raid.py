@@ -45,7 +45,7 @@ class LiteSATAStripingTX(Module):
 
         # split data and ctrl signals (except valid & ready managed in fsm)
         for i, s in enumerate(sources):
-            self.comb += sink.connect(s, leave_out=set(["valid", "ready", "data"]))
+            self.comb += sink.connect(s, omit=set(["valid", "ready", "data"]))
             if mirroring_mode:
                 self.comb += s.data.eq(sink.data)
             else:
@@ -88,7 +88,7 @@ class LiteSATAStripingRX(Module):
         )
 
         # use first sink for ctrl signals (except for valid, ready & failed)
-        self.comb += sinks[0].connect(source, leave_out=set(["valid", "ready", "failed", "data"]))
+        self.comb += sinks[0].connect(source, omit=set(["valid", "ready", "failed", "data"]))
 		# combine datas
         if mirroring_mode:
             self.comb += source.data.eq(0) # mirroring only used for writes
@@ -192,8 +192,8 @@ class LiteSATAMirroringTX(Module):
             read_status = Status(read)
             self.submodules += read_status
             self.comb += [
-                sink.connect(read, leave_out=set(["valid", "ready"])),
-                sink.connect(write, leave_out=set(["valid", "ready"])),
+                sink.connect(read, omit=set(["valid", "ready"])),
+                sink.connect(write, omit=set(["valid", "ready"])),
                 read.valid.eq(sink.valid & (sink.read | sink.identify) & ~read_stall),
                 write.valid.eq(sink.valid & sink.write),
                 If(sink.read | sink.identify,
@@ -260,8 +260,8 @@ class LiteSATAMirroringRX(Module):
             sink_status = Status(sinks[i])
             self.submodules += sink_status
             self.comb += [
-                sinks[i].connect(reads[i], leave_out=set(["valid", "ready"])),
-                sinks[i].connect(write_striper.sinks[i], leave_out=set(["valid", "ready"])),
+                sinks[i].connect(reads[i], omit=set(["valid", "ready"])),
+                sinks[i].connect(write_striper.sinks[i], omit=set(["valid", "ready"])),
                 reads[i].valid.eq(sinks[i].valid & ctrl.reading),
                 write_striper.sinks[i].valid.eq(sinks[i].valid & ctrl.writing),
                 sinks[i].ready.eq(reads[i].ready | write_striper.sinks[i].ready),
