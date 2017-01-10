@@ -104,13 +104,19 @@ class K7LiteSATAPHYCRG(Module):
         self.comb += startup_timer.wait.eq(~(self.tx_reset | self.rx_reset))
 
         # TX Startup FSM
-        self.tx_ready = Signal()
+        self.tx_ready = Signal() 
+        self.gttxreset = Signal()
+        self.cpllreset = Signal()
+        self.txuserrdy = Signal()
         self.tx_startup_fsm = tx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.submodules += tx_startup_fsm
 
         txphaligndone = Signal(reset=1)
         txphaligndone_rising = Signal()
         self.sync += txphaligndone.eq(gtx.txphaligndone)
+        self.sync += gtx.gttxreset.eq(self.gttxreset)
+        self.sync += gtx.cpllreset.eq(self.cpllreset)
+        self.sync += gtx.txuserrdy.eq(self.txuserrdy)
         self.comb += txphaligndone_rising.eq(gtx.txphaligndone & ~txphaligndone)
 
         # Wait 500ns of AR43482
@@ -121,9 +127,9 @@ class K7LiteSATAPHYCRG(Module):
         )
         # Reset CPLL, MMCM, GTX
         tx_startup_fsm.act("RESET_ALL",
-            gtx.cpllreset.eq(1),
+            self.cpllreset.eq(1),
             mmcm_reset.eq(1),
-            gtx.gttxreset.eq(1),
+            self.gttxreset.eq(1),
             If(~self.cplllock,
                NextState("RELEASE_CPLL")
             )
@@ -131,14 +137,14 @@ class K7LiteSATAPHYCRG(Module):
         # Release CPLL reset and wait for lock
         tx_startup_fsm.act("RELEASE_CPLL",
             mmcm_reset.eq(1),
-            gtx.gttxreset.eq(1),
+            self.gttxreset.eq(1),
             If(self.cplllock,
                 NextState("RELEASE_MMCM")
             )
         )
         # Release MMCM reset and wait for lock
         tx_startup_fsm.act("RELEASE_MMCM",
-            gtx.gttxreset.eq(1),
+            self.gttxreset.eq(1),
             If(mmcm_locked,
                 NextState("RELEASE_GTX")
             )
@@ -147,20 +153,20 @@ class K7LiteSATAPHYCRG(Module):
         # (from UG476, GTX is reseted on falling edge
         # of gttxreset)
         tx_startup_fsm.act("RELEASE_GTX",
-            gtx.txuserrdy.eq(1),
+            self.txuserrdy.eq(1),
             If(gtx.txresetdone,
                 NextState("ALIGN")
             )
         )
         # Start Delay alignment (Pulse)
         tx_startup_fsm.act("ALIGN",
-            gtx.txuserrdy.eq(1),
+            self.txuserrdy.eq(1),
             gtx.txdlyreset.eq(1),
             NextState("WAIT_ALIGN")
         )
         # Wait Delay alignment
         tx_startup_fsm.act("WAIT_ALIGN",
-            gtx.txuserrdy.eq(1),
+            self.txuserrdy.eq(1),
             If(gtx.txdlyresetdone,
                 NextState("WAIT_FIRST_ALIGN_DONE")
             )
@@ -168,19 +174,19 @@ class K7LiteSATAPHYCRG(Module):
         # Wait 2 rising edges of txphaligndone
         # (from UG476 in buffer bypass config)
         tx_startup_fsm.act("WAIT_FIRST_ALIGN_DONE",
-            gtx.txuserrdy.eq(1),
+            self.txuserrdy.eq(1),
             If(txphaligndone_rising,
                NextState("WAIT_SECOND_ALIGN_DONE")
             )
         )
         tx_startup_fsm.act("WAIT_SECOND_ALIGN_DONE",
-            gtx.txuserrdy.eq(1),
+            self.txuserrdy.eq(1),
             If(txphaligndone_rising,
                NextState("READY")
             )
         )
         tx_startup_fsm.act("READY",
-            gtx.txuserrdy.eq(1),
+            self.txuserrdy.eq(1),
             self.tx_ready.eq(1)
         )
 
@@ -193,7 +199,9 @@ class K7LiteSATAPHYCRG(Module):
 
 
         # RX Startup FSM
-        self.rx_ready = Signal()
+        self.rx_ready = Signal() 
+        self.gtrxreset = Signal()
+        self.rxuserrdy = Signal()
         self.rx_startup_fsm = rx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.submodules += rx_startup_fsm
 
@@ -203,6 +211,8 @@ class K7LiteSATAPHYCRG(Module):
         rxphaligndone = Signal(reset=1)
         rxphaligndone_rising = Signal()
         self.sync += rxphaligndone.eq(gtx.rxphaligndone)
+        self.sync += gtx.gtrxreset.eq(self.gtrxreset)
+        self.sync += gtx.rxuserrdy.eq(self.rxuserrdy)
         self.comb += rxphaligndone_rising.eq(gtx.rxphaligndone & ~rxphaligndone)
 
         # Wait 500ns of AR43482
@@ -213,14 +223,14 @@ class K7LiteSATAPHYCRG(Module):
         )
         # Reset GTX
         rx_startup_fsm.act("RESET_GTX",
-            gtx.gtrxreset.eq(1),
-            If(~gtx.gttxreset,
+            self.gtrxreset.eq(1),
+            If(~self.gttxreset,
                NextState("WAIT_CPLL")
             )
         )
         # Wait for CPLL lock
         rx_startup_fsm.act("WAIT_CPLL",
-            gtx.gtrxreset.eq(1),
+            self.gtrxreset.eq(1),
             If(self.cplllock,
                 NextState("RELEASE_GTX")
             )
@@ -229,7 +239,7 @@ class K7LiteSATAPHYCRG(Module):
         # (from UG476, GTX is reseted on falling edge
         # of gttxreset)
         rx_startup_fsm.act("RELEASE_GTX",
-            gtx.rxuserrdy.eq(1),
+            self.rxuserrdy.eq(1),
             cdr_stable_timer.wait.eq(1),
             If(gtx.rxresetdone &  cdr_stable_timer.done,
                 NextState("ALIGN")
@@ -237,13 +247,13 @@ class K7LiteSATAPHYCRG(Module):
         )
         # Start Delay alignment (Pulse)
         rx_startup_fsm.act("ALIGN",
-            gtx.rxuserrdy.eq(1),
+            self.rxuserrdy.eq(1),
             gtx.rxdlyreset.eq(1),
             NextState("WAIT_ALIGN")
         )
         # Wait Delay alignment
         rx_startup_fsm.act("WAIT_ALIGN",
-            gtx.rxuserrdy.eq(1),
+            self.rxuserrdy.eq(1),
             If(gtx.rxdlyresetdone,
                 NextState("WAIT_FIRST_ALIGN_DONE")
             )
@@ -251,19 +261,19 @@ class K7LiteSATAPHYCRG(Module):
         # Wait 2 rising edges of rxphaligndone
         # (from UG476 in buffer bypass config)
         rx_startup_fsm.act("WAIT_FIRST_ALIGN_DONE",
-            gtx.rxuserrdy.eq(1),
+            self.rxuserrdy.eq(1),
             If(rxphaligndone_rising,
                NextState("WAIT_SECOND_ALIGN_DONE")
             )
         )
         rx_startup_fsm.act("WAIT_SECOND_ALIGN_DONE",
-            gtx.rxuserrdy.eq(1),
+            self.rxuserrdy.eq(1),
             If(rxphaligndone_rising,
                NextState("READY")
             )
         )
         rx_startup_fsm.act("READY",
-            gtx.rxuserrdy.eq(1),
+            self.rxuserrdy.eq(1),
             self.rx_ready.eq(1)
         )
 
