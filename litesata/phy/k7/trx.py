@@ -166,6 +166,7 @@ class K7LiteSATAPHYTRX(Module):
     # Internals and clock domain crossing
         # sys_clk --> sata_tx clk
         txuserrdy = Signal()
+        txpd = Signal()
         txelecidle = Signal(reset=1)
         txcominit = Signal()
         txcomwake = Signal()
@@ -176,6 +177,7 @@ class K7LiteSATAPHYTRX(Module):
 
         self.specials += [
             MultiReg(self.txuserrdy, txuserrdy, "sata_tx"),
+            MultiReg(self.txpd, txpd, "sata_tx"),
             MultiReg(self.txelecidle, txelecidle, "sata_tx"),
             MultiReg(self.gttxreset, gttxreset, "sata_tx")
         ]
@@ -575,7 +577,7 @@ class K7LiteSATAPHYTRX(Module):
 
                 # Power-Down Ports
                     i_RXPD=Replicate(self.rxpd, 2),
-                    i_TXPD=Replicate(self.txpd, 2),
+                    i_TXPD=Replicate(txpd, 2),
 
                 # RX 8B/10B Decoder Ports
                     i_SETERRSTATUS=0,
