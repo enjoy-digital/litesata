@@ -1,11 +1,10 @@
 from litesata.common import *
-from litex.soc.interconnect.stream_sim import *
 
 from model.link import LinkTXPacket
 
 
 def print_transport(s, n=None):
-    print_with_prefix(s, "[TRN{}]: ".format("" if n is None else str(n)))
+    print("[TRN{}]: {}".format("" if n is None else str(n), s))
 
 
 def get_field_data(field, packet):

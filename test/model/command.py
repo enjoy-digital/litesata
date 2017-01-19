@@ -1,7 +1,5 @@
 from litesata.common import *
 
-from litex.soc.interconnect.stream_sim import *
-
 from model.transport import FIS_REG_H2D, FIS_DATA
 
 

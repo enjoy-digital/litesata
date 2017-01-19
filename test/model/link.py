@@ -3,11 +3,11 @@ import math
 
 from litesata.common import *
 
-from litex.soc.interconnect.stream_sim import *
+from litex.soc.interconnect.stream_sim import randn
 
 
 def print_link(s, n=None):
-    print_with_prefix(s, "[LNK{}]: ".format("" if n is None else str(n)))
+    print("[LNK{}]: {}".format("" if n is None else str(n), s))
 
 
 def import_scrambler_datas():

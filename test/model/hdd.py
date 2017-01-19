@@ -2,8 +2,6 @@ import math
 
 from litesata.common import *
 
-from litex.soc.interconnect.stream_sim import *
-
 from model.phy import *
 from model.link import *
 from model.transport import *
@@ -11,7 +9,7 @@ from model.command import *
 
 
 def print_hdd(s, n=None):
-    print_with_prefix(s, "[HDD{}]: ".format("" if n is None else str(n)))
+    print( "[HDD{}]: {}".format("" if n is None else str(n), s))
 
 
 class HDDMemRegion:
