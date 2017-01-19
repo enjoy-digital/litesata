@@ -4,7 +4,7 @@
            /____/_/\__/\__/___/_/ |_/_/ /_/ |_|
 
       Copyright 2014-2015 The University of Hong Kong
-            Copyright 2015-2016 / EnjoyDigital
+            Copyright 2015-2017 / EnjoyDigital
 
         A small footprint and configurable SATA core
        developed for HKU by M-Labs Ltd & EnjoyDigital
@@ -59,6 +59,12 @@ Frontend:
   - Synthetizable BIST
   - Striping module to segment data on multiple HDDs and increase write/read speed and capacity. (RAID0 equivalent)
   - Mirroring module for data redundancy and increase read speeds. (RAID1 equivalent)
+
+[> FPGA Proven
+---------------
+LiteSATA is already used in commercial and open-source designs:
+- High End 50Mpixels CMOS Camera using CFAST & SD cards.
+- Low latency database research.
 
 [> Possible improvements
 -------------------------
