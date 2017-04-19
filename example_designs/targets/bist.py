@@ -3,7 +3,7 @@ from litex.gen.fhdl.specials import Keep
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.soc.integration.soc_core import SoCCore
-from litex.soc.cores.uart.bridge import UARTWishboneBridge
+from litex.soc.cores.uart import UARTWishboneBridge
 
 from litesata.common import *
 from litesata.phy import LiteSATAPHY
