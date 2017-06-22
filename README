@@ -10,7 +10,7 @@
        developed for HKU by M-Labs Ltd & EnjoyDigital
 
 [> Intro
----------
+--------
 LiteSATA provides a small footprint and configurable SATA gen1/2/3 core.
 
 LiteSATA is part of LiteX libraries whose aims are to lower entry level of
@@ -32,7 +32,7 @@ LiteSATA can be used as LiteX library or can be integrated with your standard
 design flow by generating the verilog rtl that you will use as a standard core.
 
 [> Features
-------------
+-----------
 PHY:
   - OOB, COMWAKE, COMINIT
   - ALIGN inserter/remover and bytes alignment on K28.5
@@ -61,13 +61,13 @@ Frontend:
   - Mirroring module for data redundancy and increase read speeds. (RAID1 equivalent)
 
 [> FPGA Proven
----------------
+--------------
 LiteSATA is already used in commercial and open-source designs:
 - High End 50Mpixels CMOS Camera using CFAST & SD cards.
 - Low latency database research.
 
 [> Possible improvements
--------------------------
+------------------------
 - add standardized interfaces (AXI, Avalon-ST)
 - add NCQ support
 - add AES hardware encryption
@@ -85,7 +85,7 @@ devel [AT] lists.m-labs.hk.
 
 
 [> Getting started
--------------------
+------------------
 1. Install Python3 and your vendor's software
 
 2. Obtain LiteX and install it:
@@ -110,7 +110,7 @@ devel [AT] lists.m-labs.hk.
    You can customize the core in example_designs/targets/core.py
 
 [> Simulations
----------------
+--------------
   Simulations are available in ./test:
     - crc_tb
     - scrambler_tb
@@ -125,14 +125,14 @@ devel [AT] lists.m-labs.hk.
     make <simulation_name>
 
 [> Tests
----------
+--------
   A synthetizable BIST is provided and can be controlled with the bist.py script.
   By using LiteScope and the provided test_analyzer.py example you are able to
   visualize the internal logic of the design and even inject the captured data in
   the HDD model!
 
 [> License
------------
+----------
 LiteSATA is released under the very permissive two-clause BSD license. Under the
 terms of this license, you are authorized to use LiteSATA for closed-source
 proprietary designs.
@@ -145,7 +145,7 @@ do them if possible:
  - send us the modifications and improvements you have done to LiteSATA.
 
 [> Support and consulting
---------------------------
+-------------------------
 We love open-source hardware and like sharing our designs with others.
 
 LiteSATA is developed and maintained by EnjoyDigital.
@@ -158,4 +158,5 @@ So feel free to contact us, we'd love to work with you! (and eventually shorten
 the list of the possible improvements :)
 
 [> Contact
+----------
 E-mail: florent [AT] enjoy-digital.fr
