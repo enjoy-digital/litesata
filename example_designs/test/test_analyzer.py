@@ -19,10 +19,8 @@ analyzer.run(offset=128, length=1024)
 generator = LiteSATABISTGeneratorDriver(wb.regs, wb.constants, "sata_bist")
 generator.run(0, 1, 1, 0, True)
 
-while not analyzer.done():
-    pass
+analyzer.wait_done()
 analyzer.upload()
-
 analyzer.save("dump.vcd")
 
 # analyze link layer
