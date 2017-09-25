@@ -1,4 +1,3 @@
-from litex.gen.fhdl.specials import Keep
 from litex.gen.genlib.cdc import *
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
@@ -82,10 +81,8 @@ create_clock -name sys_clk -period 5 [get_nets sys_clk]
 """)
 
         for i in range(len(self.sata_phys)):
-            self.specials += [
-                Keep(ClockSignal("sata_rx{}".format(str(i)))),
-                Keep(ClockSignal("sata_tx{}".format(str(i))))
-            ]
+            self.sata_phys[i].crg.cd_sata_rx.clk.attr.add("keep")
+            self.sata_phys[i].crg.cd_sata_tx.clk.attr.add("keep")
             platform.add_platform_command("""
 create_clock -name {sata_rx_clk} -period {sata_clk_period} [get_nets {sata_rx_clk}]
 create_clock -name {sata_tx_clk} -period {sata_clk_period} [get_nets {sata_tx_clk}]

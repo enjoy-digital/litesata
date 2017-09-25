@@ -1,4 +1,3 @@
-from litex.gen.fhdl.specials import Keep
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.build.generic_platform import *
@@ -160,10 +159,8 @@ class Core(Module):
                     identify.source.ready.eq(identify_pads.source_ready)
                 ]
 
-            self.specials += [
-                Keep(ClockSignal("sata_rx")),
-                Keep(ClockSignal("sata_tx"))
-            ]
+            self.sata_phy.crg.cd_sata_rx.clk.attr.add("keep")
+            self.sata_phy.crg.cd_sata_tx.clk.attr.add("keep")
 
         elif design == "striping":
             self.nphys = 4
@@ -192,10 +189,8 @@ class Core(Module):
             self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_striping)
 
             for i in range(len(self.sata_phys)):
-                self.specials += [
-                    Keep(ClockSignal("sata_rx{}".format(str(i)))),
-                    Keep(ClockSignal("sata_tx{}".format(str(i))))
-                ]
+                self.sata_phys[i].crg.cd_sata_rx.clk.attr.add("keep")
+                self.sata_phys[i].crg.cd_sata_tx.clk.attr.add("keep")
 
         else:
             ValueError("Unknown design " + design)

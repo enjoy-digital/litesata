@@ -158,12 +158,8 @@ System Clk: {} MHz (min: {} MHz)
     if actions["build-core"]:
         soc_fragment = soc.get_fragment()
         platform.finalize(soc_fragment)
-        so = {
-            NoRetiming:             XilinxNoRetimingVivado,
-            MultiReg:               XilinxMultiRegVivado,
-            AsyncResetSynchronizer: XilinxAsyncResetSynchronizer
-        }
-        v_output = platform.get_verilog(soc_fragment, name="litesata", special_overrides=so)
+        v_output = platform.get_verilog(soc_fragment, name="litesata",
+            special_overrides=xilinx_special_overrides)
         v_output.write("build/litesata.v")
 
     if actions["build-bitstream"]:
