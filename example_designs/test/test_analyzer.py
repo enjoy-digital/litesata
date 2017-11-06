@@ -9,7 +9,7 @@ wb.open()
 
 # # #
 
-analyzer = LiteScopeLogicAnalyzerDriver(wb.regs, "analyzer", debug=True)
+analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
 
 cond = {"bistsocdevel_command_tx_sink_valid" : 1,
         "bistsocdevel_command_tx_sink_ready" : 1}
