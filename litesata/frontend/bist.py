@@ -27,11 +27,11 @@ class LiteSATABISTGenerator(Module):
         counter_reset = Signal()
         counter_ce = Signal()
         self.sync += \
-        	If(counter_reset,
-        		counter.eq(0)
-        	).Elif(counter_ce,
-        		counter.eq(counter + 1)
-        	)
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + 1)
+            )
 
         scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler

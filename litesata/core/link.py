@@ -42,10 +42,10 @@ class CRCEngine(Module):
             """
             d = OrderedDict()
             for e in l:
-            	try:
-            		d[e] += 1
-            	except:
-            		d[e] = 1
+                try:
+                    d[e] += 1
+                except:
+                    d[e] = 1
             r = []
             for k, v in d.items():
                 if v%2:

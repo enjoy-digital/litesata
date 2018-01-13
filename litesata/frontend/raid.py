@@ -89,7 +89,7 @@ class LiteSATAStripingRX(Module):
 
         # use first sink for ctrl signals (except for valid, ready & failed)
         self.comb += sinks[0].connect(source, omit=set(["valid", "ready", "failed", "data"]))
-		# combine datas
+        # combine datas
         if mirroring_mode:
             self.comb += source.data.eq(0) # mirroring only used for writes
         else:
