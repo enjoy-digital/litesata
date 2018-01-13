@@ -77,7 +77,7 @@ f = open("link_layer.txt", "w")
 data = analyze_link_layer(analyzer,
         tx_data_name="bistsocdevel_datapath_sink_sink_payload_data",
         rx_data_name="bistsocdevel_datapath_source_source_payload_data"
-   		)
+        )
 f.write(data)
 f.close()
 
