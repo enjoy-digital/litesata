@@ -37,8 +37,8 @@ class CRCEngine(Module):
 
         def _optimize_xors(l):
             """
-            Replace even numbers of XORs in the equation
-            with an equivalent XOR
+            remove an even numbers of XORs with the same bit
+            replace an odd number of XORs with a single XOR
             """
             d = OrderedDict()
             for e in l:
@@ -55,7 +55,7 @@ class CRCEngine(Module):
         new = Signal(32)
         self.comb += new.eq(self.last ^ self.data)
 
-        # compute and optimize CRC's LFSR
+        # compute and optimize the parallel implementation of the CRC's LFSR
         curval = [[("new", i)] for i in range(width)]
         for i in range(width):
             feedback = curval.pop()
