@@ -5,19 +5,20 @@ from setuptools import setup
 from setuptools import find_packages
 
 
-if sys.version_info[:3] < (3, 3):
-    raise SystemExit("You need Python 3.3+")
+if sys.version_info[:3] < (3, 5):
+    raise SystemExit("You need Python 3.5+")
 
 
 setup(
     name="litesata",
-    version="1.0",
-    description="small footprint and configurable SATA core",
+    version="0.1",
+    description="Small footprint and configurable SATA core",
     long_description=open("README").read(),
     author="Florent Kermarrec",
     author_email="florent@enjoy-digital.fr",
     url="http://enjoy-digital.fr",
     download_url="https://github.com/enjoy-digital/litesata",
+    test_suite="test",
     license="BSD",
     platforms=["Any"],
     keywords="HDL ASIC FPGA hardware design",
