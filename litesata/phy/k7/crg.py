@@ -1,8 +1,8 @@
 from litesata.common import *
 
-from litex.gen.genlib.cdc import MultiReg
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
-from litex.gen.genlib.misc import WaitTimer
+from migen.genlib.cdc import MultiReg
+from migen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.misc import WaitTimer
 
 
 class K7LiteSATAPHYCRG(Module):
@@ -104,7 +104,7 @@ class K7LiteSATAPHYCRG(Module):
         self.comb += startup_timer.wait.eq(~(self.tx_reset | self.rx_reset))
 
         # TX Startup FSM
-        self.tx_ready = Signal() 
+        self.tx_ready = Signal()
         self.gttxreset = Signal()
         self.cpllreset = Signal()
         self.txuserrdy = Signal()
@@ -199,7 +199,7 @@ class K7LiteSATAPHYCRG(Module):
 
 
         # RX Startup FSM
-        self.rx_ready = Signal() 
+        self.rx_ready = Signal()
         self.gtrxreset = Signal()
         self.rxuserrdy = Signal()
         self.rx_startup_fsm = rx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))

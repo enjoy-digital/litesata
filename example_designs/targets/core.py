@@ -1,4 +1,4 @@
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.build.generic_platform import *
 from litex.build.xilinx.platform import XilinxPlatform

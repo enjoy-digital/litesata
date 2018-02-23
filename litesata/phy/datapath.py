@@ -1,6 +1,6 @@
 from litesata.common import *
 
-from litex.gen.genlib.misc import WaitTimer
+from migen.genlib.misc import WaitTimer
 
 
 class LiteSATAPHYDatapathRX(Module):

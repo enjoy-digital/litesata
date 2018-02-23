@@ -1,5 +1,5 @@
-from litex.gen.genlib.cdc import *
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.cdc import *
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.cores.uart import UARTWishboneBridge

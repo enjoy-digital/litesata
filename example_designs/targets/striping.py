@@ -1,6 +1,6 @@
-from litex.gen.fhdl.specials import Keep
-from litex.gen.genlib.cdc import *
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen.fhdl.specials import Keep
+from migen.genlib.cdc import *
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.cores.uart import UARTWishboneBridge

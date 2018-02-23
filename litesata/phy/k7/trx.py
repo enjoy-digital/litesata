@@ -1,7 +1,7 @@
 from litesata.common import *
 
-from litex.gen.genlib.cdc import PulseSynchronizer, MultiReg
-from litex.gen.genlib.misc import WaitTimer
+from migen.genlib.cdc import PulseSynchronizer, MultiReg
+from migen.genlib.misc import WaitTimer
 
 def ones(width):
     return 2**width-1
