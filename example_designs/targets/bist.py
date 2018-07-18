@@ -19,6 +19,11 @@ class CRG(Module):
         clk200_se = Signal()
         self.specials += Instance("IBUFDS", i_I=clk200.p, i_IB=clk200.n, o_O=clk200_se)
 
+        try:
+            cpu_reset = platform.request("cpu_reset")
+        except:
+            cpu_reset = ~platform.request("cpu_reset_n")
+
         pll_locked = Signal()
         pll_fb = Signal()
         pll_sys = Signal()
@@ -43,7 +48,7 @@ class CRG(Module):
                 p_CLKOUT4_DIVIDE=2, p_CLKOUT4_PHASE=0.0, #o_CLKOUT4=
             ),
             Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
-            AsyncResetSynchronizer(self.cd_sys, ~pll_locked | platform.request("cpu_reset")),
+            AsyncResetSynchronizer(self.cd_sys, ~pll_locked | cpu_reset),
         ]
 
 
