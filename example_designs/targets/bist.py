@@ -92,7 +92,7 @@ class BISTSoC(SoCCore):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="LiteSATA example design",
+            ident="LiteSATA example design", ident_version=True,
             with_timer=False)
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
