@@ -35,19 +35,19 @@ striping_tb: crc scrambler
 mirroring_tb: crc scrambler
 	$(CMD) mirroring_tb.py
 
-example_designs:
-	cd ../example_designs && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
-	cd ../example_designs && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
-	cd ../example_designs && $(PYTHON) make.py -t mirroring -s MirroringSoC -p kc705 -Ob run False build-bitstream
-	cd ../example_designs && $(PYTHON) make.py -t striping -s StripingSoC -p kc705 -Ob run False build-bitstream
-	cd ../example_designs && $(PYTHON) make.py -t striping -s StripingSoCDevel -p kc705 -Ob run False build-bitstream
-	cd ../example_designs && $(PYTHON) make.py -t core -Ot design base build-core
-	cd ../example_designs && $(PYTHON) make.py -t core -Ot design base -Ot ports_dw 64 build-core
-	cd ../example_designs && $(PYTHON) make.py -t core -Ot design bist build-core
-	cd ../example_designs && $(PYTHON) make.py -t core -Ot design striping build-core
+examples:
+	cd ../examples && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
+	cd ../examples && $(PYTHON) make.py -t bist -s BISTSoCDevel -p kc705 -Ob run False build-bitstream
+	cd ../examples && $(PYTHON) make.py -t mirroring -s MirroringSoC -p kc705 -Ob run False build-bitstream
+	cd ../examples && $(PYTHON) make.py -t striping -s StripingSoC -p kc705 -Ob run False build-bitstream
+	cd ../examples && $(PYTHON) make.py -t striping -s StripingSoCDevel -p kc705 -Ob run False build-bitstream
+	cd ../examples && $(PYTHON) make.py -t core -Ot design base build-core
+	cd ../examples && $(PYTHON) make.py -t core -Ot design base -Ot ports_dw 64 build-core
+	cd ../examples && $(PYTHON) make.py -t core -Ot design bist build-core
+	cd ../examples && $(PYTHON) make.py -t core -Ot design striping build-core
 
 
-all: link_crc_tb link_scrambler_tb link_cont_tb link_tb command_tb bist_tb striping_tb mirroring_tb example_designs
+all: link_crc_tb link_scrambler_tb link_cont_tb link_tb command_tb bist_tb striping_tb mirroring_tb examples
 
 clean:
 	rm -f crc scrambler *.vcd
