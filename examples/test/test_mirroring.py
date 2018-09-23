@@ -1,7 +1,7 @@
 import sys
 from test_bist import *
 
-from litex.soc.tools.remote import RemoteClient
+from litex import RemoteClient
 
 identifys = []
 generators = []

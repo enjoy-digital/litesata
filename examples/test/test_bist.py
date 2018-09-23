@@ -2,7 +2,7 @@ import time
 import argparse
 import random as rand
 from collections import OrderedDict
-from litex.soc.tools.remote import RemoteClient
+from litex import RemoteClient
 
 KB = 1024
 MB = 1024*KB
