@@ -26,8 +26,7 @@ class LiteSATAPHY(Module):
 
         # Transceiver / Clocks
         if device[:3] == "xc7": # Kintex 7
-            from litesata.phy.k7.trx import K7LiteSATAPHYTRX
-            from litesata.phy.k7.crg import K7LiteSATAPHYCRG
+            from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHYTRX
             self.submodules.trx = K7LiteSATAPHYTRX(pads, revision, trx_dw)
             self.submodules.crg = K7LiteSATAPHYCRG(clock_pads_or_refclk, pads, self.trx, revision, clk_freq)
         else:
