@@ -4,9 +4,6 @@ from migen.genlib.cdc import PulseSynchronizer, MultiReg
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.misc import WaitTimer
 
-def ones(width):
-    return 2**width-1
-
 
 class _PulseSynchronizer(PulseSynchronizer):
     def __init__(self, i, idomain, o, odomain):
@@ -546,7 +543,7 @@ class K7LiteSATAPHYTRX(Module):
 
              # RX Byte and Word Alignment Attributes
             p_ALIGN_COMMA_DOUBLE= "FALSE",
-            p_ALIGN_COMMA_ENABLE= ones(10),
+            p_ALIGN_COMMA_ENABLE= 0b1111111111,
             p_ALIGN_COMMA_WORD= 1,
             p_ALIGN_MCOMMA_DET= "TRUE",
             p_ALIGN_MCOMMA_VALUE= 0b1010000011,
@@ -572,13 +569,13 @@ class K7LiteSATAPHYTRX(Module):
             p_CLK_COR_PRECEDENCE= "TRUE",
             p_CLK_COR_REPEAT_WAIT= 0,
             p_CLK_COR_SEQ_LEN= 1,
-            p_CLK_COR_SEQ_1_ENABLE= ones(4),
+            p_CLK_COR_SEQ_1_ENABLE= 0b1111,
             p_CLK_COR_SEQ_1_1= 0b0100000000,
             p_CLK_COR_SEQ_1_2= 0b0000000000,
             p_CLK_COR_SEQ_1_3= 0b0000000000,
             p_CLK_COR_SEQ_1_4= 0b0000000000,
             p_CLK_CORRECT_USE= "FALSE",
-            p_CLK_COR_SEQ_2_ENABLE= ones(4),
+            p_CLK_COR_SEQ_2_ENABLE= 0b1111,
             p_CLK_COR_SEQ_2_1= 0b0100000000,
             p_CLK_COR_SEQ_2_2= 0b0000000000,
             p_CLK_COR_SEQ_2_3= 0b0000000000,
@@ -592,15 +589,15 @@ class K7LiteSATAPHYTRX(Module):
             p_CHAN_BOND_SEQ_1_2= 0,
             p_CHAN_BOND_SEQ_1_3= 0,
             p_CHAN_BOND_SEQ_1_4= 0,
-            p_CHAN_BOND_SEQ_1_ENABLE= ones(4),
+            p_CHAN_BOND_SEQ_1_ENABLE= 0b1111,
             p_CHAN_BOND_SEQ_2_1= 0,
             p_CHAN_BOND_SEQ_2_2= 0,
             p_CHAN_BOND_SEQ_2_3= 0,
             p_CHAN_BOND_SEQ_2_4= 0,
-            p_CHAN_BOND_SEQ_2_ENABLE= ones(4),
+            p_CHAN_BOND_SEQ_2_ENABLE= 0b1111,
             p_CHAN_BOND_SEQ_2_USE= "FALSE",
-            p_FTS_DESKEW_SEQ_ENABLE= ones(4),
-            p_FTS_LANE_DESKEW_CFG= ones(4),
+            p_FTS_DESKEW_SEQ_ENABLE= 0b1111,
+            p_FTS_LANE_DESKEW_CFG= 0b1111,
             p_FTS_LANE_DESKEW_EN= "FALSE",
 
             # RX Margin Analysis Attributes
@@ -819,7 +816,7 @@ class K7LiteSATAPHYTRX(Module):
             i_PCSRSVDIN2=0,
             i_PMARSVDIN=0,
             i_PMARSVDIN2=0,
-            i_TSTIN=ones(20),
+            i_TSTIN=0b11111111111111111111,
             #o_TSTOUT=,
 
             # Channel
