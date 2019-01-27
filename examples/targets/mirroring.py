@@ -23,7 +23,7 @@ class MirroringSoC(SoCCore):
         "sata_bist3": 19,
     }
     csr_map.update(SoCCore.csr_map)
-    def __init__(self, platform, revision="sata_gen3", trx_dw=16, nphys=4):
+    def __init__(self, platform, revision="sata_gen3", data_width=16, nphys=4):
         self.nphys = nphys
         clk_freq = 200*1000000
         SoCCore.__init__(self, platform, clk_freq,
@@ -44,7 +44,7 @@ class MirroringSoC(SoCCore):
                                    platform.request("sata", i),
                                    revision,
                                    clk_freq,
-                                   trx_dw)
+                                   data_width)
             sata_phy = ClockDomainsRenamer({"sata_rx": "sata_rx{}".format(str(i)),
                                             "sata_tx": "sata_tx{}".format(str(i))})(sata_phy)
             setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
@@ -93,6 +93,6 @@ set_false_path -from [get_clocks {sata_rx_clk}] -to [get_clocks sys_clk]
 set_false_path -from [get_clocks {sata_tx_clk}] -to [get_clocks sys_clk]
 """.format(sata_rx_clk="sata_rx{}_clk".format(str(i)),
            sata_tx_clk="sata_tx{}_clk".format(str(i)),
-           sata_clk_period="3.3" if trx_dw == 16 else "6.6"))
+           sata_clk_period="3.3" if data_width == 16 else "6.6"))
 
 default_subtarget = MirroringSoC

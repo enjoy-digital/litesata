@@ -19,7 +19,7 @@ class LiteSATAPHY(Module):
     For now, the Kintex7/Zynq(with PL based on K7) PHY is the only one available,
     but the achitecture is modular enough to accept others PHYs.
     """
-    def __init__(self, device, clock_pads_or_refclk, pads, revision, clk_freq, trx_dw=16):
+    def __init__(self, device, clock_pads_or_refclk, pads, revision, clk_freq, data_width=16):
         self.clock_pads = clock_pads_or_refclk
         self.pads = pads
         self.revision = revision
@@ -27,7 +27,7 @@ class LiteSATAPHY(Module):
         # Transceiver / Clocks
         if device[:3] == "xc7": # Kintex 7
             from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHYTRX
-            self.submodules.trx = K7LiteSATAPHYTRX(pads, revision, trx_dw)
+            self.submodules.trx = K7LiteSATAPHYTRX(pads, revision, data_width)
             self.submodules.crg = K7LiteSATAPHYCRG(clock_pads_or_refclk, pads, self.trx, revision, clk_freq)
         else:
             raise NotImplementedError

@@ -55,9 +55,9 @@ class K7LiteSATAPHYCRG(Module):
         #   (sata_gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
         mmcm_mult = 8.0
         mmcm_div_config = {
-            "sata_gen1":   16.0*gtx.dw/16,
-            "sata_gen2":    8.0*gtx.dw/16,
-            "sata_gen3":    4.0*gtx.dw/16
+            "sata_gen1":   16.0*gtx.data_width/16,
+            "sata_gen2":    8.0*gtx.data_width/16,
+            "sata_gen3":    4.0*gtx.data_width/16
         }
         mmcm_div = mmcm_div_config[revision]
         use_mmcm = mmcm_mult/mmcm_div != 1.0
@@ -312,10 +312,10 @@ class K7LiteSATAPHYCRG(Module):
 
 
 class K7LiteSATAPHYTRX(Module):
-    def __init__(self, pads, revision, dw=16):
+    def __init__(self, pads, revision, data_width=16):
         # Common signals
-        self.dw = dw
-        if dw not in [16, 32]:
+        self.data_width = data_width
+        if data_width not in [16, 32]:
             raise ValueError("Unsupported datawidth")
 
         # control
@@ -332,12 +332,12 @@ class K7LiteSATAPHYTRX(Module):
         self.rx_cominit_stb = Signal()  #o
         self.rx_comwake_stb = Signal()  #o
 
-        self.rxdisperr = Signal(dw//8)      #o
-        self.rxnotintable = Signal(dw//8)   #o
+        self.rxdisperr = Signal(data_width//8)      #o
+        self.rxnotintable = Signal(data_width//8)   #o
 
         # datapath
-        self.sink = stream.Endpoint(phy_description(dw))
-        self.source = stream.Endpoint(phy_description(dw))
+        self.sink = stream.Endpoint(phy_description(data_width))
+        self.source = stream.Endpoint(phy_description(data_width))
 
         # K7 specific signals
         # Channel - Ref Clock Ports
@@ -351,11 +351,11 @@ class K7LiteSATAPHYTRX(Module):
         self.rxuserrdy = Signal()
 
         # Receive Ports - 8b10b Decoder
-        self.rxcharisk = Signal(dw//8)
+        self.rxcharisk = Signal(data_width//8)
 
         # Receive Ports - RX Data Path interface
         self.gtrxreset = Signal()
-        self.rxdata = Signal(dw)
+        self.rxdata = Signal(data_width)
         self.rxoutclk = Signal()
         self.rxusrclk = Signal()
         self.rxusrclk2 = Signal()
@@ -374,11 +374,11 @@ class K7LiteSATAPHYTRX(Module):
         self.txuserrdy = Signal()
 
         # Transmit Ports - 8b10b Encoder Control Ports
-        self.txcharisk = Signal(dw//8)
+        self.txcharisk = Signal(data_width//8)
 
         # Transmit Ports - TX Data Path interface
         self.gttxreset = Signal()
-        self.txdata = Signal(dw)
+        self.txdata = Signal(data_width)
         self.txoutclk = Signal()
         self.txusrclk = Signal()
         self.txusrclk2 = Signal()
@@ -509,8 +509,8 @@ class K7LiteSATAPHYTRX(Module):
         rxratedone = Signal()
         rxdlyresetdone = Signal()
         rxphaligndone = Signal()
-        rxdisperr = Signal(dw//8)
-        rxnotintable = Signal(dw//8)
+        rxdisperr = Signal(data_width//8)
+        rxnotintable = Signal(data_width//8)
 
         self.specials += [
             MultiReg(rxresetdone, self.rxresetdone, "sys"),
@@ -564,8 +564,8 @@ class K7LiteSATAPHYTRX(Module):
             p_CBCC_DATA_SOURCE_SEL= "DECODED",
             p_CLK_COR_SEQ_2_USE= "FALSE",
             p_CLK_COR_KEEP_IDLE= "FALSE",
-            p_CLK_COR_MAX_LAT= 9 if dw == 16 else 19,
-            p_CLK_COR_MIN_LAT= 7 if dw == 16 else 15,
+            p_CLK_COR_MAX_LAT= 9 if data_width == 16 else 19,
+            p_CLK_COR_MIN_LAT= 7 if data_width == 16 else 15,
             p_CLK_COR_PRECEDENCE= "TRUE",
             p_CLK_COR_REPEAT_WAIT= 0,
             p_CLK_COR_SEQ_LEN= 1,
@@ -613,7 +613,7 @@ class K7LiteSATAPHYTRX(Module):
             p_ES_VERT_OFFSET= 0,
 
             # FPGA RX Interface Attributes
-            p_RX_DATA_WIDTH= 20 if dw == 16 else 40,
+            p_RX_DATA_WIDTH= 20 if data_width == 16 else 40,
 
             # PMA Attributes
             p_OUTREFCLK_SEL_INV= 0b11,
@@ -721,7 +721,7 @@ class K7LiteSATAPHYTRX(Module):
             p_TX_XCLK_SEL= "TXUSR",
 
             # FPGA TX Interface Attributes
-            p_TX_DATA_WIDTH= 20 if dw ==16 else 40,
+            p_TX_DATA_WIDTH= 20 if data_width ==16 else 40,
 
             # TX Configurable Driver Attributes
             p_TX_DEEMPH0= 0,
@@ -786,10 +786,10 @@ class K7LiteSATAPHYTRX(Module):
             p_TX_CLKMUX_PD= 1,
 
             # FPGA RX Interface Attribute
-            p_RX_INT_DATAWIDTH= 0 if dw == 16 else 1,
+            p_RX_INT_DATAWIDTH= 0 if data_width == 16 else 1,
 
             # FPGA TX Interface Attribute
-            p_TX_INT_DATAWIDTH= 0 if dw == 16 else 1,
+            p_TX_INT_DATAWIDTH= 0 if data_width == 16 else 1,
 
             # TX Configurable Driver Attributes
             p_TX_QPI_STATUS_EN= 0,

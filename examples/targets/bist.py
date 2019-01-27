@@ -86,7 +86,7 @@ class BISTSoC(SoCCore):
         "sata_bist": 16
     }
     csr_map.update(SoCCore.csr_map)
-    def __init__(self, platform, revision="sata_gen3", trx_dw=16):
+    def __init__(self, platform, revision="sata_gen3", data_width=16):
         clk_freq = 200*1000000
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -104,7 +104,7 @@ class BISTSoC(SoCCore):
                                                platform.request("sata", 0),
                                                revision,
                                                clk_freq,
-                                               trx_dw)
+                                               data_width)
         self.submodules.sata_core = LiteSATACore(self.sata_phy)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
@@ -124,7 +124,7 @@ set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_rx_clk]
 set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_tx_clk]
 set_false_path -from [get_clocks sata_rx_clk] -to [get_clocks sys_clk]
 set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
-""".format(sata_clk_period="3.3" if trx_dw == 16 else "6.6"))
+""".format(sata_clk_period="3.3" if data_width == 16 else "6.6"))
 
 class BISTSoCDevel(BISTSoC):
     csr_map = {
