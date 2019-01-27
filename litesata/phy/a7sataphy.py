@@ -22,7 +22,7 @@ class _RisingEdge(Module):
 
 # --------------------------------------------------------------------------------------------------
 
-class K7LiteSATAPHYCRG(Module):
+class A7LiteSATAPHYCRG(Module):
     def __init__(self, clock_pads_or_refclk, pads, gtx, revision, clk_freq):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
@@ -313,7 +313,7 @@ class K7LiteSATAPHYCRG(Module):
 
 # --------------------------------------------------------------------------------------------------
 
-class K7LiteSATAPHY(Module):
+class A7LiteSATAPHY(Module):
     def __init__(self, pads, revision, data_width=16):
         assert data_width in [16, 32]
         # Common signals
@@ -526,16 +526,15 @@ class K7LiteSATAPHY(Module):
                 i_C=self.gtrefclk0,
                 i_D=~oobclk, o_Q=oobclk)
 
-        # GTXE2_CHANNEL Instance -------------------------------------------------------------------
+        # GTPE2_CHANNEL Instance -------------------------------------------------------------------
         tx_buffer_enable = False
         rx_buffer_enable = False
-        gtx_params = dict(
+        gtp_params = dict(
             # Simulation-Only Attributes
-            p_SIM_RECEIVER_DETECT_PASS   ="TRUE",
-            p_SIM_TX_EIDLE_DRIVE_LEVEL   ="X",
-            p_SIM_RESET_SPEEDUP          ="FALSE",
-            p_SIM_CPLLREFCLK_SEL         ="FALSE",
-            p_SIM_VERSION                ="4.0",
+            p_SIM_RECEIVER_DETECT_PASS               ="TRUE",
+            p_SIM_TX_EIDLE_DRIVE_LEVEL               ="X",
+            p_SIM_RESET_SPEEDUP                      ="FALSE",
+            p_SIM_VERSION                            ="2.0",
 
             # RX Byte and Word Alignment Attributes
             p_ALIGN_COMMA_DOUBLE                     ="FALSE",
@@ -613,18 +612,18 @@ class K7LiteSATAPHY(Module):
 
             # PMA Attributes
             p_OUTREFCLK_SEL_INV                      =0b11,
-            p_PMA_RSV                                =0x00018480,
-            p_PMA_RSV2                               =0x2050,
+            p_PMA_RSV                                =0x00000333,
+            p_PMA_RSV2                               =0x00002040,
             p_PMA_RSV3                               =0b00,
-            p_PMA_RSV4                               =0x00000000,
-            p_RX_BIAS_CFG                            =0b000000000100,
+            p_PMA_RSV4                               =0b0000,
+            p_RX_BIAS_CFG                            =0b0000111100110011,
             p_DMONITOR_CFG                           =0x000A00,
-            p_RX_CM_SEL                              =0b11,
-            p_RX_CM_TRIM                             =0b010,
-            p_RX_DEBUG_CFG                           =0b000000000000,
+            p_RX_CM_SEL                              =0b01,
+            p_RX_CM_TRIM                             =0b0000,
+            p_RX_DEBUG_CFG                           =0b00000000000000,
             p_RX_OS_CFG                              =0b0000010000000,
-            p_TERM_RCAL_CFG                          =0b10000,
-            p_TERM_RCAL_OVRD                         =0b0,
+            p_TERM_RCAL_CFG                          =0b100001000010000,
+            p_TERM_RCAL_OVRD                         =0b000,
             p_TST_RSV                                =0x00000000,
             p_RX_CLK25_DIV                           =6,
             p_TX_CLK25_DIV                           =6,
@@ -634,7 +633,7 @@ class K7LiteSATAPHY(Module):
             p_PCS_PCIE_EN                            ="FALSE",
 
             # PCS Attributes
-            p_PCS_RSVD_ATTR                          = 0x108 if revision == "sata_gen1" else 0x100,
+            p_PCS_RSVD_ATTR                          =0x000000000000,
 
             # RX Buffer Attributes
             p_RXBUF_ADDR_MODE                        ="FAST",
@@ -653,7 +652,7 @@ class K7LiteSATAPHY(Module):
             p_RXDLY_CFG                              =0x001F,
             p_RXDLY_LCFG                             =0x030,
             p_RXDLY_TAP_CFG                          =0x0000,
-            p_RXPH_CFG                               =0x000000,
+            p_RXPH_CFG                               =0xC00002,
             p_RXPHDLY_CFG                            =0x084020,
             p_RXPH_MONITOR_SEL                       =0b00000,
             p_RX_XCLK_SEL                            ="RXREC" if rx_buffer_enable else "RXUSR",
@@ -665,7 +664,7 @@ class K7LiteSATAPHY(Module):
             p_RXCDR_FR_RESET_ON_EIDLE                =0b0,
             p_RXCDR_HOLD_DURING_EIDLE                =0b0,
             p_RXCDR_PH_RESET_ON_EIDLE                =0b0,
-            p_RXCDR_LOCK_CFG                         =0b010101,
+            p_RXCDR_LOCK_CFG                         =0b001001,
 
             # RX Initialization and Reset Attributes
             p_RXCDRFREQRESET_TIME                    =0b00001,
@@ -720,8 +719,8 @@ class K7LiteSATAPHY(Module):
             p_TX_DATA_WIDTH                          = 20 if data_width == 16 else 40,
 
             # TX Configurable Driver Attributes
-            p_TX_DEEMPH0                             =0b00000,
-            p_TX_DEEMPH1                             =0b00000,
+            p_TX_DEEMPH0                             =0b000000,
+            p_TX_DEEMPH1                             =0b000000,
             p_TX_EIDLE_ASSERT_DELAY                  =0b110,
             p_TX_EIDLE_DEASSERT_DELAY                =0b100,
             p_TX_LOOPBACK_DRIVE_HIZ                  ="FALSE",
@@ -749,83 +748,103 @@ class K7LiteSATAPHY(Module):
             p_TX_RXDETECT_CFG                        =0x1832,
             p_TX_RXDETECT_REF                        =0b100,
 
-            # CPLL Attributes
-            p_CPLL_CFG                               =0xBC07DC,
-            p_CPLL_FBDIV                             =4,
-            p_CPLL_FBDIV_45                          =5,
-            p_CPLL_INIT_CFG                          =0x00001E,
-            p_CPLL_LOCK_CFG                          =0x01E8,
-            p_CPLL_REFCLK_DIV                        =1,
+            # JTAG Attributes
+            p_ACJTAG_DEBUG_MODE                      =0b0,
+            p_ACJTAG_MODE                            =0b0,
+            p_ACJTAG_RESET                           =0b0,
+
+            # CDR Attributes
+            p_CFOK_CFG                               =0x49000040E80,
+            p_CFOK_CFG2                              =0b0100000,
+            p_CFOK_CFG3                              =0b0100000,
+            p_CFOK_CFG4                              =0b0,
+            p_CFOK_CFG5                              =0x0,
+            p_CFOK_CFG6                              =0b0000,
+            p_RXOSCALRESET_TIME                      =0b00011,
+            p_RXOSCALRESET_TIMEOUT                   =0b00000,
+
+            # PMA Attributes
+            p_CLK_COMMON_SWING                       =0b0,
+            p_RX_CLKMUX_EN                           =0b1,
+            p_TX_CLKMUX_EN                           =0b1,
+            p_ES_CLK_PHASE_SEL                       =0b0,
+            p_USE_PCS_CLK_PHASE_SEL                  =0b0,
+            p_PMA_RSV6                               =0b0,
+            p_PMA_RSV7                               =0b0,
+
+            # TX Configuration Driver Attributes
+            p_TX_PREDRIVER_MODE                      =0b0,
+            p_PMA_RSV5                               =0b0,
+            p_SATA_PLL_CFG                           ="VCO_3000MHZ",
+
+            # RX Fabric Clock Output Control Attributes
             p_RXOUT_DIV                              =rxout_div,
+
+            # TX Fabric Clock Output Control Attributes
             p_TXOUT_DIV                              =txout_div,
-            p_SATA_CPLL_CFG                          ="VCO_3000MHZ",
 
-            # RX Initialization and Reset Attributes
-            p_RXDFELPMRESET_TIME                     =0b0001111,
-
-            # RX Equalizer Attributes
-            p_RXLPM_HF_CFG                           =0b00000011110000,
-            p_RXLPM_LF_CFG                           =0b00000011110000,
-            p_RX_DFE_GAIN_CFG                        =0x020FEA,
-            p_RX_DFE_H2_CFG                          =0b000000000000,
-            p_RX_DFE_H3_CFG                          =0b000001000000,
-            p_RX_DFE_H4_CFG                          =0b00011110000,
-            p_RX_DFE_H5_CFG                          =0b00011100000,
-            p_RX_DFE_KL_CFG                          =0b0000011111110,
-            p_RX_DFE_LPM_CFG                         =0x0954,
-            p_RX_DFE_LPM_HOLD_DURING_EIDLE           =0b1,
-            p_RX_DFE_UT_CFG                          =0b10001111000000000,
-            p_RX_DFE_VP_CFG                          =0b00011111100000011,
-
-            # Power-Down Attributes
-            p_RX_CLKMUX_PD                           =0b1,
-            p_TX_CLKMUX_PD                           =0b1,
-
-            # FPGA RX Interface Attribute
-            p_RX_INT_DATAWIDTH                       =data_width == 32,
-
-            # FPGA TX Interface Attribute
-            p_TX_INT_DATAWIDTH                       =data_width == 32,
-
-            # TX Configurable Driver Attributes
-            p_TX_QPI_STATUS_EN                       =0b0,
+            # RX Phase Interpolator Attributes
+            p_RXPI_CFG0                              =0b000,
+            p_RXPI_CFG1                              =0b1,
+            p_RXPI_CFG2                              =0b1,
 
             # RX Equalizer Attributes
-            p_RX_DFE_KL_CFG2                         =0x3310180c,
-            p_RX_DFE_XYD_CFG                         =0b0000000000000,
+            p_ADAPT_CFG0                             =0x00000,
+            p_RXLPMRESET_TIME                        =0b0001111,
+            p_RXLPM_BIAS_STARTUP_DISABLE             =0b0,
+            p_RXLPM_CFG                              =0b0110,
+            p_RXLPM_CFG1                             =0b0,
+            p_RXLPM_CM_CFG                           =0b0,
+            p_RXLPM_GC_CFG                           =0b111100010,
+            p_RXLPM_GC_CFG2                          =0b001,
+            p_RXLPM_HF_CFG                           =0b00001111110000,
+            p_RXLPM_HF_CFG2                          =0b01010,
+            p_RXLPM_HF_CFG3                          =0b0000,
+            p_RXLPM_HOLD_DURING_EIDLE                =0b0,
+            p_RXLPM_INCM_CFG                         =0b0,
+            p_RXLPM_IPCM_CFG                         =0b1,
+            p_RXLPM_LF_CFG                           =0b000000001111110000,
+            p_RXLPM_LF_CFG2                          =0b01010,
+            p_RXLPM_OSINT_CFG                        =0b100,
 
-            # TX Configurable Driver Attributes
-            p_TX_PREDRIVER_MODE                      =0b0
+            # TX Phase Interpolator PPM Controller Attributes
+            p_TXPI_CFG0                              =0b00,
+            p_TXPI_CFG1                              =0b00,
+            p_TXPI_CFG2                              =0b00,
+            p_TXPI_CFG3                              =0b0,
+            p_TXPI_CFG4                              =0b0,
+            p_TXPI_CFG5                              =0b000,
+            p_TXPI_GREY_SEL                          =0b0,
+            p_TXPI_INVSTROBE_SEL                     =0b0,
+            p_TXPI_PPMCLK_SEL                        ="TXUSRCLK2",
+            p_TXPI_PPM_CFG                           =0x00,
+            p_TXPI_SYNFREQ_PPM                       =0b001,
+
+            # LOOPBACK Attributes
+            p_LOOPBACK_CFG                           =0b0,
+            p_PMA_LOOPBACK_CFG                       =0b0,
+
+            # RX OOB Signalling Attributes
+            p_RXOOB_CLK_CFG                          ="PMA",
+
+            # TX OOB Signalling Attributes
+            p_TXOOB_CFG                              =0b0,
+
+            # RX Buffer Attributes
+            p_RXSYNC_MULTILANE                       =0b0,
+            p_RXSYNC_OVRD                            =0b0,
+            p_RXSYNC_SKIP_DA                         =0b0,
+
+            # TX Buffer Attributes
+            p_TXSYNC_MULTILANE                       =0b0,
+            p_TXSYNC_OVRD                            =0b1 if tx_buffer_enable else 0b0,
+            p_TXSYNC_SKIP_DA                         =0b0
         )
-        gtx_params.update(
+        gtp_params.update(
             # CPLL Ports
-            #o_CPLLFBCLKLOST                  =,
-            o_CPLLLOCK                       =self.cplllock,
-            i_CPLLLOCKDETCLK                 =0,
-            i_CPLLLOCKEN                     =1,
-            i_CPLLPD                         =self.cpllpd,
-            #o_CPLLREFCLKLOST                 =,
-            i_CPLLREFCLKSEL                  =0b001,
-            i_CPLLRESET                      =self.cpllreset,
             i_GTRSVD                         =0b0000000000000000,
             i_PCSRSVDIN                      =0b0000000000000000,
-            i_PCSRSVDIN2                     =0b00000,
-            i_PMARSVDIN                      =0b00000,
-            i_PMARSVDIN2                     =0b00000,
             i_TSTIN                          =0b11111111111111111111,
-            #o_TSTOUT                         =,
-
-            # Channel
-            i_CLKRSVD                         =oobclk,
-
-            # Channel - Clocking Ports
-            i_GTGREFCLK                      =0,
-            i_GTNORTHREFCLK0                 =0,
-            i_GTNORTHREFCLK1                 =0,
-            i_GTREFCLK0                      =self.gtrefclk0,
-            i_GTREFCLK1                      =0,
-            i_GTSOUTHREFCLK0                 =0,
-            i_GTSOUTHREFCLK1                 =0,
 
             # Channel - DRP Ports
             i_DRPADDR                        =0,
@@ -837,17 +856,17 @@ class K7LiteSATAPHY(Module):
             i_DRPWE                          =0,
 
             # Clocking Ports
-            #o_GTREFCLKMONITOR                =,
-            i_QPLLCLK                        =self.qpllclk,
-            i_QPLLREFCLK                     =self.qpllrefclk,
             i_RXSYSCLKSEL                    =0b00,
             i_TXSYSCLKSEL                    =0b00,
 
-            # Digital Monitor Ports
-            #o_DMONITOROUT                    =,
-
             # FPGA TX Interface Datapath Configuration
             i_TX8B10BEN                      =1,
+
+            # GTPE2_CHANNEL Clocking Ports
+            i_PLL0CLK                        =0,
+            i_PLL0REFCLK                     =0,
+            i_PLL1CLK                        =0,
+            i_PLL1REFCLK                     =0,
 
             # Loopback Ports
             i_LOOPBACK                       =0,
@@ -856,6 +875,10 @@ class K7LiteSATAPHY(Module):
             #o_PHYSTATUS                      =,
             i_RXRATE                         =0b000,
             #o_RXVALID                        =,
+
+            # PMA Reserved Ports
+            i_PMARSVDIN3                     =0b0,
+            i_PMARSVDIN4                     =0b0,
 
             # Power-Down Ports
             i_RXPD                           =Replicate(self.rxpd, 2),
@@ -873,6 +896,14 @@ class K7LiteSATAPHY(Module):
             i_EYESCANMODE                    =0,
             i_EYESCANTRIGGER                 =0,
 
+            # Receive Ports
+            i_CLKRSVD0                       =oobclk,
+            i_CLKRSVD1                       =oobclk,
+            i_DMONFIFORESET                  =0,
+            i_DMONITORCLK                    =0,
+            #o_RXPMARESETDONE                 =, FIXME
+            i_SIGVALIDCLK                    =0,
+
             # Receive Ports - CDR Ports
             i_RXCDRFREQRESET                 =0,
             i_RXCDRHOLD                      =self.rx_cdrhold,
@@ -880,6 +911,16 @@ class K7LiteSATAPHY(Module):
             i_RXCDROVRDEN                    =0,
             i_RXCDRRESET                     =0,
             i_RXCDRRESETRSV                  =0,
+            i_RXOSCALRESET                   =0,
+            i_RXOSINTCFG                     =0b0010,
+            #o_RXOSINTDONE                    =,
+            i_RXOSINTHOLD                    =0,
+            i_RXOSINTOVRDEN                  =0,
+            i_RXOSINTPD                      =0,
+            #o_RXOSINTSTARTED                 =,
+            i_RXOSINTSTROBE                  =0,
+            #o_RXOSINTSTROBESTARTED           =,
+            i_RXOSINTTESTOVRDEN              =0,
 
             # Receive Ports - Clock Correction Ports
             #o_RXCLKCORCNT                    =,
@@ -888,11 +929,9 @@ class K7LiteSATAPHY(Module):
             i_RX8B10BEN                      =1,
 
             # Receive Ports - FPGA RX Interface Ports
+            o_RXDATA                         =self.rxdata,
             i_RXUSRCLK                       =self.rxusrclk,
             i_RXUSRCLK2                      =self.rxusrclk2,
-
-            # Receive Ports - FPGA RX interface Ports
-            o_RXDATA                         =self.rxdata,
 
             # Receive Ports - Pattern Checker Ports
             #o_RXPRBSERR                      =,
@@ -901,18 +940,18 @@ class K7LiteSATAPHY(Module):
             # Receive Ports - Pattern Checker ports
             i_RXPRBSCNTRESET                 =0,
 
-            # Receive Ports - RX  Equalizer Ports
-            i_RXDFEXYDEN                     =1,
-            i_RXDFEXYDHOLD                   =0,
-            i_RXDFEXYDOVRDEN                 =0,
-
             # Receive Ports - RX 8B/10B Decoder Ports
+            #o_RXCHARISCOMMA                  =,
+            o_RXCHARISK                      =self.rxcharisk,
             o_RXDISPERR                      =rxdisperr,
             o_RXNOTINTABLE                   =rxnotintable,
 
-            # Receive Ports - RX AFE
-            i_GTXRXP                         =pads.rxp,
-            i_GTXRXN                         =pads.rxn,
+            # Receive Ports - RX AFE Ports
+            i_GTPRXN                         =pads.rxn,
+            i_GTPRXP                         =pads.rxp,
+            i_PMARSVDIN2                     =0b0,
+            #o_PMARSVDOUT0                    =,
+            #o_PMARSVDOUT1                    =,
 
             # Receive Ports - RX Buffer Bypass Ports
             i_RXBUFRESET                     =0,
@@ -932,6 +971,11 @@ class K7LiteSATAPHY(Module):
             i_RXPHOVRDEN                     =0,
             #o_RXPHSLIPMONITOR                =,
             #o_RXSTATUS                       =,
+            i_RXSYNCALLIN                    =rxphaligndone,
+            #o_RXSYNCDONE                     =, FIXME
+            i_RXSYNCIN                       =0,
+            i_RXSYNCMODE                     =0 if rx_buffer_enable else 1,
+            #o_RXSYNCOUT                      =,
 
             # Receive Ports - RX Byte and Word Alignment Ports
             #o_RXBYTEISALIGNED                =,
@@ -940,11 +984,13 @@ class K7LiteSATAPHY(Module):
             i_RXCOMMADETEN                   =1,
             i_RXMCOMMAALIGNEN                =1,
             i_RXPCOMMAALIGNEN                =1,
+            i_RXSLIDE                        =0,
 
             # Receive Ports - RX Channel Bonding Ports
             #o_RXCHANBONDSEQ                  =,
             i_RXCHBONDEN                     =0,
-            i_RXCHBONDLEVEL                  =0b000,
+            i_RXCHBONDI                      =0b0000,
+            i_RXCHBONDLEVEL                  =0,
             i_RXCHBONDMASTER                 =0,
             #o_RXCHBONDO                      =,
             i_RXCHBONDSLAVE                  =0,
@@ -953,39 +999,31 @@ class K7LiteSATAPHY(Module):
             #o_RXCHANISALIGNED                =,
             #o_RXCHANREALIGN                  =,
 
-            # Receive Ports - RX Equailizer Ports
+            # Receive Ports - RX Decision Feedback Equalizer
+            #o_DMONITOROUT                    =,
+            i_RXADAPTSELTEST                 =0,
+            i_RXDFEXYDEN                     =0,
+            i_RXOSINTEN                      =0b1,
+            i_RXOSINTID0                     =0,
+            i_RXOSINTNTRLEN                  =0,
+            #o_RXOSINTSTROBEDONE              =,
+
+            # Receive Ports - RX Driver,OOB signalling,Coupling and Eq.,CDR
+            i_RXLPMLFOVRDEN                  =0,
+            i_RXLPMOSINTNTRLEN               =0,
+
+            # Receive Ports - RX Equalizer Ports
             i_RXLPMHFHOLD                    =0,
             i_RXLPMHFOVRDEN                  =0,
             i_RXLPMLFHOLD                    =0,
-
-            # Receive Ports - RX Equalizer Ports
-            i_RXDFEAGCHOLD                   =0,
-            i_RXDFEAGCOVRDEN                 =0,
-            i_RXDFECM1EN                     =0,
-            i_RXDFELFHOLD                    =0,
-            i_RXDFELFOVRDEN                  =0,
-            i_RXDFELPMRESET                  =0,
-            i_RXDFETAP2HOLD                  =0,
-            i_RXDFETAP2OVRDEN                =0,
-            i_RXDFETAP3HOLD                  =0,
-            i_RXDFETAP3OVRDEN                =0,
-            i_RXDFETAP4HOLD                  =0,
-            i_RXDFETAP4OVRDEN                =0,
-            i_RXDFETAP5HOLD                  =0,
-            i_RXDFETAP5OVRDEN                =0,
-            i_RXDFEUTHOLD                    =0,
-            i_RXDFEUTOVRDEN                  =0,
-            i_RXDFEVPHOLD                    =0,
-            i_RXDFEVPOVRDEN                  =0,
-            i_RXDFEVSEN                      =0,
-            i_RXLPMLFKLOVRDEN                =0,
-            #o_RXMONITOROUT                   =
-            i_RXMONITORSEL                   =0,
             i_RXOSHOLD                       =0,
             i_RXOSOVRDEN                     =0,
 
             # Receive Ports - RX Fabric ClocK Output Control Ports
             #o_RXRATEDONE                     =,
+
+            # Receive Ports - RX Fabric Clock Output Control Ports
+            i_RXRATEMODE                     =0b0,
 
             # Receive Ports - RX Fabric Output Control Ports
             o_RXOUTCLK                       =self.rxoutclk,
@@ -1025,23 +1063,8 @@ class K7LiteSATAPHY(Module):
             # Receive Ports - RX Polarity Control Ports
             i_RXPOLARITY                     =0,
 
-            # Receive Ports - RX gearbox ports
-            i_RXSLIDE                        =0,
-
-            # Receive Ports - RX8B/10B Decoder Ports
-            #o_RXCHARISCOMMA                  =,
-            o_RXCHARISK                      =self.rxcharisk,
-
-            # Receive Ports - Rx Channel Bonding Ports
-            i_RXCHBONDI                      =0b00000,
-
             # Receive Ports -RX Initialization and Reset Ports
             o_RXRESETDONE                    =rxresetdone,
-
-            # Rx AFE Ports
-            i_RXQPIEN                        =0,
-            #o_RXQPISENN                      =,
-            #o_RXQPISENP                      =,
 
             # TX Buffer Bypass Ports
             i_TXPHDLYTSTCLK                  =0,
@@ -1051,9 +1074,9 @@ class K7LiteSATAPHY(Module):
             i_TXPOSTCURSORINV                =0,
             i_TXPRECURSOR                    =0b00000,
             i_TXPRECURSORINV                 =0,
-            i_TXQPIBIASEN                    =0,
-            i_TXQPISTRONGPDOWN               =0,
-            i_TXQPIWEAKPUP                   =0,
+
+            # TX Fabric Clock Output Control Ports
+            i_TXRATEMODE                     =0,
 
             # TX Initialization and Reset Ports
             i_CFGRESET                       =0,
@@ -1061,15 +1084,26 @@ class K7LiteSATAPHY(Module):
             #o_PCSRSVDOUT                     =,
             i_TXUSERRDY                      =txuserrdy,
 
+            # TX Phase Interpolator PPM Controller Ports
+            i_TXPIPPMEN                      =0,
+            i_TXPIPPMOVRDEN                  =0,
+            i_TXPIPPMPD                      =0,
+            i_TXPIPPMSEL                     =1,
+            i_TXPIPPMSTEPSIZE                =0,
+
             # Transceiver Reset Mode Operation
             i_GTRESETSEL                     =0,
             i_RESETOVRD                      =0,
 
-            # Transmit Ports - 8b10b Encoder Control Ports
-            i_TXCHARDISPMODE                 =0,
-            i_TXCHARDISPVAL                  =0,
+            # Transmit Ports
+            #o_TXPMARESETDONE                 =,
+
+            # Transmit Ports - Configurable Driver Ports
+            i_PMARSVDIN0                     =0b0,
+            i_PMARSVDIN1                     =0b0,
 
             # Transmit Ports - FPGA TX Interface Ports
+            i_TXDATA                         =self.txdata,
             i_TXUSRCLK                       =self.txusrclk,
             i_TXUSRCLK2                      =self.txusrclk2,
 
@@ -1081,6 +1115,12 @@ class K7LiteSATAPHY(Module):
 
             # Transmit Ports - Pattern Generator Ports
             i_TXPRBSFORCEERR                 =0,
+
+            # Transmit Ports - TX 8B/10B Encoder Ports
+            i_TX8B10BBYPASS                  =0,
+            i_TXCHARDISPMODE                 =0,
+            i_TXCHARDISPVAL                  =0,
+            i_TXCHARISK                      =self.txcharisk,
 
             # Transmit Ports - TX Buffer Bypass Ports
             i_TXDLYBYPASS                    =0,
@@ -1102,7 +1142,16 @@ class K7LiteSATAPHY(Module):
             # Transmit Ports - TX Buffer Ports
             #o_TXBUFSTATUS                    =,
 
+            # Transmit Ports - TX Buffer and Phase Alignment Ports
+            i_TXSYNCALLIN                    =0,
+            #o_TXSYNCDONE                     =,
+            #i_TXSYNCIN                       =0,
+            #i_TXSYNCMODE                     =0,
+            #o_TXSYNCOUT                      =,
+
             # Transmit Ports - TX Configurable Driver Ports
+            o_GTPTXN                         =pads.txn,
+            o_GTPTXP                         =pads.txp,
             i_TXBUFDIFFCTRL                  =0b100,
             i_TXDEEMPH                       =0,
             i_TXDIFFCTRL                     =0b1000,
@@ -1110,13 +1159,6 @@ class K7LiteSATAPHY(Module):
             i_TXINHIBIT                      =0,
             i_TXMAINCURSOR                   =0b0000000,
             i_TXPISOPD                       =0,
-
-            # Transmit Ports - TX Data Path interface
-            i_TXDATA                         =self.txdata,
-
-            # Transmit Ports - TX Driver and OOB signaling
-            o_GTXTXP                         =pads.txp,
-            o_GTXTXN                         =pads.txn,
 
             # Transmit Ports - TX Fabric Clock Output Control Ports
             o_TXOUTCLK                       =self.txoutclk,
@@ -1126,7 +1168,6 @@ class K7LiteSATAPHY(Module):
             #o_TXRATEDONE                     =,
 
             # Transmit Ports - TX Gearbox Ports
-            i_TXCHARISK                       =self.txcharisk,
             #o_TXGEARBOXREADY                 =,
             i_TXHEADER                       =0b000,
             i_TXSEQUENCE                     =0b0000000,
@@ -1150,14 +1191,7 @@ class K7LiteSATAPHY(Module):
             # Transmit Ports - TX Receiver Detection Ports
             i_TXDETECTRX                     =0,
 
-            # Transmit Ports - TX8b/10b Encoder Ports
-            i_TX8B10BBYPASS                  =0b00000000,
-
             # Transmit Ports - pattern Generator Ports
             i_TXPRBSSEL                      =0b000,
-
-            # Tx Configurable Driver  Ports
-            #o_TXQPISENN                      =,
-            #o_TXQPISENP                      =,
         )
-        self.specials += Instance("GTXE2_CHANNEL", **gtx_params)
+        self.specials += Instance("GTPE2_CHANNEL", **gtp_params)
