@@ -26,17 +26,17 @@ class LiteSATAPHY(Module):
 
         # Transceiver / Clocks
         if device[:3] == "xc7": # Kintex 7
-            from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHYTRX
-            self.submodules.trx = K7LiteSATAPHYTRX(pads, revision, data_width)
-            self.submodules.crg = K7LiteSATAPHYCRG(clock_pads_or_refclk, pads, self.trx, revision, clk_freq)
+            from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHY
+            self.submodules.phy = K7LiteSATAPHY(pads, revision, data_width)
+            self.submodules.crg = K7LiteSATAPHYCRG(clock_pads_or_refclk, pads, self.phy, revision, clk_freq)
         else:
             raise NotImplementedError
 
         # Control
-        self.submodules.ctrl = LiteSATAPHYCtrl(self.trx, self.crg, clk_freq)
+        self.submodules.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq)
 
         # Datapath
-        self.submodules.datapath = LiteSATAPHYDatapath(self.trx, self.ctrl)
+        self.submodules.datapath = LiteSATAPHYDatapath(self.phy, self.ctrl)
         self.comb += [
             self.ctrl.rx_idle.eq(self.datapath.rx_idle),
             self.ctrl.misalign.eq(self.datapath.misalign)

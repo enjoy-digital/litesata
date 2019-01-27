@@ -20,6 +20,7 @@ class _RisingEdge(Module):
         self.sync += i_d.eq(i)
         self.comb += o.eq(i & ~i_d)
 
+# --------------------------------------------------------------------------------------------------
 
 class K7LiteSATAPHYCRG(Module):
     def __init__(self, clock_pads_or_refclk, pads, gtx, revision, clk_freq):
@@ -31,7 +32,7 @@ class K7LiteSATAPHYCRG(Module):
         self.clock_domains.cd_sata_tx = ClockDomain()
         self.clock_domains.cd_sata_rx = ClockDomain()
 
-        # CPLL
+        # CPLL -------------------------------------------------------------------------------------
         #   (sata_gen3) 150MHz / VCO @ 3GHz / Line rate @ 6Gbps
         #   (sata_gen2 & sata_gen1) VCO still @ 3 GHz, Line rate is
         #   decreased with output dividers.
@@ -49,7 +50,7 @@ class K7LiteSATAPHYCRG(Module):
 
         self.comb += gtx.gtrefclk0.eq(self.refclk)
 
-        # TX clocking
+        # TX clocking ------------------------------------------------------------------------------
         #   (sata_gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
         #   (sata_gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
         #   (sata_gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
@@ -99,7 +100,7 @@ class K7LiteSATAPHYCRG(Module):
             gtx.txusrclk2.eq(self.cd_sata_tx.clk)
         ]
 
-        # RX clocking
+        # RX clocking ------------------------------------------------------------------------------
         #   (sata_gen3) sata_rx recovered clk @  @ 300MHz (16-bits) /  150MHz (32-bits) from GTX RXOUTCLK
         #   (sata_gen2) sata_rx recovered clk @  @ 150MHz (16-bits) /   75MHz (32-bits) from GTX RXOUTCLK
         #   (sata_gen1) sata_rx recovered clk @  @ 75MHz  (16-bits) / 37.5MHz (32-bits) from GTX RXOUTCLK
@@ -111,15 +112,15 @@ class K7LiteSATAPHYCRG(Module):
             gtx.rxusrclk2.eq(self.cd_sata_rx.clk)
         ]
 
-        # Configuration Reset
+        # Configuration Reset ----------------------------------------------------------------------
         #   After configuration, GTX's resets have to stay low for at least 500ns
         #   See AR43482
-        startup_cycles = ceil(500*clk_freq/1000000000)
+        startup_cycles = ceil(500e-9*clk_freq)
         startup_timer = WaitTimer(startup_cycles)
         self.submodules += startup_timer
         self.comb += startup_timer.wait.eq(~(self.tx_reset | self.rx_reset))
 
-        # TX Startup FSM
+        # TX Startup FSM ---------------------------------------------------------------------------
         self.tx_ready = Signal()
         self.gttxreset = Signal()
         self.cpllreset = Signal()
@@ -206,7 +207,7 @@ class K7LiteSATAPHYCRG(Module):
             self.tx_ready.eq(1)
         )
 
-        tx_ready_timer = WaitTimer(2*clk_freq//1000)
+        tx_ready_timer = WaitTimer(int(2e-3*clk_freq))
         self.submodules += tx_ready_timer
         self.comb += [
             tx_ready_timer.wait.eq(~self.tx_ready & ~tx_startup_fsm.reset),
@@ -214,7 +215,7 @@ class K7LiteSATAPHYCRG(Module):
         ]
 
 
-        # RX Startup FSM
+        # RX Startup FSM ---------------------------------------------------------------------------
         self.rx_ready = Signal()
         self.gtrxreset = Signal()
         self.rxuserrdy = Signal()
@@ -293,30 +294,30 @@ class K7LiteSATAPHYCRG(Module):
             self.rx_ready.eq(1)
         )
 
-        rx_ready_timer = WaitTimer(2*clk_freq//1000)
+        rx_ready_timer = WaitTimer(int(2e-3*clk_freq))
         self.submodules += rx_ready_timer
         self.comb += [
             rx_ready_timer.wait.eq(~self.rx_ready & ~rx_startup_fsm.reset),
             rx_startup_fsm.reset.eq(self.rx_reset | rx_ready_timer.done),
         ]
 
-        # Ready
+        # Ready ------------------------------------------------------------------------------------
         self.comb += self.ready.eq(self.tx_ready & self.rx_ready)
 
-        # Reset for SATA TX/RX clock domains
+        # Reset for SATA TX/RX clock domains -------------------------------------------------------
         self.specials += [
             AsyncResetSynchronizer(self.cd_sata_tx, ~(gtx.cplllock & mmcm_locked) | self.tx_reset),
             AsyncResetSynchronizer(self.cd_sata_rx, ~gtx.cplllock | self.rx_reset),
             MultiReg(gtx.cplllock, self.cplllock, "sys"),
         ]
 
+# --------------------------------------------------------------------------------------------------
 
-class K7LiteSATAPHYTRX(Module):
+class K7LiteSATAPHY(Module):
     def __init__(self, pads, revision, data_width=16):
+        assert data_width in [16, 32]
         # Common signals
         self.data_width = data_width
-        if data_width not in [16, 32]:
-            raise ValueError("Unsupported datawidth")
 
         # control
         self.tx_idle = Signal()         #i
@@ -427,7 +428,7 @@ class K7LiteSATAPHYTRX(Module):
         }
         rxcdr_cfg = cdr_config[revision]
 
-        # Specific / Generic signals encoding/decoding
+        # Specific / Generic signals encoding/decoding ---------------------------------------------
         self.comb += [
             self.txelecidle.eq(self.tx_idle | self.txpd),
             self.tx_cominit_ack.eq(self.tx_cominit_stb & self.txcomfinish),
@@ -452,7 +453,7 @@ class K7LiteSATAPHYTRX(Module):
             self.sink.ready.eq(1),
         ]
 
-        # Internals and clock domain crossing
+        # Internals and clock domain crossing ------------------------------------------------------
         # sys_clk --> sata_tx clk
         txuserrdy = Signal()
         txpd = Signal()
@@ -522,17 +523,19 @@ class K7LiteSATAPHYTRX(Module):
             MultiReg(rxnotintable, self.rxnotintable, "sys")
         ]
 
-        # QPLL input clock
+        # QPLL input clock -------------------------------------------------------------------------
         self.qpllclk = Signal()
         self.qpllrefclk = Signal()
 
-        # OOB clock (75MHz)
+        # OOB clock (75MHz) ------------------------------------------------------------------------
         oobclk = Signal()
         self.specials += \
-            Instance("FDPE", p_INIT=1, i_CE=1,  i_PRE=0,
-                     i_C=self.gtrefclk0, i_D=~oobclk, o_Q=oobclk)
+            Instance("FDPE",
+                p_INIT=1, i_CE=1, i_PRE=0,
+                i_C=self.gtrefclk0,
+                i_D=~oobclk, o_Q=oobclk)
 
-        # Instance
+        # GTXE2_CHANNEL Instance -------------------------------------------------------------------
         tx_buffer_enable = False
         rx_buffer_enable = False
         gtx_params = dict(
