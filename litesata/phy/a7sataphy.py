@@ -413,9 +413,9 @@ class A7LiteSATAPHY(Module):
         txout_div = div_config[revision]
 
         cdr_config = {
-            "sata_gen1": 0x0380008BFF40100008,
-            "sata_gen2": 0x0388008BFF40200008,
-            "sata_gen3": 0x0380008BFF10200010
+            "sata_gen1": 0x0000047FE106024481010,
+            "sata_gen2": 0x0000047FE206024481010,
+            "sata_gen3": 0x0000087FE206024441010
         }
         rxcdr_cfg = cdr_config[revision]
 
@@ -618,8 +618,8 @@ class A7LiteSATAPHY(Module):
             p_PMA_RSV4                               =0b0000,
             p_RX_BIAS_CFG                            =0b0000111100110011,
             p_DMONITOR_CFG                           =0x000A00,
-            p_RX_CM_SEL                              =0b01,
-            p_RX_CM_TRIM                             =0b0000,
+            p_RX_CM_SEL                              =0b11,
+            p_RX_CM_TRIM                             =0b1010,
             p_RX_DEBUG_CFG                           =0b00000000000000,
             p_RX_OS_CFG                              =0b0000010000000,
             p_TERM_RCAL_CFG                          =0b100001000010000,
@@ -692,8 +692,8 @@ class A7LiteSATAPHY(Module):
             p_SAS_MAX_COM                            =64,
             p_SAS_MIN_COM                            =36,
             p_SATA_BURST_SEQ_LEN                     =0b0101,
-            p_SATA_BURST_VAL                         =0b100,
-            p_SATA_EIDLE_VAL                         =0b100,
+            p_SATA_BURST_VAL                         =0b111,
+            p_SATA_EIDLE_VAL                         =0b111,
             p_SATA_MAX_BURST                         =8,
             p_SATA_MAX_INIT                          =21,
             p_SATA_MAX_WAKE                          =7,
@@ -801,8 +801,8 @@ class A7LiteSATAPHY(Module):
             p_RXLPM_HF_CFG2                          =0b01010,
             p_RXLPM_HF_CFG3                          =0b0000,
             p_RXLPM_HOLD_DURING_EIDLE                =0b0,
-            p_RXLPM_INCM_CFG                         =0b0,
-            p_RXLPM_IPCM_CFG                         =0b1,
+            p_RXLPM_INCM_CFG                         =0b1,
+            p_RXLPM_IPCM_CFG                         =0b0,
             p_RXLPM_LF_CFG                           =0b000000001111110000,
             p_RXLPM_LF_CFG2                          =0b01010,
             p_RXLPM_OSINT_CFG                        =0b100,
