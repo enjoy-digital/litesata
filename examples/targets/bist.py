@@ -15,9 +15,14 @@ class CRG(Module):
     def __init__(self, platform):
         self.clock_domains.cd_sys = ClockDomain()
 
-        clk200 = platform.request("clk200")
-        clk200_se = Signal()
-        self.specials += Instance("IBUFDS", i_I=clk200.p, i_IB=clk200.n, o_O=clk200_se)
+        use_clk100 = False
+        try:
+            clk = platform.request("clk200")
+            clk_se = Signal()
+            self.specials += Instance("IBUFDS", i_I=clk200.p, i_IB=clk200.n, o_O=clk_se)
+        except:
+            use_clk100 = True
+            clk_se = platform.request("clk100")
 
         try:
             cpu_reset = platform.request("cpu_reset")
@@ -32,9 +37,9 @@ class CRG(Module):
                 p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
 
                 # VCO @ 1GHz
-                p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=5.0,
-                p_CLKFBOUT_MULT=5, p_DIVCLK_DIVIDE=1,
-                i_CLKIN1=clk200_se, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
+                p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=10.0 if use_clk100 else 5.0,
+                p_CLKFBOUT_MULT=10 if use_clk100 else 5, p_DIVCLK_DIVIDE=1,
+                i_CLKIN1=clk_se, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
 
                 # 200MHz
                 p_CLKOUT0_DIVIDE=5, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=pll_sys,

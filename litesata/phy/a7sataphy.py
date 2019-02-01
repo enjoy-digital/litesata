@@ -1046,9 +1046,6 @@ class A7LiteSATAPHY(Module):
             i_RXPCSRESET                     =0,
             i_RXPMARESET                     =0,
 
-            # Receive Ports - RX Margin Analysis ports
-            i_RXLPMEN                        =1,
-
             # Receive Ports - RX OOB Signaling ports
             #o_RXCOMSASDET                    =,
             o_RXCOMWAKEDET                   =rxcomwakedet,
