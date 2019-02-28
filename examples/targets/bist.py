@@ -91,7 +91,7 @@ class BISTSoC(SoCCore):
         "sata_bist": 16
     }
     csr_map.update(SoCCore.csr_map)
-    def __init__(self, platform, revision="sata_gen3", data_width=16):
+    def __init__(self, platform, revision="sata_gen1", data_width=16):
         clk_freq = 200*1000000
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
