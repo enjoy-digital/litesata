@@ -13,11 +13,12 @@ analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
 
 cond = {"bistsocdevel_command_tx_sink_valid" : 1,
         "bistsocdevel_command_tx_sink_ready" : 1}
-analyzer.configure_trigger(cond=cond)
-analyzer.run(offset=128, length=1024)
+#analyzer.configure_trigger(cond=cond)
+analyzer.configure_trigger(cond={})
+analyzer.run(offset=32, length=64)
 
-generator = LiteSATABISTGeneratorDriver(wb.regs, wb.constants, "sata_bist")
-generator.run(0, 1, 1, 0, True)
+#generator = LiteSATABISTGeneratorDriver(wb.regs, wb.constants, "sata_bist")
+#generator.run(0, 1, 1, 0, True)
 
 analyzer.wait_done()
 analyzer.upload()

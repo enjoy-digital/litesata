@@ -47,13 +47,23 @@ class StatusLeds(Module):
         else:
             use_cd_num = True
         for i, sata_phy in enumerate(sata_phys):
-            # 1Hz blinking leds (sata_rx and sata_tx clocks)
-            rx_led = platform.request("user_led", 2*i)
-
-            rx_cnt = Signal(32)
-
+            # 1Hz blinking sata_tx led
+            tx_led = platform.request("user_led", 4*i+1)
+            tx_cnt = Signal(32)
             freq = int(frequencies[sata_phy.revision]*1000*1000)
+            tx_sync = getattr(self.sync, "sata_tx{}".format(str(i) if use_cd_num else ""))
+            tx_sync += \
+                If(tx_cnt == 0,
+                    tx_led.eq(~tx_led),
+                    tx_cnt.eq(freq//2)
+                ).Else(
+                    tx_cnt.eq(tx_cnt-1)
+                )
 
+            # 1Hz bliking sata_rx led
+            rx_led = platform.request("user_led", 4*i)
+            rx_cnt = Signal(32)
+            freq = int(frequencies[sata_phy.revision]*1000*1000)
             rx_sync = getattr(self.sync, "sata_rx{}".format(str(i) if use_cd_num else ""))
             rx_sync += \
                 If(rx_cnt == 0,
@@ -63,8 +73,8 @@ class StatusLeds(Module):
                     rx_cnt.eq(rx_cnt-1)
                 )
 
-            # ready leds
-            self.comb += platform.request("user_led", 2*i+1).eq(sata_phy.ctrl.ready)
+            # ready led
+            self.comb += platform.request("user_led", 4*i+2).eq(sata_phy.ctrl.ready)
 
 
 class BISTSoC(SoCCore):
@@ -111,7 +121,7 @@ set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_rx_clk]
 set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_tx_clk]
 set_false_path -from [get_clocks sata_rx_clk] -to [get_clocks sys_clk]
 set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
-""".format(sata_clk_period="3.3" if data_width == 16 else "6.6"))
+""".format(sata_clk_period="13.2" if data_width == 16 else "26.4"))
 
 class BISTSoCDevel(BISTSoC):
     csr_map = {
