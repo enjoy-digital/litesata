@@ -27,7 +27,7 @@ class A7LiteSATAPHYCRG(Module):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
         self.ready = Signal()
-        self.cplllock = Signal()
+        self.qplllock = Signal()
 
         self.clock_domains.cd_sata_tx = ClockDomain()
         self.clock_domains.cd_sata_rx = ClockDomain()
@@ -123,7 +123,7 @@ class A7LiteSATAPHYCRG(Module):
         # TX Startup FSM ---------------------------------------------------------------------------
         self.tx_ready = Signal()
         self.gttxreset = Signal()
-        self.cpllreset = Signal()
+        self.qpllreset = Signal()
         self.txuserrdy = Signal()
         self.tx_startup_fsm = tx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.submodules += tx_startup_fsm
@@ -132,7 +132,7 @@ class A7LiteSATAPHYCRG(Module):
         txphaligndone_rising = Signal()
         self.sync += txphaligndone.eq(gtx.txphaligndone)
         self.sync += gtx.gttxreset.eq(self.gttxreset)
-        self.sync += gtx.cpllreset.eq(self.cpllreset)
+        self.sync += gtx.qpllreset.eq(self.qpllreset)
         self.sync += gtx.txuserrdy.eq(self.txuserrdy)
         self.comb += txphaligndone_rising.eq(gtx.txphaligndone & ~txphaligndone)
 
@@ -144,10 +144,10 @@ class A7LiteSATAPHYCRG(Module):
         )
         # Reset CPLL, MMCM, GTX
         tx_startup_fsm.act("RESET_ALL",
-            self.cpllreset.eq(1),
+            self.qpllreset.eq(1),
             mmcm_reset.eq(1),
             self.gttxreset.eq(1),
-            If(~self.cplllock,
+            If(~self.qplllock,
                NextState("RELEASE_CPLL")
             )
         )
@@ -155,7 +155,7 @@ class A7LiteSATAPHYCRG(Module):
         tx_startup_fsm.act("RELEASE_CPLL",
             mmcm_reset.eq(1),
             self.gttxreset.eq(1),
-            If(self.cplllock,
+            If(self.qplllock,
                 NextState("RELEASE_MMCM")
             )
         )
@@ -248,7 +248,7 @@ class A7LiteSATAPHYCRG(Module):
         # Wait for CPLL lock
         rx_startup_fsm.act("WAIT_CPLL",
             self.gtrxreset.eq(1),
-            If(self.cplllock,
+            If(self.qplllock,
                 NextState("RELEASE_GTX")
             )
         )
@@ -306,10 +306,104 @@ class A7LiteSATAPHYCRG(Module):
 
         # Reset for SATA TX/RX clock domains -------------------------------------------------------
         self.specials += [
-            AsyncResetSynchronizer(self.cd_sata_tx, ~(gtx.cplllock & mmcm_locked) | self.tx_reset),
-            AsyncResetSynchronizer(self.cd_sata_rx, ~gtx.cplllock | self.rx_reset),
-            MultiReg(gtx.cplllock, self.cplllock, "sys"),
+            AsyncResetSynchronizer(self.cd_sata_tx, ~(gtx.qplllock & mmcm_locked) | self.tx_reset),
+            AsyncResetSynchronizer(self.cd_sata_rx, ~gtx.qplllock | self.rx_reset),
+            MultiReg(gtx.qplllock, self.qplllock, "sys"),
         ]
+
+# --------------------------------------------------------------------------------------------------
+
+class GTPQuadPLL(Module):
+    def __init__(self, refclk, refclk_freq, linerate):
+        self.pd = Signal()
+        self.clk = Signal()
+        self.refclk = Signal()
+        self.reset = Signal()
+        self.lock = Signal()
+        self.config = config = self.compute_config(refclk_freq, linerate)
+
+        # # #
+
+        gtpe2_common_params = dict(
+            # common
+            i_GTREFCLK0=refclk,
+            i_BGBYPASSB=1,
+            i_BGMONITORENB=1,
+            i_BGPDB=1,
+            i_BGRCALOVRD=0b11111,
+            i_RCALENB=1,
+
+            # pll0
+            p_PLL0_FBDIV=config["n2"],
+            p_PLL0_FBDIV_45=config["n1"],
+            p_PLL0_REFCLK_DIV=config["m"],
+            i_PLL0LOCKEN=1,
+            i_PLL0PD=self.pd,
+            i_PLL0REFCLKSEL=0b001,
+            i_PLL0RESET=self.reset,
+            o_PLL0LOCK=self.lock,
+            o_PLL0OUTCLK=self.clk,
+            o_PLL0OUTREFCLK=self.refclk,
+
+            # pll1 (not used: power down)
+            i_PLL1PD=1,
+        )
+        self.specials += Instance("GTPE2_COMMON", **gtpe2_common_params)
+
+    @staticmethod
+    def compute_config(refclk_freq, linerate):
+        for n1 in 4, 5:
+            for n2 in 1, 2, 3, 4, 5:
+                for m in 1, 2:
+                    vco_freq = refclk_freq*(n1*n2)/m
+                    if 1.6e9 <= vco_freq <= 3.3e9:
+                        for d in 1, 2, 4, 8, 16:
+                            current_linerate = vco_freq*2/d
+                            if current_linerate == linerate:
+                                return {"n1": n1, "n2": n2, "m": m, "d": d,
+                                        "vco_freq": vco_freq,
+                                        "clkin": refclk_freq,
+                                        "linerate": linerate}
+        msg = "No config found for {:3.2f} MHz refclk / {:3.2f} Gbps linerate."
+        raise ValueError(msg.format(refclk_freq/1e6, linerate/1e9))
+
+    def __repr__(self):
+        config = self.config
+        r = """
+GTPQuadPLL
+==============
+  overview:
+  ---------
+       +--------------------------------------------------+
+       |                                                  |
+       |   +-----+  +---------------------------+ +-----+ |
+       |   |     |  | Phase Frequency Detector  | |     | |
+CLKIN +----> /M  +-->       Charge Pump         +-> VCO +---> CLKOUT
+       |   |     |  |       Loop Filter         | |     | |
+       |   +-----+  +---------------------------+ +--+--+ |
+       |              ^                              |    |
+       |              |    +-------+    +-------+    |    |
+       |              +----+  /N2  <----+  /N1  <----+    |
+       |                   +-------+    +-------+         |
+       +--------------------------------------------------+
+                            +-------+
+                   CLKOUT +->  2/D  +-> LINERATE
+                            +-------+
+  config:
+  -------
+    CLKIN    = {clkin}MHz
+    CLKOUT   = CLKIN x (N1 x N2) / M = {clkin}MHz x ({n1} x {n2}) / {m}
+             = {vco_freq}GHz
+    LINERATE = CLKOUT x 2 / D = {vco_freq}GHz x 2 / {d}
+             = {linerate}GHz
+""".format(clkin=config["clkin"]/1e6,
+           n1=config["n1"],
+           n2=config["n2"],
+           m=config["m"],
+           vco_freq=config["vco_freq"]/1e9,
+           d=config["d"],
+           linerate=config["linerate"]/1e9)
+        return r
 
 # --------------------------------------------------------------------------------------------------
 
@@ -344,9 +438,9 @@ class A7LiteSATAPHY(Module):
         # Channel - Ref Clock Ports
         self.gtrefclk0 = Signal()
 
-        # Channel PLL
-        self.cplllock = Signal()
-        self.cpllreset = Signal()
+        # Quad PLL
+        self.qplllock = Signal()
+        self.qpllreset = Signal()
 
         # Receive Ports
         self.rxuserrdy = Signal()
@@ -399,7 +493,7 @@ class A7LiteSATAPHY(Module):
         self.txcomwake = Signal()
 
         # Power-down signals
-        self.cpllpd = Signal()
+        self.qpllpd = Signal()
         self.rxpd   = Signal()
         self.txpd   = Signal()
 
@@ -514,9 +608,18 @@ class A7LiteSATAPHY(Module):
             MultiReg(rxnotintable, self.rxnotintable, "sys")
         ]
 
-        # QPLL input clock -------------------------------------------------------------------------
-        self.qpllclk = Signal()
-        self.qpllrefclk = Signal()
+        # QPLL ------------------------------------------------------------------------------------
+        linerate_config = {
+            "sata_gen1": 1.5e9,
+            "sata_gen2": 3.0e9,
+            "sata_gen3": 6.0e9
+        }
+        self.submodules.qpll = GTPQuadPLL(self.gtrefclk0, 150e6, linerate_config[revision])
+        self.comb += [
+            self.qpll.pd.eq(self.qpllpd),
+            self.qpll.reset.eq(self.qpllreset),
+            self.qplllock.eq(self.qpll.lock)
+        ]
 
         # OOB clock (75MHz) ------------------------------------------------------------------------
         oobclk = Signal()
@@ -863,8 +966,8 @@ class A7LiteSATAPHY(Module):
             i_TX8B10BEN                      =1,
 
             # GTPE2_CHANNEL Clocking Ports
-            i_PLL0CLK                        =0,
-            i_PLL0REFCLK                     =0,
+            i_PLL0CLK                        =self.qpll.clk,
+            i_PLL0REFCLK                     =self.qpll.refclk,
             i_PLL1CLK                        =0,
             i_PLL1REFCLK                     =0,
 
