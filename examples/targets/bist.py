@@ -73,8 +73,21 @@ class StatusLeds(Module):
                     rx_cnt.eq(rx_cnt-1)
                 )
 
+            # 1Hz blinking sata_refclk led
+            refclk_led = platform.request("user_led", 4*i+2)
+            refclk_cnt = Signal(32)
+            freq = int(frequencies[sata_phy.revision]*1000*1000)
+            refclk_sync = getattr(self.sync, "sata_refclk{}".format(str(i) if use_cd_num else ""))
+            refclk_sync += \
+                If(refclk_cnt == 0,
+                    refclk_led.eq(~refclk_led),
+                    refclk_cnt.eq(freq//2)
+                ).Else(
+                    refclk_cnt.eq(refclk_cnt-1)
+                )
+
             # ready led
-            self.comb += platform.request("user_led", 4*i+2).eq(sata_phy.ctrl.ready)
+            self.comb += platform.request("user_led", 4*i+3).eq(sata_phy.ctrl.ready)
 
 
 class BISTSoC(SoCCore):
@@ -140,6 +153,9 @@ class BISTSoCDevel(BISTSoC):
         self.sata_core_command_tx_fsm_state = Signal(4)
 
         debug = [
+            self.sata_phy.crg.tx_startup_fsm,
+            self.sata_phy.crg.rx_startup_fsm,
+
             self.sata_phy.ctrl.ready,
 
             self.sata_phy.source.valid,

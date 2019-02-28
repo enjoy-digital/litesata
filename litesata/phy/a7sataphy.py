@@ -29,6 +29,7 @@ class A7LiteSATAPHYCRG(Module):
         self.ready = Signal()
         self.qplllock = Signal()
 
+        self.clock_domains.cd_sata_refclk = ClockDomain()
         self.clock_domains.cd_sata_tx = ClockDomain()
         self.clock_domains.cd_sata_rx = ClockDomain()
 
@@ -49,6 +50,7 @@ class A7LiteSATAPHYCRG(Module):
             )
 
         self.comb += gtx.gtrefclk0.eq(self.refclk)
+        self.comb += self.cd_sata_refclk.clk.eq(self.refclk)
 
         # TX clocking ------------------------------------------------------------------------------
         #   (sata_gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
