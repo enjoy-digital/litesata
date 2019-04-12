@@ -160,6 +160,8 @@ System Clk: {} MHz (min: {} MHz)
         platform.finalize(soc_fragment)
         v_output = platform.get_verilog(soc_fragment, name="litesata",
             special_overrides=xilinx_special_overrides)
+        if not os.path.exists("build"):
+            os.makedirs("build")
         v_output.write("build/litesata.v")
 
     if actions["build-bitstream"]:
