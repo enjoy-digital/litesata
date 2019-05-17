@@ -23,7 +23,7 @@ class _RisingEdge(Module):
 # --------------------------------------------------------------------------------------------------
 
 class A7LiteSATAPHYCRG(Module):
-    def __init__(self, clock_pads_or_refclk, pads, gtx, revision, clk_freq):
+    def __init__(self, clock_pads_or_refclk, pads, gtp, revision, clk_freq):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
         self.ready = Signal()
@@ -49,7 +49,7 @@ class A7LiteSATAPHYCRG(Module):
                 o_O=self.refclk
             )
 
-        self.comb += gtx.gtrefclk0.eq(self.refclk)
+        self.comb += gtp.gtrefclk0.eq(self.refclk)
         self.comb += self.cd_sata_refclk.clk.eq(self.refclk)
 
         # TX clocking ------------------------------------------------------------------------------
@@ -58,9 +58,9 @@ class A7LiteSATAPHYCRG(Module):
         #   (sata_gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
         mmcm_mult = 8.0
         mmcm_div_config = {
-            "sata_gen1":   16.0*gtx.data_width/16,
-            "sata_gen2":    8.0*gtx.data_width/16,
-            "sata_gen3":    4.0*gtx.data_width/16
+            "sata_gen1":   16.0*gtp.data_width/16,
+            "sata_gen2":    8.0*gtp.data_width/16,
+            "sata_gen3":    4.0*gtp.data_width/16
         }
         mmcm_div = mmcm_div_config[revision]
         use_mmcm = mmcm_mult/mmcm_div != 1.0
@@ -73,7 +73,7 @@ class A7LiteSATAPHYCRG(Module):
             mmcm_clk_i = Signal()
             mmcm_clk0_o = Signal()
             self.specials += [
-                Instance("BUFG", i_I=gtx.txoutclk, o_O=mmcm_clk_i),
+                Instance("BUFG", i_I=gtp.txoutclk, o_O=mmcm_clk_i),
                 Instance("MMCME2_ADV",
                      p_BANDWIDTH="HIGH", p_COMPENSATION="ZHOLD", i_RST=mmcm_reset, o_LOCKED=mmcm_locked_async,
 
@@ -95,27 +95,27 @@ class A7LiteSATAPHYCRG(Module):
         else:
             mmcm_locked = Signal(reset=1)
             mmcm_reset = Signal()
-            self.specials += Instance("BUFG", i_I=gtx.txoutclk, o_O=self.cd_sata_tx.clk)
+            self.specials += Instance("BUFG", i_I=gtp.txoutclk, o_O=self.cd_sata_tx.clk)
 
         self.comb += [
-            gtx.txusrclk.eq(self.cd_sata_tx.clk),
-            gtx.txusrclk2.eq(self.cd_sata_tx.clk)
+            gtp.txusrclk.eq(self.cd_sata_tx.clk),
+            gtp.txusrclk2.eq(self.cd_sata_tx.clk)
         ]
 
         # RX clocking ------------------------------------------------------------------------------
-        #   (sata_gen3) sata_rx recovered clk @  @ 300MHz (16-bits) /  150MHz (32-bits) from GTX RXOUTCLK
-        #   (sata_gen2) sata_rx recovered clk @  @ 150MHz (16-bits) /   75MHz (32-bits) from GTX RXOUTCLK
-        #   (sata_gen1) sata_rx recovered clk @  @ 75MHz  (16-bits) / 37.5MHz (32-bits) from GTX RXOUTCLK
+        #   (sata_gen3) sata_rx recovered clk @  @ 300MHz (16-bits) /  150MHz (32-bits) from GTP RXOUTCLK
+        #   (sata_gen2) sata_rx recovered clk @  @ 150MHz (16-bits) /   75MHz (32-bits) from GTP RXOUTCLK
+        #   (sata_gen1) sata_rx recovered clk @  @ 75MHz  (16-bits) / 37.5MHz (32-bits) from GTP RXOUTCLK
         self.specials += [
-            Instance("BUFG", i_I=gtx.rxoutclk, o_O=self.cd_sata_rx.clk),
+            Instance("BUFG", i_I=gtp.rxoutclk, o_O=self.cd_sata_rx.clk),
         ]
         self.comb += [
-            gtx.rxusrclk.eq(self.cd_sata_rx.clk),
-            gtx.rxusrclk2.eq(self.cd_sata_rx.clk)
+            gtp.rxusrclk.eq(self.cd_sata_rx.clk),
+            gtp.rxusrclk2.eq(self.cd_sata_rx.clk)
         ]
 
         # Configuration Reset ----------------------------------------------------------------------
-        #   After configuration, GTX's resets have to stay low for at least 500ns
+        #   After configuration, GTP's resets have to stay low for at least 500ns
         #   See AR43482
         startup_cycles = ceil(500e-9*clk_freq)
         startup_timer = WaitTimer(startup_cycles)
@@ -132,11 +132,11 @@ class A7LiteSATAPHYCRG(Module):
 
         txphaligndone = Signal(reset=1)
         txphaligndone_rising = Signal()
-        self.sync += txphaligndone.eq(gtx.txphaligndone)
-        self.sync += gtx.gttxreset.eq(self.gttxreset)
-        self.sync += gtx.qpllreset.eq(self.qpllreset)
-        self.sync += gtx.txuserrdy.eq(self.txuserrdy)
-        self.comb += txphaligndone_rising.eq(gtx.txphaligndone & ~txphaligndone)
+        self.sync += txphaligndone.eq(gtp.txphaligndone)
+        self.sync += gtp.gttxreset.eq(self.gttxreset)
+        self.sync += gtp.qpllreset.eq(self.qpllreset)
+        self.sync += gtp.txuserrdy.eq(self.txuserrdy)
+        self.comb += txphaligndone_rising.eq(gtp.txphaligndone & ~txphaligndone)
 
         # Wait 500ns of AR43482
         tx_startup_fsm.act("IDLE",
@@ -144,7 +144,7 @@ class A7LiteSATAPHYCRG(Module):
                 NextState("RESET_ALL")
             )
         )
-        # Reset CPLL, MMCM, GTX
+        # Reset CPLL, MMCM, GTP
         tx_startup_fsm.act("RESET_ALL",
             self.qpllreset.eq(1),
             mmcm_reset.eq(1),
@@ -165,28 +165,28 @@ class A7LiteSATAPHYCRG(Module):
         tx_startup_fsm.act("RELEASE_MMCM",
             self.gttxreset.eq(1),
             If(mmcm_locked,
-                NextState("RELEASE_GTX")
+                NextState("RELEASE_GTP")
             )
         )
-        # Release GTX reset and wait for GTX resetdone
-        # (from UG476, GTX is reseted on falling edge
+        # Release GTP reset and wait for GTP resetdone
+        # (from UG476, GTP is reseted on falling edge
         # of gttxreset)
-        tx_startup_fsm.act("RELEASE_GTX",
+        tx_startup_fsm.act("RELEASE_GTP",
             self.txuserrdy.eq(1),
-            If(gtx.txresetdone,
+            If(gtp.txresetdone,
                 NextState("ALIGN")
             )
         )
         # Start Delay alignment (Pulse)
         tx_startup_fsm.act("ALIGN",
             self.txuserrdy.eq(1),
-            gtx.txdlyreset.eq(1),
+            gtp.txdlyreset.eq(1),
             NextState("WAIT_ALIGN")
         )
         # Wait Delay alignment
         tx_startup_fsm.act("WAIT_ALIGN",
             self.txuserrdy.eq(1),
-            If(gtx.txdlyresetdone,
+            If(gtp.txdlyresetdone,
                 NextState("WAIT_FIRST_ALIGN_DONE")
             )
         )
@@ -200,9 +200,10 @@ class A7LiteSATAPHYCRG(Module):
         )
         tx_startup_fsm.act("WAIT_SECOND_ALIGN_DONE",
             self.txuserrdy.eq(1),
-            If(txphaligndone_rising,
-               NextState("READY")
-            )
+            NextState("READY") # FIXME
+            #If(txphaligndone_rising,
+            #   NextState("READY")
+            #)
         )
         tx_startup_fsm.act("READY",
             self.txuserrdy.eq(1),
@@ -229,19 +230,19 @@ class A7LiteSATAPHYCRG(Module):
 
         rxphaligndone = Signal(reset=1)
         rxphaligndone_rising = Signal()
-        self.sync += rxphaligndone.eq(gtx.rxphaligndone)
-        self.sync += gtx.gtrxreset.eq(self.gtrxreset)
-        self.sync += gtx.rxuserrdy.eq(self.rxuserrdy)
-        self.comb += rxphaligndone_rising.eq(gtx.rxphaligndone & ~rxphaligndone)
+        self.sync += rxphaligndone.eq(gtp.rxphaligndone)
+        self.sync += gtp.gtrxreset.eq(self.gtrxreset)
+        self.sync += gtp.rxuserrdy.eq(self.rxuserrdy)
+        self.comb += rxphaligndone_rising.eq(gtp.rxphaligndone & ~rxphaligndone)
 
         # Wait 500ns of AR43482
         rx_startup_fsm.act("IDLE",
             If(startup_timer.done,
-                NextState("RESET_GTX")
+                NextState("RESET_GTP")
             )
         )
-        # Reset GTX
-        rx_startup_fsm.act("RESET_GTX",
+        # Reset GTP
+        rx_startup_fsm.act("RESET_GTP",
             self.gtrxreset.eq(1),
             If(~self.gttxreset,
                NextState("WAIT_CPLL")
@@ -251,29 +252,29 @@ class A7LiteSATAPHYCRG(Module):
         rx_startup_fsm.act("WAIT_CPLL",
             self.gtrxreset.eq(1),
             If(self.qplllock,
-                NextState("RELEASE_GTX")
+                NextState("RELEASE_GTP")
             )
         )
-        # Release GTX reset and wait for GTX resetdone
-        # (from UG476, GTX is reseted on falling edge
+        # Release GTP reset and wait for GTP resetdone
+        # (from UG476, GTP is reseted on falling edge
         # of gttxreset)
-        rx_startup_fsm.act("RELEASE_GTX",
+        rx_startup_fsm.act("RELEASE_GTP",
             self.rxuserrdy.eq(1),
             cdr_stable_timer.wait.eq(1),
-            If(gtx.rxresetdone &  cdr_stable_timer.done,
+            If(gtp.rxresetdone &  cdr_stable_timer.done,
                 NextState("ALIGN")
             )
         )
         # Start Delay alignment (Pulse)
         rx_startup_fsm.act("ALIGN",
             self.rxuserrdy.eq(1),
-            gtx.rxdlyreset.eq(1),
+            gtp.rxdlyreset.eq(1),
             NextState("WAIT_ALIGN")
         )
         # Wait Delay alignment
         rx_startup_fsm.act("WAIT_ALIGN",
             self.rxuserrdy.eq(1),
-            If(gtx.rxdlyresetdone,
+            If(gtp.rxdlyresetdone,
                 NextState("WAIT_FIRST_ALIGN_DONE")
             )
         )
@@ -308,9 +309,9 @@ class A7LiteSATAPHYCRG(Module):
 
         # Reset for SATA TX/RX clock domains -------------------------------------------------------
         self.specials += [
-            AsyncResetSynchronizer(self.cd_sata_tx, ~(gtx.qplllock & mmcm_locked) | self.tx_reset),
-            AsyncResetSynchronizer(self.cd_sata_rx, ~gtx.qplllock | self.rx_reset),
-            MultiReg(gtx.qplllock, self.qplllock, "sys"),
+            AsyncResetSynchronizer(self.cd_sata_tx, ~(gtp.qplllock & mmcm_locked) | self.tx_reset),
+            AsyncResetSynchronizer(self.cd_sata_rx, ~gtp.qplllock | self.rx_reset),
+            MultiReg(gtp.qplllock, self.qplllock, "sys"),
         ]
 
 # --------------------------------------------------------------------------------------------------
