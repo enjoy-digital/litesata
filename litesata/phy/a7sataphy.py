@@ -115,19 +115,19 @@ class A7LiteSATAPHYCRG(Module):
         ]
 
         # Configuration Reset ----------------------------------------------------------------------
-        #   After configuration, GTP's resets have to stay low for at least 500ns
-        #   See AR43482
-        startup_cycles = ceil(500e-9*clk_freq)
-        startup_timer = WaitTimer(startup_cycles)
-        self.submodules += startup_timer
-        self.comb += startup_timer.wait.eq(~(self.tx_reset | self.rx_reset))
+
+        # PLL reset must be at least 500us
+        pll_reset_cycles = ceil(500e-9*clk_freq)
+        pll_reset_timer = WaitTimer(pll_reset_cycles)
+        self.submodules += pll_reset_timer
+
 
         # TX Startup FSM ---------------------------------------------------------------------------
         self.tx_ready = Signal()
         self.gttxreset = Signal()
         self.qpllreset = Signal()
         self.txuserrdy = Signal()
-        self.tx_startup_fsm = tx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
+        self.tx_startup_fsm = tx_startup_fsm = ResetInserter()(FSM(reset_state="PLL_RESET"))
         self.submodules += tx_startup_fsm
 
         txphaligndone = Signal(reset=1)
@@ -138,77 +138,75 @@ class A7LiteSATAPHYCRG(Module):
         self.sync += gtp.txuserrdy.eq(self.txuserrdy)
         self.comb += txphaligndone_rising.eq(gtp.txphaligndone & ~txphaligndone)
 
-        # Wait 500ns of AR43482
-        tx_startup_fsm.act("IDLE",
-            If(startup_timer.done,
-                NextState("RESET_ALL")
-            )
-        )
-        # Reset CPLL, MMCM, GTP
-        tx_startup_fsm.act("RESET_ALL",
-            self.qpllreset.eq(1),
+        tx_startup_fsm.act("PLL_RESET",
             mmcm_reset.eq(1),
-            self.gttxreset.eq(1),
-            If(~self.qplllock,
-               NextState("RELEASE_CPLL")
+            self.qpllreset.eq(1),
+            pll_reset_timer.wait.eq(1),
+            If(pll_reset_timer.done,
+                NextState("GTP_RESET")
             )
         )
-        # Release CPLL reset and wait for lock
-        tx_startup_fsm.act("RELEASE_CPLL",
+        tx_startup_fsm.act("GTP_RESET",
             mmcm_reset.eq(1),
             self.gttxreset.eq(1),
             If(self.qplllock,
-                NextState("RELEASE_MMCM")
+                NextState("WAIT_MMCM")
             )
         )
-        # Release MMCM reset and wait for lock
-        tx_startup_fsm.act("RELEASE_MMCM",
+        tx_startup_fsm.act("WAIT_MMCM",
             self.gttxreset.eq(1),
             If(mmcm_locked,
-                NextState("RELEASE_GTP")
+                NextState("WAIT_GTP_RESET_DONE")
             )
         )
         # Release GTP reset and wait for GTP resetdone
-        # (from UG476, GTP is reseted on falling edge
+        # (from UG482, GTP is reset on falling edge
         # of gttxreset)
-        tx_startup_fsm.act("RELEASE_GTP",
+        tx_startup_fsm.act("WAIT_GTP_RESET_DONE",
             self.txuserrdy.eq(1),
             If(gtp.txresetdone,
                 NextState("ALIGN")
             )
         )
-        # Start Delay alignment (Pulse)
+        # Start delay alignment
         tx_startup_fsm.act("ALIGN",
             self.txuserrdy.eq(1),
-            gtp.txdlyreset.eq(1),
-            NextState("WAIT_ALIGN")
+            gtp.txdlysreset.eq(1),
+            If(gtp.txdlysresetdone,
+                NextState("READY"), # FIXME
+                #NextState("PHALIGN")
+            )
         )
-        # Wait Delay alignment
-        tx_startup_fsm.act("WAIT_ALIGN",
+        # Start phase alignment
+        tx_startup_fsm.act("PHALIGN",
             self.txuserrdy.eq(1),
-            If(gtp.txdlyresetdone,
+            gtp.txphinit.eq(1),
+            If(gtp.txphinitdone,
                 NextState("WAIT_FIRST_ALIGN_DONE")
             )
         )
-        # Wait 2 rising edges of txphaligndone
-        # (from UG476 in buffer bypass config)
+        # Wait 2 rising edges of Xxphaligndone
+        # (from UG482 in TX Buffer Bypass in Single-Lane Auto Mode)
         tx_startup_fsm.act("WAIT_FIRST_ALIGN_DONE",
             self.txuserrdy.eq(1),
+            gtp.txphalign.eq(1),
             If(txphaligndone_rising,
-               NextState("WAIT_SECOND_ALIGN_DONE")
+                NextState("WAIT_SECOND_ALIGN_DONE")
             )
         )
         tx_startup_fsm.act("WAIT_SECOND_ALIGN_DONE",
             self.txuserrdy.eq(1),
-            NextState("READY") # FIXME
-            #If(txphaligndone_rising,
-            #   NextState("READY")
-            #)
+            gtp.txdlyen.eq(1),
+            If(txphaligndone_rising,
+                NextState("READY")
+            )
         )
         tx_startup_fsm.act("READY",
             self.txuserrdy.eq(1),
-            self.tx_ready.eq(1)
+            gtp.txdlyen.eq(1),
+            self.tx_ready.eq(1),
         )
+
 
         tx_ready_timer = WaitTimer(int(2e-3*clk_freq))
         self.submodules += tx_ready_timer
@@ -228,36 +226,22 @@ class A7LiteSATAPHYCRG(Module):
         cdr_stable_timer = WaitTimer(1024)
         self.submodules += cdr_stable_timer
 
-        rxphaligndone = Signal(reset=1)
-        rxphaligndone_rising = Signal()
-        self.sync += rxphaligndone.eq(gtp.rxphaligndone)
         self.sync += gtp.gtrxreset.eq(self.gtrxreset)
         self.sync += gtp.rxuserrdy.eq(self.rxuserrdy)
-        self.comb += rxphaligndone_rising.eq(gtp.rxphaligndone & ~rxphaligndone)
-
-        # Wait 500ns of AR43482
         rx_startup_fsm.act("IDLE",
-            If(startup_timer.done,
+            If(self.tx_ready,
                 NextState("RESET_GTP")
             )
         )
+        # FIXME: missing DRP reconfig
         # Reset GTP
         rx_startup_fsm.act("RESET_GTP",
             self.gtrxreset.eq(1),
-            If(~self.gttxreset,
-               NextState("WAIT_CPLL")
-            )
-        )
-        # Wait for CPLL lock
-        rx_startup_fsm.act("WAIT_CPLL",
-            self.gtrxreset.eq(1),
-            If(self.qplllock,
-                NextState("RELEASE_GTP")
-            )
+            NextState("RELEASE_GTP")
         )
         # Release GTP reset and wait for GTP resetdone
-        # (from UG476, GTP is reseted on falling edge
-        # of gttxreset)
+        # (from UG482, GTP is reset on falling edge
+        # of gtrxreset)
         rx_startup_fsm.act("RELEASE_GTP",
             self.rxuserrdy.eq(1),
             cdr_stable_timer.wait.eq(1),
@@ -265,31 +249,19 @@ class A7LiteSATAPHYCRG(Module):
                 NextState("ALIGN")
             )
         )
-        # Start Delay alignment (Pulse)
+        # Start Delay alignment
         rx_startup_fsm.act("ALIGN",
             self.rxuserrdy.eq(1),
             gtp.rxdlyreset.eq(1),
-            NextState("WAIT_ALIGN")
+            If(gtp.rxdlyresetdone,
+                NextState("WAIT_ALIGN_DONE")
+            )
         )
         # Wait Delay alignment
-        rx_startup_fsm.act("WAIT_ALIGN",
+        rx_startup_fsm.act("WAIT_ALIGN_DONE",
             self.rxuserrdy.eq(1),
-            If(gtp.rxdlyresetdone,
-                NextState("WAIT_FIRST_ALIGN_DONE")
-            )
-        )
-        # Wait 2 rising edges of rxphaligndone
-        # (from UG476 in buffer bypass config)
-        rx_startup_fsm.act("WAIT_FIRST_ALIGN_DONE",
-            self.rxuserrdy.eq(1),
-            If(rxphaligndone_rising,
-               NextState("WAIT_SECOND_ALIGN_DONE")
-            )
-        )
-        rx_startup_fsm.act("WAIT_SECOND_ALIGN_DONE",
-            self.rxuserrdy.eq(1),
-            If(rxphaligndone_rising,
-               NextState("READY")
+            If(gtp.rxsyncdone,
+                NextState("READY")
             )
         )
         rx_startup_fsm.act("READY",
@@ -462,7 +434,7 @@ class A7LiteSATAPHY(Module):
         self.rxresetdone = Signal()
         self.rxdlyreset = Signal()
         self.rxdlyresetdone = Signal()
-        self.rxphaligndone = Signal()
+        self.rxsyncdone = Signal()
 
         # Receive Ports - RX Ports for SATA
         self.rxcominitdet = Signal()
@@ -483,9 +455,13 @@ class A7LiteSATAPHY(Module):
 
         # Transmit Ports - TX PLL Ports
         self.txresetdone = Signal()
-        self.txdlyreset = Signal()
-        self.txdlyresetdone = Signal()
+        self.txdlyen = Signal()
+        self.txdlysreset = Signal()
+        self.txdlysresetdone = Signal()
+        self.txphalign = Signal()
         self.txphaligndone = Signal()
+        self.txphinit = Signal()
+        self.txphinitdone = Signal()
 
         # Transmit Ports - TX Ports for PCI Express
         self.txelecidle = Signal(reset=1)
@@ -548,9 +524,13 @@ class A7LiteSATAPHY(Module):
         txelecidle = Signal(reset=1)
         txcominit = Signal()
         txcomwake = Signal()
-        txdlyreset = Signal()
-        txdlyresetdone = Signal()
+        txdlyen = Signal()
+        txdlysreset = Signal()
+        txdlysresetdone = Signal()
+        txphalign = Signal()
         txphaligndone = Signal()
+        txphinit = Signal()
+        txphinitdone = Signal()
         gttxreset = Signal()
 
         self.specials += [
@@ -562,7 +542,10 @@ class A7LiteSATAPHY(Module):
         self.submodules += [
             _PulseSynchronizer(self.txcominit, "sys", txcominit, "sata_tx"),
             _PulseSynchronizer(self.txcomwake, "sys", txcomwake, "sata_tx"),
-            _PulseSynchronizer(self.txdlyreset, "sys", txdlyreset, "sata_tx")
+            _PulseSynchronizer(self.txdlyen, "sys", txdlyen, "sata_tx"),
+            _PulseSynchronizer(self.txdlysreset, "sys", txdlysreset, "sata_tx"),
+            _PulseSynchronizer(self.txphalign, "sys", txphalign, "sata_tx"),
+            _PulseSynchronizer(self.txphinit, "sys", txphinit, "sata_tx"),
         ]
 
         # sata_tx clk --> sys clk
@@ -571,8 +554,9 @@ class A7LiteSATAPHY(Module):
 
         self.specials += [
             MultiReg(txresetdone, self.txresetdone, "sys"),
-            MultiReg(txdlyresetdone, self.txdlyresetdone, "sys"),
-            MultiReg(txphaligndone, self.txphaligndone, "sys")
+            MultiReg(txdlysresetdone, self.txdlysresetdone, "sys"),
+            MultiReg(txphaligndone, self.txphaligndone, "sys"),
+            MultiReg(txphinitdone, self.txphinitdone, "sys")
         ]
 
         self.submodules += [
@@ -597,7 +581,7 @@ class A7LiteSATAPHY(Module):
         rxcomwakedet = Signal()
         rxratedone = Signal()
         rxdlyresetdone = Signal()
-        rxphaligndone = Signal()
+        rxsyncdone = Signal()
         rxdisperr = Signal(data_width//8)
         rxnotintable = Signal(data_width//8)
 
@@ -606,7 +590,7 @@ class A7LiteSATAPHY(Module):
             MultiReg(rxcominitdet, self.rxcominitdet, "sys"),
             MultiReg(rxcomwakedet, self.rxcomwakedet, "sys"),
             MultiReg(rxdlyresetdone, self.rxdlyresetdone, "sys"),
-            MultiReg(rxphaligndone, self.rxphaligndone, "sys"),
+            MultiReg(rxsyncdone, self.rxsyncdone, "sys"),
             MultiReg(rxdisperr, self.rxdisperr, "sys"),
             MultiReg(rxnotintable, self.rxnotintable, "sys")
         ]
@@ -635,6 +619,7 @@ class A7LiteSATAPHY(Module):
         # GTPE2_CHANNEL Instance -------------------------------------------------------------------
         tx_buffer_enable = False
         rx_buffer_enable = False
+        rxphaligndone = Signal()
         gtp_params = dict(
             # Simulation-Only Attributes
             p_SIM_RECEIVER_DETECT_PASS               ="TRUE",
@@ -943,7 +928,7 @@ class A7LiteSATAPHY(Module):
 
             # TX Buffer Attributes
             p_TXSYNC_MULTILANE                       =0b0,
-            p_TXSYNC_OVRD                            =0b1 if tx_buffer_enable else 0b0,
+            p_TXSYNC_OVRD                            =0b1,
             p_TXSYNC_SKIP_DA                         =0b0
         )
         gtp_params.update(
@@ -1078,7 +1063,7 @@ class A7LiteSATAPHY(Module):
             #o_RXPHSLIPMONITOR                =,
             #o_RXSTATUS                       =,
             i_RXSYNCALLIN                    =rxphaligndone,
-            #o_RXSYNCDONE                     =, FIXME
+            o_RXSYNCDONE                     =rxsyncdone,
             i_RXSYNCIN                       =0,
             i_RXSYNCMODE                     =0 if rx_buffer_enable else 1,
             #o_RXSYNCOUT                      =,
@@ -1227,19 +1212,19 @@ class A7LiteSATAPHY(Module):
 
             # Transmit Ports - TX Buffer Bypass Ports
             i_TXDLYBYPASS                    =0,
-            i_TXDLYEN                        =0,
+            i_TXDLYEN                        =txdlyen,
             i_TXDLYHOLD                      =0,
             i_TXDLYOVRDEN                    =0,
-            i_TXDLYSRESET                    =txdlyreset,
-            o_TXDLYSRESETDONE                =txdlyresetdone,
+            i_TXDLYSRESET                    =txdlysreset,
+            o_TXDLYSRESETDONE                =txdlysresetdone,
             i_TXDLYUPDOWN                    =0,
-            i_TXPHALIGN                      =0,
+            i_TXPHALIGN                      =txphalign,
             o_TXPHALIGNDONE                  =txphaligndone,
-            i_TXPHALIGNEN                    =0,
+            i_TXPHALIGNEN                    =1,
             i_TXPHDLYPD                      =0,
             i_TXPHDLYRESET                   =0,
-            i_TXPHINIT                       =0,
-            #o_TXPHINITDONE                   =,
+            i_TXPHINIT                       =txphinit,
+            o_TXPHINITDONE                   =txphinitdone,
             i_TXPHOVRDEN                     =0,
 
             # Transmit Ports - TX Buffer Ports
