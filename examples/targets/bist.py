@@ -15,9 +15,14 @@ class CRG(Module):
     def __init__(self, platform):
         self.clock_domains.cd_sys = ClockDomain()
 
-        clk_se = platform.request("clk100")
+        clk200 = platform.request("clk200")
+        clk200_se = Signal()
+        self.specials += Instance("IBUFDS", i_I=clk200.p, i_IB=clk200.n, o_O=clk200_se)
 
-        cpu_reset = ~platform.request("cpu_reset") # FIXME
+        try:
+            cpu_reset = platform.request("cpu_reset")
+        except:
+            cpu_reset = ~platform.request("cpu_reset_n")
 
         pll_locked = Signal()
         pll_fb = Signal()
@@ -27,12 +32,20 @@ class CRG(Module):
                 p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
 
                 # VCO @ 1GHz
-                p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=10.0,
-                p_CLKFBOUT_MULT=10, p_DIVCLK_DIVIDE=1,
-                i_CLKIN1=clk_se, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
+                p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=5.0,
+                p_CLKFBOUT_MULT=5, p_DIVCLK_DIVIDE=1,
+                i_CLKIN1=clk200_se, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
 
-                # 100MHz
-                p_CLKOUT0_DIVIDE=10, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=pll_sys
+                # 200MHz
+                p_CLKOUT0_DIVIDE=5, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=pll_sys,
+
+                p_CLKOUT1_DIVIDE=2, p_CLKOUT1_PHASE=0.0, #o_CLKOUT1=,
+
+                p_CLKOUT2_DIVIDE=2, p_CLKOUT2_PHASE=0.0, #o_CLKOUT2=,
+
+                p_CLKOUT3_DIVIDE=2, p_CLKOUT3_PHASE=0.0, #o_CLKOUT3=,
+
+                p_CLKOUT4_DIVIDE=2, p_CLKOUT4_PHASE=0.0, #o_CLKOUT4=
             ),
             Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
             AsyncResetSynchronizer(self.cd_sys, ~pll_locked | cpu_reset),
@@ -47,23 +60,13 @@ class StatusLeds(Module):
         else:
             use_cd_num = True
         for i, sata_phy in enumerate(sata_phys):
-            # 1Hz blinking sata_tx led
-            tx_led = platform.request("user_led", 4*i+1)
-            tx_cnt = Signal(32)
-            freq = int(frequencies[sata_phy.revision]*1000*1000)
-            tx_sync = getattr(self.sync, "sata_tx{}".format(str(i) if use_cd_num else ""))
-            tx_sync += \
-                If(tx_cnt == 0,
-                    tx_led.eq(~tx_led),
-                    tx_cnt.eq(freq//2)
-                ).Else(
-                    tx_cnt.eq(tx_cnt-1)
-                )
+            # 1Hz blinking leds (sata_rx and sata_tx clocks)
+            rx_led = platform.request("user_led", 2*i)
 
-            # 1Hz bliking sata_rx led
-            rx_led = platform.request("user_led", 4*i)
             rx_cnt = Signal(32)
+
             freq = int(frequencies[sata_phy.revision]*1000*1000)
+
             rx_sync = getattr(self.sync, "sata_rx{}".format(str(i) if use_cd_num else ""))
             rx_sync += \
                 If(rx_cnt == 0,
@@ -73,21 +76,8 @@ class StatusLeds(Module):
                     rx_cnt.eq(rx_cnt-1)
                 )
 
-            # 1Hz blinking sata_refclk led
-            refclk_led = platform.request("user_led", 4*i+2)
-            refclk_cnt = Signal(32)
-            freq = int(frequencies[sata_phy.revision]*1000*1000)
-            refclk_sync = getattr(self.sync, "sata_refclk{}".format(str(i) if use_cd_num else ""))
-            refclk_sync += \
-                If(refclk_cnt == 0,
-                    refclk_led.eq(~refclk_led),
-                    refclk_cnt.eq(freq//2)
-                ).Else(
-                    refclk_cnt.eq(refclk_cnt-1)
-                )
-
-            # ready led
-            self.comb += platform.request("user_led", 4*i+3).eq(sata_phy.ctrl.ready)
+            # ready leds
+            self.comb += platform.request("user_led", 2*i+1).eq(sata_phy.ctrl.ready)
 
 
 class BISTSoC(SoCCore):
@@ -96,16 +86,16 @@ class BISTSoC(SoCCore):
         "sata_bist": 16
     }
     csr_map.update(SoCCore.csr_map)
-    def __init__(self, platform, revision="sata_gen1", data_width=16):
-        sys_clk_freq = int(100e6)
-        SoCCore.__init__(self, platform, sys_clk_freq,
+    def __init__(self, platform, revision="sata_gen3", trx_dw=16):
+        clk_freq = 200*1000000
+        SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
             ident="LiteSATA example design", ident_version=True,
             with_timer=False)
-        self.add_cpu(UARTWishboneBridge(platform.request("serial"), sys_clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu.wishbone)
+        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))
+        self.add_wb_master(self.cpu_or_bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
         # SATA PHY/Core/Frontend
@@ -113,8 +103,8 @@ class BISTSoC(SoCCore):
                                                platform.request("sata_clocks"),
                                                platform.request("sata", 0),
                                                revision,
-                                               sys_clk_freq,
-                                               data_width)
+                                               clk_freq,
+                                               trx_dw)
         self.submodules.sata_core = LiteSATACore(self.sata_phy)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
@@ -125,7 +115,7 @@ class BISTSoC(SoCCore):
         self.sata_phy.crg.cd_sata_rx.clk.attr.add("keep")
         self.sata_phy.crg.cd_sata_tx.clk.attr.add("keep")
         platform.add_platform_command("""
-create_clock -name sys_clk -period 10 [get_nets sys_clk]
+create_clock -name sys_clk -period 5 [get_nets sys_clk]
 
 create_clock -name sata_rx_clk -period {sata_clk_period} [get_nets sata_rx_clk]
 create_clock -name sata_tx_clk -period {sata_clk_period} [get_nets sata_tx_clk]
@@ -134,7 +124,7 @@ set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_rx_clk]
 set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_tx_clk]
 set_false_path -from [get_clocks sata_rx_clk] -to [get_clocks sys_clk]
 set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
-""".format(sata_clk_period="13.2" if data_width == 16 else "26.4"))
+""".format(sata_clk_period="3.3" if trx_dw == 16 else "6.6"))
 
 class BISTSoCDevel(BISTSoC):
     csr_map = {
@@ -153,9 +143,6 @@ class BISTSoCDevel(BISTSoC):
         self.sata_core_command_tx_fsm_state = Signal(4)
 
         debug = [
-            self.sata_phy.crg.tx_startup_fsm,
-            self.sata_phy.crg.rx_startup_fsm,
-
             self.sata_phy.ctrl.ready,
 
             self.sata_phy.source.valid,
@@ -206,4 +193,4 @@ class BISTSoCDevel(BISTSoC):
     def do_exit(self, vns):
         self.analyzer.export_csv(vns, "test/analyzer.csv")
 
-default_subtarget = BISTSoCDevel
+default_subtarget = BISTSoC
