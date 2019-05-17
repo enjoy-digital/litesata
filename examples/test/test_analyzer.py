@@ -1,5 +1,5 @@
 from litex import RemoteClient
-from litescope.software.driver.analyzer import LiteScopeAnalyzerDriver
+from litescope import LiteScopeAnalyzerDriver
 from litescope.software.dump import *
 
 from test_bist import *
@@ -23,6 +23,8 @@ analyzer.run(offset=32, length=64)
 analyzer.wait_done()
 analyzer.upload()
 analyzer.save("dump.vcd")
+
+exit()
 
 # analyze link layer
 
