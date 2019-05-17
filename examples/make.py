@@ -59,7 +59,6 @@ all             clean, build-csr-csv, build-bitstream, load-bitstream.
     parser.add_argument("-s", "--sub-target", default="", help="variant of the Core type to build")
     parser.add_argument("-p", "--platform", default=None, help="platform to build for")
     parser.add_argument("-Ot", "--target-option", default=[], nargs=2, action="append", help="set target-specific option")
-    parser.add_argument("-Op", "--platform-option", default=[("programmer", "vivado")], nargs=2, action="append", help="set platform-specific option")
     parser.add_argument("-Ob", "--build-option", default=[], nargs=2, action="append", help="set build option")
     parser.add_argument("--csr_csv", default="./test/csr.csv", help="CSV file to save the CSR map into")
 
@@ -86,8 +85,7 @@ if __name__ == "__main__":
         else:
             platform_name = args.platform
         platform_module = _import("platforms", platform_name)
-        platform_kwargs = dict((k, autotype(v)) for k, v in args.platform_option)
-        platform = platform_module.Platform(**platform_kwargs)
+        platform = platform_module.Platform()
 
     build_name = top_class.__name__.lower() + "_" + platform_name
     top_kwargs = dict((k, autotype(v)) for k, v in args.target_option)

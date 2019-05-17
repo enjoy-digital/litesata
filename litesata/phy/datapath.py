@@ -18,18 +18,18 @@ class LiteSATAPHYDatapathRX(Module):
     alignement with the special character and use this information to select the
     data we will output.
     """
-    def __init__(self, trx_dw):
-        self.sink = sink = stream.Endpoint(phy_description(trx_dw))
+    def __init__(self, data_width):
+        self.sink = sink = stream.Endpoint(phy_description(data_width))
         self.source = source = stream.Endpoint(phy_description(32))
 
         # # #
 
         # width convertion and byte alignment
-        byte_alignment = Signal(trx_dw//8)
-        last_charisk = Signal(trx_dw//8)
-        last_data = Signal(trx_dw)
-        sr_charisk = Signal(2*trx_dw//8)
-        sr_data = Signal(2*trx_dw)
+        byte_alignment = Signal(data_width//8)
+        last_charisk = Signal(data_width//8)
+        last_data = Signal(data_width)
+        sr_charisk = Signal(2*data_width//8)
+        sr_data = Signal(2*data_width)
         self.sync.sata_rx += \
             If(sink.valid & sink.ready,
                 If(sink.charisk != 0,
@@ -44,24 +44,24 @@ class LiteSATAPHYDatapathRX(Module):
         ]
 
 
-        converter = StrideConverter(phy_description(trx_dw),
+        converter = StrideConverter(phy_description(data_width),
                                     phy_description(32),
                                     reverse=False)
-        if trx_dw == 16: # when trx_dw=32, converter is just direct connection
+        if data_width == 16: # when data_width=32, converter is just direct connection
             converter = ResetInserter()(ClockDomainsRenamer("sata_rx")(converter))
         self.submodules += converter
         cases = {}
-        for i in range(trx_dw//8):
+        for i in range(data_width//8):
             cases[2**i] = [
-                converter.sink.charisk.eq(sr_charisk[trx_dw//8-i:2*trx_dw//8-i]),
-                converter.sink.data.eq(sr_data[trx_dw-8*i:2*trx_dw-8*i])
+                converter.sink.charisk.eq(sr_charisk[data_width//8-i:2*data_width//8-i]),
+                converter.sink.data.eq(sr_data[data_width-8*i:2*data_width-8*i])
             ]
         self.comb += [
             converter.sink.valid.eq(sink.valid),
             Case(byte_alignment, cases),
             sink.ready.eq(converter.sink.ready)
         ]
-        if trx_dw == 16:
+        if data_width == 16:
             self.comb += converter.reset.eq(converter.source.charisk[2:] != 0)
 
         # clock domain crossing
@@ -90,9 +90,9 @@ class LiteSATAPHYDatapathTX(Module):
     - convert 32 bits data to the transceiver data width (32 bits or 16 bits)
     - change clock domain from "sys" to "sata_rx".
     """
-    def __init__(self, trx_dw):
+    def __init__(self, data_width):
         self.sink = sink = stream.Endpoint(phy_description(32))
-        self.source = source = stream.Endpoint(phy_description(trx_dw))
+        self.source = source = stream.Endpoint(phy_description(data_width))
 
         # # #
 
@@ -109,7 +109,7 @@ class LiteSATAPHYDatapathTX(Module):
 
         # width convertion
         converter = StrideConverter(phy_description(32),
-                                    phy_description(trx_dw),
+                                    phy_description(data_width),
                                     reverse=False)
         converter = ClockDomainsRenamer("sata_tx")(converter)
         self.submodules += converter
@@ -171,7 +171,7 @@ class LiteSATAPHYDatapath(Module):
 
         # TX path
         mux = Multiplexer(phy_description(32), 2)
-        tx = LiteSATAPHYDatapathTX(trx.dw)
+        tx = LiteSATAPHYDatapathTX(trx.data_width)
         self.submodules += mux, tx
         self.comb += [
             mux.sel.eq(ctrl.ready),
@@ -182,7 +182,7 @@ class LiteSATAPHYDatapath(Module):
         ]
 
         # RX path
-        rx = LiteSATAPHYDatapathRX(trx.dw)
+        rx = LiteSATAPHYDatapathRX(trx.data_width)
         demux = Demultiplexer(phy_description(32), 2)
         align_timer = LiteSATAPHYAlignTimer()
         self.submodules += rx, demux, align_timer
