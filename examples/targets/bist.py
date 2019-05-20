@@ -135,60 +135,24 @@ class BISTSoCDevel(BISTSoC):
         from litescope import LiteScopeAnalyzer
         BISTSoC.__init__(self, platform)
 
-        self.sata_core_link_rx_fsm_state = Signal(4)
-        self.sata_core_link_tx_fsm_state = Signal(4)
-        self.sata_core_transport_rx_fsm_state = Signal(4)
-        self.sata_core_transport_tx_fsm_state = Signal(4)
-        self.sata_core_command_rx_fsm_state = Signal(4)
-        self.sata_core_command_tx_fsm_state = Signal(4)
-
-        debug = [
+        # analyzer signals
+        analyzer_signals = [
             self.sata_phy.ctrl.ready,
+            self.sata_phy.source,
+            self.sata_phy.sink,
 
-            self.sata_phy.source.valid,
-            self.sata_phy.source.data,
-            self.sata_phy.source.charisk,
+            self.sata_core.command.sink,
+            self.sata_core.command.source,
 
-            self.sata_phy.sink.valid,
-            self.sata_phy.sink.data,
-            self.sata_phy.sink.charisk,
-
-            self.sata_core.command.sink.valid,
-            self.sata_core.command.sink.last,
-            self.sata_core.command.sink.ready,
-            self.sata_core.command.sink.write,
-            self.sata_core.command.sink.read,
-            self.sata_core.command.sink.identify,
-
-            self.sata_core.command.source.valid,
-            self.sata_core.command.source.last,
-            self.sata_core.command.source.ready,
-            self.sata_core.command.source.write,
-            self.sata_core.command.source.read,
-            self.sata_core.command.source.identify,
-            self.sata_core.command.source.failed,
-            self.sata_core.command.source.data,
-
-            self.sata_core_link_rx_fsm_state,
-            self.sata_core_link_tx_fsm_state,
-            self.sata_core_transport_rx_fsm_state,
-            self.sata_core_transport_tx_fsm_state,
-            self.sata_core_command_rx_fsm_state,
-            self.sata_core_command_tx_fsm_state,
+            self.sata_core.link.rx.fsm,
+            self.sata_core.link.tx.fsm,
+            self.sata_core.transport.rx.fsm,
+            self.sata_core.transport.tx.fsm,
+            self.sata_core.command.rx.fsm,
+            self.sata_core.command.tx.fsm,
         ]
 
-        self.submodules.analyzer = LiteScopeAnalyzer(debug, 2048)
-
-    def do_finalize(self):
-        BISTSoC.do_finalize(self)
-        self.comb += [
-            self.sata_core_link_rx_fsm_state.eq(self.sata_core.link.rx.fsm.state),
-            self.sata_core_link_tx_fsm_state.eq(self.sata_core.link.tx.fsm.state),
-            self.sata_core_transport_rx_fsm_state.eq(self.sata_core.transport.rx.fsm.state),
-            self.sata_core_transport_tx_fsm_state.eq(self.sata_core.transport.tx.fsm.state),
-            self.sata_core_command_rx_fsm_state.eq(self.sata_core.command.rx.fsm.state),
-            self.sata_core_command_tx_fsm_state.eq(self.sata_core.command.tx.fsm.state)
-        ]
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 2048)
 
     def do_exit(self, vns):
         self.analyzer.export_csv(vns, "test/analyzer.csv")
