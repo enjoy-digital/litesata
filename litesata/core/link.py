@@ -1,3 +1,7 @@
+# This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
+# License: BSD
+
 from collections import OrderedDict
 from functools import reduce
 from operator import xor

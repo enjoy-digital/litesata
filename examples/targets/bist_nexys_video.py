@@ -1,3 +1,6 @@
+# This file is Copyright (c) 2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# License: BSD
+
 from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 

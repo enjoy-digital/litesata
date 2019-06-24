@@ -1,3 +1,6 @@
+# This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
+# License: BSD
+
 from functools import reduce
 from operator import and_, or_
 

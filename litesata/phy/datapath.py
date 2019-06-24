@@ -1,3 +1,6 @@
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# License: BSD
+
 from litesata.common import *
 
 from migen.genlib.misc import WaitTimer

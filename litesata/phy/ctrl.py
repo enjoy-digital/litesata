@@ -1,3 +1,8 @@
+# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2017 Johan Klockars <Johan.Klockars@hasselblad.com>
+# This file is Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
+# License: BSD
+
 from litesata.common import *
 
 from migen.genlib.misc import WaitTimer
