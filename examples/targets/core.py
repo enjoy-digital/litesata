@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from migen.genlib.resetsync import AsyncResetSynchronizer
@@ -15,6 +15,7 @@ from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.raid import LiteSATAStriping
 from litesata.frontend.bist import LiteSATABIST
 
+# IOs ----------------------------------------------------------------------------------------------
 
 _io = [
     ("sys_clock", 0, Pins(1)),
@@ -89,11 +90,14 @@ for i in range(2):
             Subsignal("source_write",    Pins(1)),
             Subsignal("source_read",     Pins(1)),
             Subsignal("source_identify", Pins(1)),
-            Subsignal("source_end",       Pins(1)),
+            Subsignal("source_end",      Pins(1)),
             Subsignal("source_failed",   Pins(1)),
             Subsignal("source_data",     Pins(128)), #FIXME
         ),
     ]
+
+
+# Platform -----------------------------------------------------------------------------------------
 
 class CorePlatform(XilinxPlatform):
     name = "core"
@@ -103,6 +107,7 @@ class CorePlatform(XilinxPlatform):
     def do_finalize(self, *args, **kwargs):
         pass
 
+# Core ---------------------------------------------------------------------------------------------
 
 class Core(Module):
     platform = CorePlatform()
@@ -116,16 +121,20 @@ class Core(Module):
         ]
 
         if design == "base" or design == "bist":
-            # SATA PHY/Core/frontend
-            self.submodules.sata_phy = LiteSATAPHY(platform.device, platform.request("sata_clocks"), platform.request("sata"), "sata_gen3", clk_freq)
-            self.sata_phys = [self.sata_phy]
-            self.submodules.sata_core = LiteSATACore(self.sata_phy)
+            # SATA PHY/Core/frontend ---------------------------------------------------------------
+            self.submodules.sata_phy      = LiteSATAPHY(platform.device,
+                platform.request("sata_clocks"),
+                platform.request("sata"),
+                "sata_gen3",
+                clk_freq)
+            self.sata_phys                = [self.sata_phy]
+            self.submodules.sata_core     = LiteSATACore(self.sata_phy)
             self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
 
             if design == "bist":
-                # BIST
+                # BIST -----------------------------------------------------------------------------
                 self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar)
-                generator = self.sata_bist.generator
+                generator      = self.sata_bist.generator
                 generator_pads = platform.request("generator")
                 self.comb += [
                     generator.start.eq(generator_pads.start),
@@ -138,7 +147,7 @@ class Core(Module):
                     generator_pads.errors.eq(generator.errors)
                 ]
 
-                checker = self.sata_bist.checker
+                checker      = self.sata_bist.checker
                 checker_pads = platform.request("checker")
                 self.comb += [
                     checker.start.eq(checker_pads.start),
@@ -151,7 +160,7 @@ class Core(Module):
                     checker_pads.errors.eq(checker.errors),
                 ]
 
-                identify = self.sata_bist.identify
+                identify      = self.sata_bist.identify
                 identify_pads = platform.request("identify")
                 self.comb += [
                     identify.start.eq(identify_pads.start),
@@ -167,7 +176,7 @@ class Core(Module):
 
         elif design == "striping":
             self.nphys = 4
-            # SATA PHYs
+            # SATA PHYs ----------------------------------------------------------------------------
             self.sata_phys = []
             for i in range(self.nphys):
                 sata_phy = LiteSATAPHY(platform.device,
@@ -180,14 +189,14 @@ class Core(Module):
                 setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
                 self.sata_phys.append(sata_phy)
 
-            # SATA Cores
+            # SATA Cores ---------------------------------------------------------------------------
             self.sata_cores = []
             for i in range(self.nphys):
                 sata_core = LiteSATACore(self.sata_phys[i])
                 setattr(self.submodules, "sata_core{}".format(str(i)), sata_core)
                 self.sata_cores.append(sata_core)
 
-            # SATA Frontend
+            # SATA Frontend ------------------------------------------------------------------------
             self.submodules.sata_striping = LiteSATAStriping(self.sata_cores)
             self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_striping)
 
@@ -199,7 +208,7 @@ class Core(Module):
             ValueError("Unknown design " + design)
 
 
-        # CRG / Ctrl ready
+        # CRG / Ctrl ready -------------------------------------------------------------------------
         crg_ready_pads = platform.request("crg_ready")
         ctrl_ready_pads = platform.request("ctrl_ready")
         for i, sata_phy in enumerate(self.sata_phys):
@@ -208,7 +217,7 @@ class Core(Module):
                 ctrl_ready_pads[i].eq(sata_phy.ctrl.ready)
             ]
 
-        # Get user ports from crossbar
+        # Get user ports from crossbar -------------------------------------------------------------
         self.user_ports = self.sata_crossbar.get_ports(nports, ports_dw)
         for i, user_port in enumerate(self.user_ports):
             user_port_pads = platform.request("user_port", i+1)

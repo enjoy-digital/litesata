@@ -16,6 +16,7 @@ from litesata.frontend.bist import LiteSATABIST
 
 from targets.bist import CRG, StatusLeds
 
+# StripingSoC --------------------------------------------------------------------------------------
 
 class StripingSoC(SoCMini):
     default_platform = "kc705"
@@ -31,52 +32,51 @@ class StripingSoC(SoCMini):
             ident          = "LiteSATA example design",
             ident_version  = True
         )
+
+        # Serial Bridge ----------------------------------------------------------------------------
         self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
         self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
-        # SATA PHYs
+        # SATA PHYs --------------------------------------------------------------------------------
         self.sata_phys = []
         for i in range(self.nphys):
             sata_phy = LiteSATAPHY(platform.device,
-                                   platform.request("sata_clocks") if i == 0 else self.sata_phys[0].crg.refclk,
-                                   platform.request("sata", i),
-                                   revision,
-                                   clk_freq,
-                                   data_width)
+                platform.request("sata_clocks") if i == 0 else self.sata_phys[0].crg.refclk,
+                platform.request("sata", i),
+                revision,
+                clk_freq,
+                data_width)
             sata_phy = ClockDomainsRenamer({"sata_rx": "sata_rx{}".format(str(i)),
                                             "sata_tx": "sata_tx{}".format(str(i))})(sata_phy)
             setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
             self.sata_phys.append(sata_phy)
 
-        # SATA Cores
+        # SATA Cores -------------------------------------------------------------------------------
         self.sata_cores = []
         for i in range(self.nphys):
             sata_core = LiteSATACore(self.sata_phys[i])
             setattr(self.submodules, "sata_core{}".format(str(i)), sata_core)
             self.sata_cores.append(sata_core)
 
-        # SATA Frontend
+        # SATA Frontend ----------------------------------------------------------------------------
         self.submodules.sata_striping = LiteSATAStriping(self.sata_cores)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_striping)
 
-        # SATA Application
+        # SATA Application -------------------------------------------------------------------------
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
 
-        # Status Leds
+        # Status Leds ------------------------------------------------------------------------------
         self.submodules.status_leds = StatusLeds(platform, self.sata_phys)
 
-
+        # Timing constraints -----------------------------------------------------------------------
         platform.add_platform_command("""
 create_clock -name sys_clk -period 5 [get_nets sys_clk]
 """)
 
         for i in range(len(self.sata_phys)):
-            # FIXME
-            #self.specials += [
-            #    Keep(ClockSignal("sata_rx{}".format(str(i)))),
-            #    Keep(ClockSignal("sata_tx{}".format(str(i))))
-            #]
+            self.sata_phys[i].crg.cd_sata_rx.clk.attr.add("keep")
+            self.sata_phys[i].crg.cd_sata_tx.clk.attr.add("keep")
             platform.add_platform_command("""
 create_clock -name {sata_rx_clk} -period {sata_clk_period} [get_nets {sata_rx_clk}]
 create_clock -name {sata_tx_clk} -period {sata_clk_period} [get_nets {sata_tx_clk}]
@@ -90,6 +90,8 @@ set_false_path -from [get_clocks {sata_tx_clk}] -to [get_clocks sys_clk]
            sata_clk_period="3.3" if data_width == 16 else "6.6"))
 
 
+# StripingSoCDevel ---------------------------------------------------------------------------------
+
 class StripingSoCDevel(StripingSoC):
     csr_map = {
         "analyzer": 17
@@ -98,7 +100,6 @@ class StripingSoCDevel(StripingSoC):
     def __init__(self, platform):
         from litescope import LiteScopeAnalyzer
         StripingSoC.__init__(self, platform)
-
         analyzer_signals = [
             self.sata_phy0.ctrl.ready,
             self.sata_phy1.ctrl.ready,
@@ -161,7 +162,6 @@ class StripingSoCDevel(StripingSoC):
             self.sata_phy3.sink.data,
             self.sata_phy3.sink.charisk
         ]
-
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="test/analyzer.csv")
 
 default_subtarget = StripingSoC

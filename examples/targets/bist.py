@@ -14,6 +14,7 @@ from litesata.core import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABIST
 
+# CRG ----------------------------------------------------------------------------------------------
 
 class CRG(Module):
     def __init__(self, platform):
@@ -30,6 +31,7 @@ class CRG(Module):
         pll.register_clkin(clk200, 200e6)
         pll.create_clkout(self.cd_sys, 200e6)
 
+# StatusLeds ---------------------------------------------------------------------------------------
 
 class StatusLeds(Module):
     def __init__(self, platform, sata_phys):
@@ -58,6 +60,7 @@ class StatusLeds(Module):
             # ready leds
             self.comb += platform.request("user_led", 2*i+1).eq(sata_phy.ctrl.ready)
 
+# BISTSoC ------------------------------------------------------------------------------------------
 
 class BISTSoC(SoCMini):
     default_platform = "kc705"
@@ -71,24 +74,27 @@ class BISTSoC(SoCMini):
             csr_data_width = 32,
             ident          = "LiteSATA example design",
             ident_version  = True)
+
+        # Serial Bridge ----------------------------------------------------------------------------
         self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
         self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
-        # SATA PHY/Core/Frontend
+        # SATA PHY/Core/Frontend -------------------------------------------------------------------
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
                                                platform.request("sata_clocks"),
                                                platform.request("sata", 0),
                                                revision,
                                                clk_freq,
                                                data_width)
-        self.submodules.sata_core = LiteSATACore(self.sata_phy)
+        self.submodules.sata_core     = LiteSATACore(self.sata_phy)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
-        self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
+        self.submodules.sata_bist     = LiteSATABIST(self.sata_crossbar, with_csr=True)
 
-        # Status Leds
+        # Status Leds ------------------------------------------------------------------------------
         self.submodules.leds = StatusLeds(platform, self.sata_phy)
 
+        # Timing constraints -----------------------------------------------------------------------
         self.sata_phy.crg.cd_sata_rx.clk.attr.add("keep")
         self.sata_phy.crg.cd_sata_tx.clk.attr.add("keep")
         platform.add_platform_command("""
@@ -103,6 +109,8 @@ set_false_path -from [get_clocks sata_rx_clk] -to [get_clocks sys_clk]
 set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
 """.format(sata_clk_period="3.3" if data_width == 16 else "6.6"))
 
+# BISTSoCDevel -------------------------------------------------------------------------------------
+
 class BISTSoCDevel(BISTSoC):
     csr_map = {
         "analyzer": 17
@@ -111,8 +119,6 @@ class BISTSoCDevel(BISTSoC):
     def __init__(self, platform):
         from litescope import LiteScopeAnalyzer
         BISTSoC.__init__(self, platform)
-
-        # analyzer signals
         analyzer_signals = [
             self.sata_phy.ctrl.ready,
             self.sata_phy.source,
@@ -128,7 +134,6 @@ class BISTSoCDevel(BISTSoC):
             self.sata_core.command.rx.fsm,
             self.sata_core.command.tx.fsm,
         ]
-
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="test/analyzer.csv")
 
 default_subtarget = BISTSoC

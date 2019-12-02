@@ -16,6 +16,7 @@ from litesata.frontend.bist import LiteSATABIST
 
 from targets.bist import CRG, StatusLeds
 
+# MirroringSoC -------------------------------------------------------------------------------------
 
 class MirroringSoC(SoCMini):
     default_platform = "kc705"
@@ -33,32 +34,34 @@ class MirroringSoC(SoCMini):
             csr_data_width = 32,
             ident          = "LiteSATA example design",
             ident_version  = True)
+
+        # Serial Bridge ----------------------------------------------------------------------------
         self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
         self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
-        # SATA PHYs
+        # SATA PHYs --------------------------------------------------------------------------------
         self.sata_phys = []
         for i in range(self.nphys):
             sata_phy = LiteSATAPHY(platform.device,
-                                   platform.request("sata_clocks") if i == 0 else self.sata_phys[0].crg.refclk,
-                                   platform.request("sata", i),
-                                   revision,
-                                   clk_freq,
-                                   data_width)
+                platform.request("sata_clocks") if i == 0 else self.sata_phys[0].crg.refclk,
+                platform.request("sata", i),
+                revision,
+                clk_freq,
+                data_width)
             sata_phy = ClockDomainsRenamer({"sata_rx": "sata_rx{}".format(str(i)),
                                             "sata_tx": "sata_tx{}".format(str(i))})(sata_phy)
             setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)
             self.sata_phys.append(sata_phy)
 
-        # SATA Cores
+        # SATA Cores -------------------------------------------------------------------------------
         self.sata_cores = []
         for i in range(self.nphys):
             sata_core = LiteSATACore(self.sata_phys[i])
             setattr(self.submodules, "sata_core{}".format(str(i)), sata_core)
             self.sata_cores.append(sata_core)
 
-        # SATA Frontend
+        # SATA Frontend ----------------------------------------------------------------------------
         self.submodules.sata_mirroring = LiteSATAMirroring(self.sata_cores)
         self.sata_crossbars = []
         for i in range(self.nphys):
@@ -66,17 +69,17 @@ class MirroringSoC(SoCMini):
             setattr(self.submodules, "sata_crossbar{}".format(str(i)), sata_crossbar)
             self.sata_crossbars.append(sata_crossbar)
 
-        # SATA Application
+        # SATA Application -------------------------------------------------------------------------
         self.sata_bists = []
         for i in range(self.nphys):
             sata_bist = LiteSATABIST(self.sata_crossbars[i], with_csr=True)
             setattr(self.submodules, "sata_bist{}".format(str(i)), sata_bist)
             self.sata_bists.append(sata_bist)
 
-        # Status Leds
+        # Status Leds ------------------------------------------------------------------------------
         self.submodules.status_leds = StatusLeds(platform, self.sata_phys)
 
-
+        # Timing constraints -----------------------------------------------------------------------
         platform.add_platform_command("""
 create_clock -name sys_clk -period 5 [get_nets sys_clk]
 """)
