@@ -40,7 +40,7 @@ def _import(default, name):
 def _get_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""\
-LiteSATA - based on Migen.
+LiteSATA - based on Migen & LiteX.
 
 This program builds and/or loads LiteSATA components.
 One or several actions can be specified:
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     /____/_/\__/\__/___/_/ |_/_/ /_/ |_|
 
 A small footprint and configurable SATA core
-             powered by Migen
+         powered by Migen & LiteX
 """)
     if revision  != "unknown":
         print("""
