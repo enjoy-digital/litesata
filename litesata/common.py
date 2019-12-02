@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from math import ceil
@@ -9,6 +9,7 @@ from litex.soc.interconnect import stream
 from litex.soc.interconnect.stream import *
 from litex.soc.interconnect.stream_packet import Header, HeaderField
 
+# Bitrates/Frequencies -----------------------------------------------------------------------------
 
 bitrates = {
     "sata_gen3": 6.0,
@@ -23,22 +24,22 @@ frequencies = {
 }
 
 
-# PHY / Link Layers
+# PHY / Link Layers --------------------------------------------------------------------------------
 primitives = {
-    "ALIGN": 0x7B4A4ABC,
-    "CONT":  0X9999AA7C,
-    "SYNC":  0xB5B5957C,
-    "R_RDY": 0x4A4A957C,
-    "R_OK":  0x3535B57C,
-    "R_ERR": 0x5656B57C,
-    "R_IP":  0X5555B57C,
-    "X_RDY": 0x5757B57C,
-    "CONT":  0x9999AA7C,
-    "WTRM":  0x5858B57C,
-    "SOF":   0x3737B57C,
-    "EOF":   0xD5D5B57C,
-    "HOLD":  0xD5D5AA7C,
-    "HOLDA": 0X9595AA7C
+    "ALIGN": 0x7b4a4abc,
+    "CONT":  0x9999aa7c,
+    "SYNC":  0xb5b5957c,
+    "R_RDY": 0x4a4a957c,
+    "R_OK":  0x3535b57c,
+    "R_ERR": 0x5656b57c,
+    "R_IP":  0x5555b57c,
+    "X_RDY": 0x5757b57c,
+    "CONT":  0x9999aa7c,
+    "WTRM":  0x5858b57c,
+    "SOF":   0x3737b57c,
+    "EOF":   0xd5d5b57c,
+    "HOLD":  0xd5d5aa7c,
+    "HOLDA": 0x9595aa7c
 }
 
 def is_primitive(dword):
@@ -71,14 +72,14 @@ def link_description(dw):
     return EndpointDescription(layout)
 
 
-# Transport Layer
+# Transport Layer ----------------------------------------------------------------------------------
 fis_max_dwords = 2048
 
 fis_types = {
     "REG_H2D":          0x27,
     "REG_D2H":          0x34,
     "DMA_ACTIVATE_D2H": 0x39,
-    "PIO_SETUP_D2H":    0x5F,
+    "PIO_SETUP_D2H":    0x5f,
     "DATA":             0x46
 }
 
@@ -197,11 +198,11 @@ def transport_rx_description(dw):
     return EndpointDescription(payload_layout, param_layout)
 
 
-# Command Layer
+# Command Layer ------------------------------------------------------------------------------------
 regs = {
     "WRITE_DMA_EXT":   0x35,
     "READ_DMA_EXT":    0x25,
-    "IDENTIFY_DEVICE": 0xEC
+    "IDENTIFY_DEVICE": 0xec
 }
 
 reg_d2h_status = {
@@ -258,7 +259,7 @@ def command_rx_data_description(dw):
     return EndpointDescription(payload_layout)
 
 
-# HDD
+# HDD ----------------------------------------------------------------------------------------------
 logical_sector_size = 512  # constant since all HDDs use this
 
 def dwords2sectors(n):

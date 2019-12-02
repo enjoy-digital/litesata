@@ -31,7 +31,7 @@ class K7LiteSATAPHYCRG(Module):
     def __init__(self, clock_pads_or_refclk, pads, gtx, revision, clk_freq):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
-        self.ready = Signal()
+        self.ready    = Signal()
         self.cplllock = Signal()
 
         self.clock_domains.cd_sata_tx = ClockDomain()
@@ -69,12 +69,12 @@ class K7LiteSATAPHYCRG(Module):
         use_mmcm = mmcm_mult/mmcm_div != 1.0
 
         if use_mmcm:
-            mmcm_reset = Signal()
+            mmcm_reset        = Signal()
             mmcm_locked_async = Signal()
-            mmcm_locked = Signal()
-            mmcm_fb = Signal()
-            mmcm_clk_i = Signal()
-            mmcm_clk0_o = Signal()
+            mmcm_locked       = Signal()
+            mmcm_fb           = Signal()
+            mmcm_clk_i        = Signal()
+            mmcm_clk0_o       = Signal()
             self.specials += [
                 Instance("BUFG", i_I=gtx.txoutclk, o_O=mmcm_clk_i),
                 Instance("MMCME2_ADV",
@@ -97,7 +97,7 @@ class K7LiteSATAPHYCRG(Module):
             ]
         else:
             mmcm_locked = Signal(reset=1)
-            mmcm_reset = Signal()
+            mmcm_reset  = Signal()
             self.specials += Instance("BUFG", i_I=gtx.txoutclk, o_O=self.cd_sata_tx.clk)
 
         self.comb += [
@@ -121,19 +121,19 @@ class K7LiteSATAPHYCRG(Module):
         #   After configuration, GTX's resets have to stay low for at least 500ns
         #   See AR43482
         startup_cycles = ceil(500e-9*clk_freq)
-        startup_timer = WaitTimer(startup_cycles)
+        startup_timer  = WaitTimer(startup_cycles)
         self.submodules += startup_timer
         self.comb += startup_timer.wait.eq(~(self.tx_reset | self.rx_reset))
 
         # TX Startup FSM ---------------------------------------------------------------------------
-        self.tx_ready = Signal()
+        self.tx_ready  = Signal()
         self.gttxreset = Signal()
         self.cpllreset = Signal()
         self.txuserrdy = Signal()
         self.tx_startup_fsm = tx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.submodules += tx_startup_fsm
 
-        txphaligndone = Signal(reset=1)
+        txphaligndone        = Signal(reset=1)
         txphaligndone_rising = Signal()
         self.sync += txphaligndone.eq(gtx.txphaligndone)
         self.sync += gtx.gttxreset.eq(self.gttxreset)
@@ -221,7 +221,7 @@ class K7LiteSATAPHYCRG(Module):
 
 
         # RX Startup FSM ---------------------------------------------------------------------------
-        self.rx_ready = Signal()
+        self.rx_ready  = Signal()
         self.gtrxreset = Signal()
         self.rxuserrdy = Signal()
         self.rx_startup_fsm = rx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
@@ -230,7 +230,7 @@ class K7LiteSATAPHYCRG(Module):
         cdr_stable_timer = WaitTimer(1024)
         self.submodules += cdr_stable_timer
 
-        rxphaligndone = Signal(reset=1)
+        rxphaligndone        = Signal(reset=1)
         rxphaligndone_rising = Signal()
         self.sync += rxphaligndone.eq(gtx.rxphaligndone)
         self.sync += gtx.gtrxreset.eq(self.gtrxreset)
@@ -324,25 +324,25 @@ class K7LiteSATAPHY(Module):
         # Common signals
         self.data_width = data_width
 
-        # control
-        self.tx_idle = Signal()         #i
+        # Control
+        self.tx_idle        = Signal()  #i
 
         self.tx_cominit_stb = Signal()  #i
         self.tx_cominit_ack = Signal()  #o
         self.tx_comwake_stb = Signal()  #i
         self.tx_comwake_ack = Signal()  #o
 
-        self.rx_idle = Signal()         #o
-        self.rx_cdrhold = Signal()      #i
+        self.rx_idle        = Signal()  #o
+        self.rx_cdrhold     = Signal()  #i
 
         self.rx_cominit_stb = Signal()  #o
         self.rx_comwake_stb = Signal()  #o
 
-        self.rxdisperr = Signal(data_width//8)      #o
-        self.rxnotintable = Signal(data_width//8)   #o
+        self.rxdisperr      = Signal(data_width//8) #o
+        self.rxnotintable   = Signal(data_width//8) #o
 
-        # datapath
-        self.sink = stream.Endpoint(phy_description(data_width))
+        # Datapath
+        self.sink   = stream.Endpoint(phy_description(data_width))
         self.source = stream.Endpoint(phy_description(data_width))
 
         # K7 specific signals
@@ -350,7 +350,7 @@ class K7LiteSATAPHY(Module):
         self.gtrefclk0 = Signal()
 
         # Channel PLL
-        self.cplllock = Signal()
+        self.cplllock  = Signal()
         self.cpllreset = Signal()
 
         # Receive Ports
@@ -361,16 +361,16 @@ class K7LiteSATAPHY(Module):
 
         # Receive Ports - RX Data Path interface
         self.gtrxreset = Signal()
-        self.rxdata = Signal(data_width)
-        self.rxoutclk = Signal()
-        self.rxusrclk = Signal()
+        self.rxdata    = Signal(data_width)
+        self.rxoutclk  = Signal()
+        self.rxusrclk  = Signal()
         self.rxusrclk2 = Signal()
 
         # Receive Ports - RX PLL Ports
-        self.rxresetdone = Signal()
-        self.rxdlyreset = Signal()
+        self.rxresetdone    = Signal()
+        self.rxdlyreset     = Signal()
         self.rxdlyresetdone = Signal()
-        self.rxphaligndone = Signal()
+        self.rxphaligndone  = Signal()
 
         # Receive Ports - RX Ports for SATA
         self.rxcominitdet = Signal()
@@ -384,24 +384,24 @@ class K7LiteSATAPHY(Module):
 
         # Transmit Ports - TX Data Path interface
         self.gttxreset = Signal()
-        self.txdata = Signal(data_width)
-        self.txoutclk = Signal()
-        self.txusrclk = Signal()
+        self.txdata    = Signal(data_width)
+        self.txoutclk  = Signal()
+        self.txusrclk  = Signal()
         self.txusrclk2 = Signal()
 
         # Transmit Ports - TX PLL Ports
-        self.txresetdone = Signal()
-        self.txdlyreset = Signal()
+        self.txresetdone    = Signal()
+        self.txdlyreset     = Signal()
         self.txdlyresetdone = Signal()
-        self.txphaligndone = Signal()
+        self.txphaligndone  = Signal()
 
         # Transmit Ports - TX Ports for PCI Express
         self.txelecidle = Signal(reset=1)
 
         # Transmit Ports - TX Ports for SATA
         self.txcomfinish = Signal()
-        self.txcominit = Signal()
-        self.txcomwake = Signal()
+        self.txcominit   = Signal()
+        self.txcomwake   = Signal()
 
         # Power-down signals
         self.cpllpd = Signal()

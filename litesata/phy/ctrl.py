@@ -7,6 +7,7 @@ from litesata.common import *
 
 from migen.genlib.misc import WaitTimer
 
+# LiteSATAPHYCtrl ----------------------------------------------------------------------------------
 
 class LiteSATAPHYCtrl(Module):
     """SATA PHY Controller
@@ -24,14 +25,14 @@ class LiteSATAPHYCtrl(Module):
     """
     def __init__(self, trx, crg, clk_freq):
         self.clk_freq = clk_freq
-        self.ready = Signal()
-        self.sink = sink = stream.Endpoint(phy_description(32))
-        self.source = source = stream.Endpoint(phy_description(32))
+        self.ready    = Signal()
+        self.sink     = sink = stream.Endpoint(phy_description(32))
+        self.source   = source = stream.Endpoint(phy_description(32))
         self.misalign = Signal()
-        self.tx_idle = Signal()
+        self.tx_idle  = Signal()
         self.rx_reset = Signal()
         self.tx_reset = Signal()
-        self.rx_idle = Signal()
+        self.rx_idle  = Signal()
 
         # # #
 
@@ -44,11 +45,11 @@ class LiteSATAPHYCtrl(Module):
         align_timer = WaitTimer(self.us(873))
         self.submodules += align_timer, retry_timer
 
-        align_det = Signal()
+        align_det    = Signal()
         misalign_det = Signal()
-        non_align_counter = Signal(4)
+        non_align_counter       = Signal(4)
         non_align_counter_reset = Signal()
-        non_align_counter_ce = Signal()
+        non_align_counter_ce    = Signal()
         self.sync += \
             If(non_align_counter_reset,
                 non_align_counter.eq(0)
@@ -163,8 +164,8 @@ class LiteSATAPHYCtrl(Module):
             )
         )
 
-        # wait alignement stability for 5ms before declaring ctrl is ready,
-        # reset the RX part of the transceiver when misalignment is detected.
+        # Wait alignment stability for 5ms before declaring ctrl is ready, reset the RX part of
+        # the transceiver when misalignment is detected.
         stability_timer = WaitTimer(5*clk_freq//1000)
         self.submodules += stability_timer
 

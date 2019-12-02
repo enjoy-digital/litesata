@@ -5,6 +5,7 @@ from litesata.common import *
 
 from migen.genlib.misc import WaitTimer
 
+# LiteSATAPHYDatapathRX ----------------------------------------------------------------------------
 
 class LiteSATAPHYDatapathRX(Module):
     """SATA PHY RX datapath
@@ -22,17 +23,17 @@ class LiteSATAPHYDatapathRX(Module):
     data we will output.
     """
     def __init__(self, data_width):
-        self.sink = sink = stream.Endpoint(phy_description(data_width))
+        self.sink   = sink   = stream.Endpoint(phy_description(data_width))
         self.source = source = stream.Endpoint(phy_description(32))
 
         # # #
 
         # width convertion and byte alignment
         byte_alignment = Signal(data_width//8)
-        last_charisk = Signal(data_width//8)
-        last_data = Signal(data_width)
-        sr_charisk = Signal(2*data_width//8)
-        sr_data = Signal(2*data_width)
+        last_charisk   = Signal(data_width//8)
+        last_data      = Signal(data_width)
+        sr_charisk     = Signal(2*data_width//8)
+        sr_data        = Signal(2*data_width)
         self.sync.sata_rx += \
             If(sink.valid & sink.ready,
                 If(sink.charisk != 0,
@@ -82,6 +83,7 @@ class LiteSATAPHYDatapathRX(Module):
             fifo.source.connect(source)
         ]
 
+# LiteSATAPHYDatapathTX ----------------------------------------------------------------------------
 
 class LiteSATAPHYDatapathTX(Module):
     """SATA PHY TX Datapath
@@ -94,7 +96,7 @@ class LiteSATAPHYDatapathTX(Module):
     - change clock domain from "sys" to "sata_rx".
     """
     def __init__(self, data_width):
-        self.sink = sink = stream.Endpoint(phy_description(32))
+        self.sink   = sink   = stream.Endpoint(phy_description(32))
         self.source = source = stream.Endpoint(phy_description(data_width))
 
         # # #
@@ -121,6 +123,7 @@ class LiteSATAPHYDatapathTX(Module):
             converter.source.connect(source)
         ]
 
+# LiteSATAPHYAlignTimer ----------------------------------------------------------------------------
 
 class LiteSATAPHYAlignTimer(Module):
     """SATA PHY align timer
@@ -137,7 +140,7 @@ class LiteSATAPHYAlignTimer(Module):
         self.submodules.timer = WaitTimer(256*16)
 
         charisk_match = sink.charisk == 0b0001
-        data_match = sink.data == primitives["ALIGN"]
+        data_match    = sink.data == primitives["ALIGN"]
 
         self.comb += \
             If(sink.valid &
@@ -147,6 +150,8 @@ class LiteSATAPHYAlignTimer(Module):
             ).Else(
                 self.timer.wait.eq(1),
             )
+
+# LiteSATAPHYDatapath ------------------------------------------------------------------------------
 
 class LiteSATAPHYDatapath(Module):
     """SATA PHY datapath
@@ -164,17 +169,17 @@ class LiteSATAPHYDatapath(Module):
 
     """
     def __init__(self, trx, ctrl):
-        self.sink = sink = stream.Endpoint(phy_description(32))
+        self.sink   = sink   = stream.Endpoint(phy_description(32))
         self.source = source = stream.Endpoint(phy_description(32))
 
         self.misalign = Signal()
-        self.rx_idle = Signal()
+        self.rx_idle  = Signal()
 
         # # #
 
         # TX path
         mux = Multiplexer(phy_description(32), 2)
-        tx = LiteSATAPHYDatapathTX(trx.data_width)
+        tx  = LiteSATAPHYDatapathTX(trx.data_width)
         self.submodules += mux, tx
         self.comb += [
             mux.sel.eq(ctrl.ready),
@@ -185,7 +190,7 @@ class LiteSATAPHYDatapath(Module):
         ]
 
         # RX path
-        rx = LiteSATAPHYDatapathRX(trx.data_width)
+        rx    = LiteSATAPHYDatapathRX(trx.data_width)
         demux = Demultiplexer(phy_description(32), 2)
         align_timer = LiteSATAPHYAlignTimer()
         self.submodules += rx, demux, align_timer

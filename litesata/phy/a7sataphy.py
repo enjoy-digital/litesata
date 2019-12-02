@@ -29,12 +29,12 @@ class A7LiteSATAPHYCRG(Module):
     def __init__(self, clock_pads_or_refclk, pads, gtp, revision, clk_freq):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
-        self.ready = Signal()
+        self.ready    = Signal()
         self.qplllock = Signal()
 
         self.clock_domains.cd_sata_refclk = ClockDomain()
-        self.clock_domains.cd_sata_tx = ClockDomain()
-        self.clock_domains.cd_sata_rx = ClockDomain()
+        self.clock_domains.cd_sata_tx     = ClockDomain()
+        self.clock_domains.cd_sata_rx     = ClockDomain()
 
         # CPLL -------------------------------------------------------------------------------------
         #   (sata_gen3) 150MHz / VCO @ 3GHz / Line rate @ 6Gbps
@@ -69,12 +69,12 @@ class A7LiteSATAPHYCRG(Module):
         use_mmcm = mmcm_mult/mmcm_div != 1.0
 
         if use_mmcm:
-            mmcm_reset = Signal()
+            mmcm_reset        = Signal()
             mmcm_locked_async = Signal()
-            mmcm_locked = Signal()
-            mmcm_fb = Signal()
-            mmcm_clk_i = Signal()
-            mmcm_clk0_o = Signal()
+            mmcm_locked       = Signal()
+            mmcm_fb           = Signal()
+            mmcm_clk_i        = Signal()
+            mmcm_clk0_o       = Signal()
             self.specials += [
                 Instance("BUFG", i_I=gtp.txoutclk, o_O=mmcm_clk_i),
                 Instance("MMCME2_ADV",
@@ -97,7 +97,7 @@ class A7LiteSATAPHYCRG(Module):
             ]
         else:
             mmcm_locked = Signal(reset=1)
-            mmcm_reset = Signal()
+            mmcm_reset  = Signal()
             self.specials += Instance("BUFG", i_I=gtp.txoutclk, o_O=self.cd_sata_tx.clk)
 
         self.comb += [
@@ -121,12 +121,12 @@ class A7LiteSATAPHYCRG(Module):
 
         # PLL reset must be at least 500us
         pll_reset_cycles = ceil(500e-9*clk_freq)
-        pll_reset_timer = WaitTimer(pll_reset_cycles)
+        pll_reset_timer  = WaitTimer(pll_reset_cycles)
         self.submodules += pll_reset_timer
 
 
         # TX Startup FSM ---------------------------------------------------------------------------
-        self.tx_ready = Signal()
+        self.tx_ready  = Signal()
         self.gttxreset = Signal()
         self.qpllreset = Signal()
         self.txuserrdy = Signal()
@@ -220,7 +220,7 @@ class A7LiteSATAPHYCRG(Module):
 
 
         # RX Startup FSM ---------------------------------------------------------------------------
-        self.rx_ready = Signal()
+        self.rx_ready  = Signal()
         self.gtrxreset = Signal()
         self.rxuserrdy = Signal()
         self.rx_startup_fsm = rx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
@@ -293,38 +293,38 @@ class A7LiteSATAPHYCRG(Module):
 
 class GTPQuadPLL(Module):
     def __init__(self, refclk, refclk_freq, linerate):
-        self.pd = Signal()
-        self.clk = Signal()
+        self.pd     = Signal()
+        self.clk    = Signal()
         self.refclk = Signal()
-        self.reset = Signal()
-        self.lock = Signal()
+        self.reset  = Signal()
+        self.lock   = Signal()
         self.config = config = self.compute_config(refclk_freq, linerate)
 
         # # #
 
         gtpe2_common_params = dict(
             # common
-            i_GTREFCLK0=refclk,
-            i_BGBYPASSB=1,
-            i_BGMONITORENB=1,
-            i_BGPDB=1,
-            i_BGRCALOVRD=0b11111,
-            i_RCALENB=1,
+            i_GTREFCLK0       = refclk,
+            i_BGBYPASSB       = 1,
+            i_BGMONITORENB    = 1,
+            i_BGPDB           = 1,
+            i_BGRCALOVRD      = 0b11111,
+            i_RCALENB         = 1,
 
             # pll0
-            p_PLL0_FBDIV=config["n2"],
-            p_PLL0_FBDIV_45=config["n1"],
-            p_PLL0_REFCLK_DIV=config["m"],
-            i_PLL0LOCKEN=1,
-            i_PLL0PD=self.pd,
-            i_PLL0REFCLKSEL=0b001,
-            i_PLL0RESET=self.reset,
-            o_PLL0LOCK=self.lock,
-            o_PLL0OUTCLK=self.clk,
-            o_PLL0OUTREFCLK=self.refclk,
+            p_PLL0_FBDIV      = config["n2"],
+            p_PLL0_FBDIV_45   = config["n1"],
+            p_PLL0_REFCLK_DIV = config["m"],
+            i_PLL0LOCKEN      = 1,
+            i_PLL0PD          = self.pd,
+            i_PLL0REFCLKSEL   = 0b001,
+            i_PLL0RESET       = self.reset,
+            o_PLL0LOCK        = self.lock,
+            o_PLL0OUTCLK      = self.clk,
+            o_PLL0OUTREFCLK   = self.refclk,
 
             # pll1 (not used: power down)
-            i_PLL1PD=1,
+            i_PLL1PD          = 1,
         )
         self.specials += Instance("GTPE2_COMMON", **gtpe2_common_params)
 
@@ -391,25 +391,25 @@ class A7LiteSATAPHY(Module):
         # Common signals
         self.data_width = data_width
 
-        # control
-        self.tx_idle = Signal()         #i
+        # Control
+        self.tx_idle        = Signal() #i
 
-        self.tx_cominit_stb = Signal()  #i
-        self.tx_cominit_ack = Signal()  #o
-        self.tx_comwake_stb = Signal()  #i
-        self.tx_comwake_ack = Signal()  #o
+        self.tx_cominit_stb = Signal() #i
+        self.tx_cominit_ack = Signal() #o
+        self.tx_comwake_stb = Signal() #i
+        self.tx_comwake_ack = Signal() #o
 
-        self.rx_idle = Signal()         #o
-        self.rx_cdrhold = Signal()      #i
+        self.rx_idle        = Signal() #o
+        self.rx_cdrhold     = Signal() #i
 
-        self.rx_cominit_stb = Signal()  #o
-        self.rx_comwake_stb = Signal()  #o
+        self.rx_cominit_stb = Signal() #o
+        self.rx_comwake_stb = Signal() #o
 
-        self.rxdisperr = Signal(data_width//8)      #o
-        self.rxnotintable = Signal(data_width//8)   #o
+        self.rxdisperr      = Signal(data_width//8) #o
+        self.rxnotintable   = Signal(data_width//8) #o
 
-        # datapath
-        self.sink = stream.Endpoint(phy_description(data_width))
+        # Datapath
+        self.sink   = stream.Endpoint(phy_description(data_width))
         self.source = stream.Endpoint(phy_description(data_width))
 
         # K7 specific signals
@@ -417,7 +417,7 @@ class A7LiteSATAPHY(Module):
         self.gtrefclk0 = Signal()
 
         # Quad PLL
-        self.qplllock = Signal()
+        self.qplllock  = Signal()
         self.qpllreset = Signal()
 
         # Receive Ports
@@ -428,16 +428,16 @@ class A7LiteSATAPHY(Module):
 
         # Receive Ports - RX Data Path interface
         self.gtrxreset = Signal()
-        self.rxdata = Signal(data_width)
-        self.rxoutclk = Signal()
-        self.rxusrclk = Signal()
+        self.rxdata    = Signal(data_width)
+        self.rxoutclk  = Signal()
+        self.rxusrclk  = Signal()
         self.rxusrclk2 = Signal()
 
         # Receive Ports - RX PLL Ports
-        self.rxresetdone = Signal()
-        self.rxdlyreset = Signal()
+        self.rxresetdone    = Signal()
+        self.rxdlyreset     = Signal()
         self.rxdlyresetdone = Signal()
-        self.rxsyncdone = Signal()
+        self.rxsyncdone     = Signal()
 
         # Receive Ports - RX Ports for SATA
         self.rxcominitdet = Signal()
@@ -451,28 +451,28 @@ class A7LiteSATAPHY(Module):
 
         # Transmit Ports - TX Data Path interface
         self.gttxreset = Signal()
-        self.txdata = Signal(data_width)
-        self.txoutclk = Signal()
-        self.txusrclk = Signal()
+        self.txdata    = Signal(data_width)
+        self.txoutclk  = Signal()
+        self.txusrclk  = Signal()
         self.txusrclk2 = Signal()
 
         # Transmit Ports - TX PLL Ports
-        self.txresetdone = Signal()
-        self.txdlyen = Signal()
-        self.txdlysreset = Signal()
+        self.txresetdone     = Signal()
+        self.txdlyen         = Signal()
+        self.txdlysreset     = Signal()
         self.txdlysresetdone = Signal()
-        self.txphalign = Signal()
-        self.txphaligndone = Signal()
-        self.txphinit = Signal()
-        self.txphinitdone = Signal()
+        self.txphalign       = Signal()
+        self.txphaligndone   = Signal()
+        self.txphinit        = Signal()
+        self.txphinitdone    = Signal()
 
         # Transmit Ports - TX Ports for PCI Express
         self.txelecidle = Signal(reset=1)
 
         # Transmit Ports - TX Ports for SATA
         self.txcomfinish = Signal()
-        self.txcominit = Signal()
-        self.txcomwake = Signal()
+        self.txcominit   = Signal()
+        self.txcomwake   = Signal()
 
         # Power-down signals
         self.qpllpd = Signal()
@@ -522,19 +522,19 @@ class A7LiteSATAPHY(Module):
 
         # Internals and clock domain crossing ------------------------------------------------------
         # sys_clk --> sata_tx clk
-        txuserrdy = Signal()
-        txpd = Signal()
-        txelecidle = Signal(reset=1)
-        txcominit = Signal()
-        txcomwake = Signal()
-        txdlyen = Signal()
-        txdlysreset = Signal()
+        txuserrdy       = Signal()
+        txpd            = Signal()
+        txelecidle      = Signal(reset=1)
+        txcominit       = Signal()
+        txcomwake       = Signal()
+        txdlyen         = Signal()
+        txdlysreset     = Signal()
         txdlysresetdone = Signal()
-        txphalign = Signal()
-        txphaligndone = Signal()
-        txphinit = Signal()
-        txphinitdone = Signal()
-        gttxreset = Signal()
+        txphalign       = Signal()
+        txphaligndone   = Signal()
+        txphinit        = Signal()
+        txphinitdone    = Signal()
+        gttxreset       = Signal()
 
         self.specials += [
             MultiReg(self.txuserrdy, txuserrdy, "sata_tx"),
@@ -567,7 +567,7 @@ class A7LiteSATAPHY(Module):
         ]
 
         # sys clk --> sata_rx clk
-        rxuserrdy = Signal()
+        rxuserrdy  = Signal()
         rxdlyreset = Signal()
 
         self.specials += [
@@ -579,14 +579,14 @@ class A7LiteSATAPHY(Module):
         ]
 
         # sata_rx clk --> sys clk
-        rxresetdone = Signal()
-        rxcominitdet = Signal()
-        rxcomwakedet = Signal()
-        rxratedone = Signal()
+        rxresetdone    = Signal()
+        rxcominitdet   = Signal()
+        rxcomwakedet   = Signal()
+        rxratedone     = Signal()
         rxdlyresetdone = Signal()
-        rxsyncdone = Signal()
-        rxdisperr = Signal(data_width//8)
-        rxnotintable = Signal(data_width//8)
+        rxsyncdone     = Signal()
+        rxdisperr      = Signal(data_width//8)
+        rxnotintable   = Signal(data_width//8)
 
         self.specials += [
             MultiReg(rxresetdone, self.rxresetdone, "sys"),
@@ -622,7 +622,7 @@ class A7LiteSATAPHY(Module):
         # GTPE2_CHANNEL Instance -------------------------------------------------------------------
         tx_buffer_enable = False
         rx_buffer_enable = False
-        rxphaligndone = Signal()
+        rxphaligndone    = Signal()
         gtp_params = dict(
             # Simulation-Only Attributes
             p_SIM_RECEIVER_DETECT_PASS               ="TRUE",
