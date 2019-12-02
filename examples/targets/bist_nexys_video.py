@@ -5,7 +5,7 @@ from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.soc.cores.clock import *
-from litex.soc.integration.soc_core import SoCCore
+from litex.soc.integration.soc_core import *
 from litex.soc.cores.uart import UARTWishboneBridge
 
 from litesata.common import *
@@ -82,20 +82,18 @@ class StatusLeds(Module):
             self.comb += platform.request("user_led", 4*i+3).eq(sata_phy.ctrl.ready)
 
 
-class BISTSoC(SoCCore):
+class BISTSoC(SoCMini):
     default_platform = "kc705"
     csr_map = {
         "sata_bist": 16
     }
-    csr_map.update(SoCCore.csr_map)
+    csr_map.update(SoCMini.csr_map)
     def __init__(self, platform, revision="sata_gen2", data_width=16):
         sys_clk_freq = int(100e6)
-        SoCCore.__init__(self, platform, sys_clk_freq,
-            cpu_type=None,
-            csr_data_width=32,
-            with_uart=False,
-            ident="LiteSATA example design", ident_version=True,
-            with_timer=False)
+        SoCMini.__init__(self, platform, sys_clk_freq,
+            csr_data_width = 32,
+            ident          = "LiteSATA example design",
+            ident_version  = True)
         self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
         self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform)
