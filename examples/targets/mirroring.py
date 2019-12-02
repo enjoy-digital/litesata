@@ -22,14 +22,14 @@ class MirroringSoC(SoCMini):
     default_platform = "kc705"
     def __init__(self, platform, revision="sata_gen3", data_width=16, nphys=4):
         self.nphys = nphys
-        clk_freq = 200*1000000
-        SoCMini.__init__(self, platform, clk_freq,
+        sys_clk_freq = int(200e6)
+        SoCMini.__init__(self, platform, sys_clk_freq,
             csr_data_width = 32,
             ident          = "LiteSATA example design",
             ident_version  = True)
 
         # Serial Bridge ----------------------------------------------------------------------------
-        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
+        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), sys_clk_freq, baudrate=115200)
         self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
@@ -40,7 +40,7 @@ class MirroringSoC(SoCMini):
                 platform.request("sata_clocks") if i == 0 else self.sata_phys[0].crg.refclk,
                 platform.request("sata", i),
                 revision,
-                clk_freq,
+                sys_clk_freq,
                 data_width)
             sata_phy = ClockDomainsRenamer({"sata_rx": "sata_rx{}".format(str(i)),
                                             "sata_tx": "sata_tx{}".format(str(i))})(sata_phy)

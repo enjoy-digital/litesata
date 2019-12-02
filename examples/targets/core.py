@@ -111,8 +111,8 @@ class CorePlatform(XilinxPlatform):
 
 class Core(Module):
     platform = CorePlatform()
-    def __init__(self, platform, design="base", clk_freq=200*1000000, nports=1, ports_dw=32):
-        self.clk_freq = clk_freq
+    def __init__(self, platform, design="base", sys_clk_freq=int(200e6), nports=1, ports_dw=32):
+        self.sys_clk_freq = sys_clk_freq
 
         self.clock_domains.cd_sys = ClockDomain()
         self.comb += [
@@ -126,7 +126,7 @@ class Core(Module):
                 platform.request("sata_clocks"),
                 platform.request("sata"),
                 "sata_gen3",
-                clk_freq)
+                sys_clk_freq)
             self.sata_phys                = [self.sata_phy]
             self.submodules.sata_core     = LiteSATACore(self.sata_phy)
             self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
@@ -183,7 +183,7 @@ class Core(Module):
                                        platform.request("sata_clocks") if i == 0 else self.sata_phys[0].crg.refclk,
                                        platform.request("sata", i),
                                        "sata_gen3",
-                                       clk_freq)
+                                       sys_clk_freq)
                 sata_phy = ClockDomainsRenamer({"sata_rx": "sata_rx{}".format(str(i)),
                                                 "sata_tx": "sata_tx{}".format(str(i))})(sata_phy)
                 setattr(self.submodules, "sata_phy{}".format(str(i)), sata_phy)

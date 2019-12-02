@@ -46,7 +46,7 @@ class StatusLeds(Module):
 
             rx_cnt = Signal(32)
 
-            freq = int(frequencies[sata_phy.revision]*1000*1000)
+            freq = int(frequencies[sata_phy.revision]*1e6)
 
             rx_sync = getattr(self.sync, "sata_rx{}".format(str(i) if use_cd_num else ""))
             rx_sync += \
@@ -65,24 +65,24 @@ class StatusLeds(Module):
 class BISTSoC(SoCMini):
     default_platform = "kc705"
     def __init__(self, platform, revision="sata_gen3", data_width=16):
-        clk_freq = int(200e6)
-        SoCMini.__init__(self, platform, clk_freq,
+        sys_clk_freq = int(200e6)
+        SoCMini.__init__(self, platform, sys_clk_freq,
             csr_data_width = 32,
             ident          = "LiteSATA example design",
             ident_version  = True)
 
         # Serial Bridge ----------------------------------------------------------------------------
-        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
+        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), sys_clk_freq, baudrate=115200)
         self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
         # SATA PHY/Core/Frontend -------------------------------------------------------------------
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
-                                               platform.request("sata_clocks"),
-                                               platform.request("sata", 0),
-                                               revision,
-                                               clk_freq,
-                                               data_width)
+            platform.request("sata_clocks"),
+            platform.request("sata", 0),
+            revision,
+            sys_clk_freq,
+            data_width)
         self.submodules.sata_core     = LiteSATACore(self.sata_phy)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
         self.submodules.sata_bist     = LiteSATABIST(self.sata_crossbar, with_csr=True)

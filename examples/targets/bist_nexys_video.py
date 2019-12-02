@@ -96,7 +96,7 @@ class BISTSoC(SoCMini):
             ident_version  = True)
 
         # Serial Bridge ----------------------------------------------------------------------------
-        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
+        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), sys_clk_freq, baudrate=115200)
         self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
