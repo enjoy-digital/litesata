@@ -16,10 +16,10 @@ class TestBIST(unittest.TestCase):
     def test_bist(self):
         def main_generator(dut):
             dut.hdd.malloc(0, 64)
-            sector = 0
-            count = 1
+            sector    = 0
+            count     = 1
             generator = dut.generator
-            checker = dut.checker
+            checker   = dut.checker
             for i in range(4):
                 # Write data
                 yield dut.generator.sector.eq(sector)
@@ -70,4 +70,4 @@ class TestBIST(unittest.TestCase):
                        dut.hdd.phy.tx.generator()]
         }
         clocks = {"sys": 10}
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        run_simulation(dut, generators, clocks)

@@ -14,11 +14,11 @@ from test.model.hdd import *
 class CommandTXPacket(list):
     def __init__(self, write=0, read=0, sector=0, count=0, data=[]):
         self.ongoing = False
-        self.done = False
-        self.write = write
-        self.read = read
-        self.sector = sector
-        self.count = count
+        self.done    = False
+        self.write   = write
+        self.read    = read
+        self.sector  = sector
+        self.count   = count
         for d in data:
             self.append(d)
 
@@ -30,7 +30,7 @@ class CommandStreamer(PacketStreamer):
         # # #
 
         self.packets = []
-        self.packet = CommandTXPacket()
+        self.packet  = CommandTXPacket()
         self.packet.done = True
 
     def send(self, packet):
@@ -68,13 +68,14 @@ class CommandStreamer(PacketStreamer):
 
             yield
 
+
 class CommandRXPacket(list):
     def __init__(self):
         self.ongoing = False
-        self.done = False
-        self.write = 0
-        self.read = 0
-        self.failed = 0
+        self.done    = False
+        self.write   = 0
+        self.read    = 0
+        self.failed  = 0
 
 
 class CommandLogger(PacketLogger):
@@ -88,8 +89,8 @@ class CommandLogger(PacketLogger):
             yield self.sink.ready.eq(1)
             if (yield self.sink.valid) and self.first:
                 self.packet = CommandRXPacket()
-                self.packet.write = (yield self.sink.write)
-                self.packet.read = (yield self.sink.read)
+                self.packet.write  = (yield self.sink.write)
+                self.packet.read   = (yield self.sink.read)
                 self.packet.failed = (yield self.sink.failed)
                 self.packet.append((yield self.sink.data))
                 self.first = False
@@ -106,8 +107,8 @@ class TestCommand(unittest.TestCase):
         def generator(dut):
             hdd = dut.hdd
             hdd.malloc(0, 64)
-            write_data = [i for i in range(sectors2dwords(2))]
-            write_len = dwords2sectors(len(write_data))
+            write_data   = [i for i in range(sectors2dwords(2))]
+            write_len    = dwords2sectors(len(write_data))
             write_packet = CommandTXPacket(write=1, sector=2, count=write_len, data=write_data)
             yield from dut.streamer.send_blocking(write_packet)
             yield from dut.logger.receive()
@@ -117,7 +118,7 @@ class TestCommand(unittest.TestCase):
             yield from dut.logger.receive()
             read_data = dut.logger.packet
 
-            # check results
+            # Check results
             s, l, e = check(write_data, read_data)
             print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
             self.assertEqual(s, 0)
@@ -159,4 +160,4 @@ class TestCommand(unittest.TestCase):
                        dut.hdd.phy.tx.generator()]
         }
         clocks = {"sys": 10}
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        run_simulation(dut, generators, clocks)

@@ -48,8 +48,8 @@ class TestLinkScrambler(unittest.TestCase):
             def get_c_values(self, length):
                 stdin = "0x{:08x}".format(length)
                 with subprocess.Popen("./test/model/scrambler",
-                                      stdin=subprocess.PIPE,
-                                      stdout=subprocess.PIPE) as process:
+                    stdin  = subprocess.PIPE,
+                    stdout = subprocess.PIPE) as process:
                     process.stdin.write(stdin.encode("ASCII"))
                     out, err = process.communicate()
                 return [int(e, 16) for e in out.decode("ASCII").split("\n")[:-1]]
@@ -59,4 +59,4 @@ class TestLinkScrambler(unittest.TestCase):
             "sys" :   [generator(dut)]
         }
         clocks = {"sys": 10}
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        run_simulation(dut, generators, clocks)

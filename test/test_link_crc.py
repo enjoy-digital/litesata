@@ -38,7 +38,7 @@ class TestLinkCRC(unittest.TestCase):
             for i in range(32):
                 yield
 
-            # Get C core reference
+            # Get C code reference
             c_crc = dut.get_c_crc(datas)
 
             # Check results
@@ -64,4 +64,4 @@ class TestLinkCRC(unittest.TestCase):
                 return int(out.decode("ASCII"), 16)
 
         dut = DUT(1024, False)
-        run_simulation(dut, generator(dut),vcd_name="sim.vcd")
+        run_simulation(dut, generator(dut))

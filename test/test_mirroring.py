@@ -24,7 +24,7 @@ class TestMirroring(unittest.TestCase):
 
             for i in range(2):
                 for dut_generator in [dut.generator0, dut.generator1]:
-                    # write data (alternate generators)
+                    # Write data (alternate generators)
                     yield dut_generator.sector.eq(sector)
                     yield dut_generator.count.eq(count)
                     yield dut_generator.start.eq(1)
@@ -34,7 +34,7 @@ class TestMirroring(unittest.TestCase):
                     while not (yield dut_generator.done):
                         yield
 
-                    # verify data on the 2 hdds in //
+                    # Verify data on the 2 hdds in //
                     yield dut.checker0.sector.eq(sector)
                     yield dut.checker0.count.eq(count)
                     yield dut.checker0.start.eq(1)
@@ -51,7 +51,7 @@ class TestMirroring(unittest.TestCase):
                     print("errors {}".format(errors))
                     self.assertEqual(errors, 0)
 
-                    # prepare next iteration
+                    # Prepare next iteration
                     sector += 1
 
         class DUT(Module):
@@ -93,4 +93,4 @@ class TestMirroring(unittest.TestCase):
                        dut.hdd1.phy.tx.generator()]
         }
         clocks = {"sys": 10}
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        run_simulation(dut, generators, clocks)

@@ -12,7 +12,7 @@ from litex.soc.interconnect.stream_sim import *
 class ContPacket(list):
     def __init__(self, data=[]):
         self.ongoing = False
-        self.done = False
+        self.done    = False
         for d in data:
             self.append(d)
 
@@ -110,4 +110,4 @@ class TestLinkCont(unittest.TestCase):
                        dut.logger_randomizer.generator()]
         }
         clocks = {"sys": 10}
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        run_simulation(dut, generators, clocks)

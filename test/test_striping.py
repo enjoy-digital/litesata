@@ -83,4 +83,4 @@ class TestStriping(unittest.TestCase):
                        dut.hdd1.phy.tx.generator()]
         }
         clocks = {"sys": 10}
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        run_simulation(dut, generators, clocks)

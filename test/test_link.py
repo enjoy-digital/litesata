@@ -70,4 +70,4 @@ class TestLink(unittest.TestCase):
                        dut.hdd.phy.tx.generator()]
         }
         clocks = {"sys": 10}
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        run_simulation(dut, generators, clocks)
