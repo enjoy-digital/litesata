@@ -1,7 +1,6 @@
 # This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
-from migen.fhdl.specials import Keep
 from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
@@ -34,8 +33,8 @@ class StripingSoC(SoCCore):
             ident="LiteSATA example design",
             with_timer=False
         )
-        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
+        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
+        self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
         # SATA PHYs
@@ -75,10 +74,11 @@ create_clock -name sys_clk -period 5 [get_nets sys_clk]
 """)
 
         for i in range(len(self.sata_phys)):
-            self.specials += [
-                Keep(ClockSignal("sata_rx{}".format(str(i)))),
-                Keep(ClockSignal("sata_tx{}".format(str(i))))
-            ]
+            # FIXME
+            #self.specials += [
+            #    Keep(ClockSignal("sata_rx{}".format(str(i)))),
+            #    Keep(ClockSignal("sata_tx{}".format(str(i))))
+            #]
             platform.add_platform_command("""
 create_clock -name {sata_rx_clk} -period {sata_clk_period} [get_nets {sata_rx_clk}]
 create_clock -name {sata_tx_clk} -period {sata_clk_period} [get_nets {sata_tx_clk}]

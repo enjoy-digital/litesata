@@ -91,12 +91,6 @@ if __name__ == "__main__":
     top_kwargs = dict((k, autotype(v)) for k, v in args.target_option)
     soc = top_class(platform, **top_kwargs)
     soc.finalize()
-    try:
-        memory_regions = soc.get_memory_regions()
-        csr_regions = soc.get_csr_regions()
-        constants = soc.get_constants()
-    except:
-        pass
 
     # decode actions
     action_list = ["clean", "build-csr-csv", "build-core", "build-bitstream", "load-bitstream", "all"]
@@ -150,7 +144,7 @@ System Clk: {} MHz (min: {} MHz)
         subprocess.call(["rm", "-rf", "build/*"])
 
     if actions["build-csr-csv"]:
-        csr_csv = cpu_interface.get_csr_csv(csr_regions, constants, memory_regions)
+        csr_csv = cpu_interface.get_csr_csv(soc.csr_regions, soc.constants, soc.mem_regions)
         write_to_file(args.csr_csv, csr_csv)
 
     if actions["build-core"]:

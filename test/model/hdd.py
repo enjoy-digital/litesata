@@ -5,10 +5,10 @@ import math
 
 from litesata.common import *
 
-from model.phy import *
-from model.link import *
-from model.transport import *
-from model.command import *
+from test.model.phy import *
+from test.model.link import *
+from test.model.transport import *
+from test.model.command import *
 
 
 def print_hdd(s, n=None):

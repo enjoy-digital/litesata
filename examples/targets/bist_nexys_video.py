@@ -107,8 +107,8 @@ class BISTSoC(SoCCore):
             with_uart=False,
             ident="LiteSATA example design", ident_version=True,
             with_timer=False)
-        self.add_cpu(UARTWishboneBridge(platform.request("serial"), sys_clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu.wishbone)
+        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
+        self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform)
 
         # SATA PHY/Core/Frontend

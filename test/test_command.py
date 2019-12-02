@@ -1,14 +1,14 @@
-#!/usr/bin/env python3
-
 # This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
+
+import unittest
 
 from litesata.common import *
 from litesata.core import LiteSATACore
 
 from litex.soc.interconnect.stream_sim import *
 
-from model.hdd import *
+from test.model.hdd import *
 
 
 class CommandTXPacket(list):
@@ -101,57 +101,62 @@ class CommandLogger(PacketLogger):
             yield
 
 
-class TB(Module):
-    def __init__(self):
-        self.submodules.hdd = HDD(
-                link_debug=False, link_random_level=50,
-                transport_debug=False, transport_loopback=False,
-                hdd_debug=True)
-        self.submodules.core = LiteSATACore(self.hdd.phy)
+class TestCommand(unittest.TestCase):
+    def test_command(self):
+        def generator(dut):
+            hdd = dut.hdd
+            hdd.malloc(0, 64)
+            write_data = [i for i in range(sectors2dwords(2))]
+            write_len = dwords2sectors(len(write_data))
+            write_packet = CommandTXPacket(write=1, sector=2, count=write_len, data=write_data)
+            yield from dut.streamer.send_blocking(write_packet)
+            yield from dut.logger.receive()
 
-        self.submodules.streamer = CommandStreamer()
-        self.submodules.streamer_randomizer = Randomizer(command_tx_description(32), level=50)
+            read_packet = CommandTXPacket(read=1, sector=2, count=write_len)
+            yield from dut.streamer.send_blocking(read_packet)
+            yield from dut.logger.receive()
+            read_data = dut.logger.packet
 
-        self.submodules.logger = CommandLogger()
-        self.submodules.logger_randomizer = Randomizer(command_rx_description(32), level=50)
+            # check results
+            s, l, e = check(write_data, read_data)
+            print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
+            self.assertEqual(s, 0)
+            self.assertEqual(e, 0)
 
-        self.submodules.pipeline = Pipeline(
-            self.streamer,
-            self.streamer_randomizer,
-            self.core,
-            self.logger_randomizer,
-            self.logger
-        )
+        class DUT(Module):
+            def __init__(self):
+                self.submodules.hdd = HDD(
+                    link_debug         = False,
+                    link_random_level  = 50,
+                    transport_debug    = False,
+                    transport_loopback = False,
+                    hdd_debug          = True)
+                self.submodules.core = LiteSATACore(self.hdd.phy)
 
-def main_generator(dut):
-    hdd = dut.hdd
-    hdd.malloc(0, 64)
-    write_data = [i for i in range(sectors2dwords(2))]
-    write_len = dwords2sectors(len(write_data))
-    write_packet = CommandTXPacket(write=1, sector=2, count=write_len, data=write_data)
-    yield from dut.streamer.send_blocking(write_packet)
-    yield from dut.logger.receive()
+                self.submodules.streamer = CommandStreamer()
+                self.submodules.streamer_randomizer = Randomizer(command_tx_description(32), level=50)
 
-    read_packet = CommandTXPacket(read=1, sector=2, count=write_len)
-    yield from dut.streamer.send_blocking(read_packet)
-    yield from dut.logger.receive()
-    read_data = dut.logger.packet
+                self.submodules.logger = CommandLogger()
+                self.submodules.logger_randomizer = Randomizer(command_rx_description(32), level=50)
 
-    # check results
-    s, l, e = check(write_data, read_data)
-    print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
+                self.submodules.pipeline = Pipeline(
+                    self.streamer,
+                    self.streamer_randomizer,
+                    self.core,
+                    self.logger_randomizer,
+                    self.logger
+                )
 
-if __name__ == "__main__":
-    tb = TB()
-    generators = {
-        "sys" :   [main_generator(tb),
-                   tb.hdd.link.generator(),
-                   tb.streamer.generator(),
-                   tb.streamer_randomizer.generator(),
-                   tb.logger.generator(),
-                   tb.logger_randomizer.generator(),
-                   tb.hdd.phy.rx.generator(),
-                   tb.hdd.phy.tx.generator()]
-    }
-    clocks = {"sys": 10}
-    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
+        dut = DUT()
+        generators = {
+            "sys" :   [generator(dut),
+                       dut.hdd.link.generator(),
+                       dut.streamer.generator(),
+                       dut.streamer_randomizer.generator(),
+                       dut.logger.generator(),
+                       dut.logger_randomizer.generator(),
+                       dut.hdd.phy.rx.generator(),
+                       dut.hdd.phy.tx.generator()]
+        }
+        clocks = {"sys": 10}
+        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
