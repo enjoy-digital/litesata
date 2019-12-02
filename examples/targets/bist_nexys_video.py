@@ -4,6 +4,7 @@
 from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from litex.soc.cores.clock import *
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.cores.uart import UARTWishboneBridge
 
@@ -18,28 +19,16 @@ class CRG(Module):
     def __init__(self, platform):
         self.clock_domains.cd_sys = ClockDomain()
 
-        clk_se = platform.request("clk100")
+        clk100 = platform.request("clk100")
+        try:
+            cpu_reset = platform.request("cpu_reset")
+        except:
+            cpu_reset = ~platform.request("cpu_reset_n")
 
-        cpu_reset = ~platform.request("cpu_reset") # FIXME
-
-        pll_locked = Signal()
-        pll_fb = Signal()
-        pll_sys = Signal()
-        self.specials += [
-            Instance("PLLE2_BASE",
-                p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
-
-                # VCO @ 1GHz
-                p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=10.0,
-                p_CLKFBOUT_MULT=10, p_DIVCLK_DIVIDE=1,
-                i_CLKIN1=clk_se, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
-
-                # 100MHz
-                p_CLKOUT0_DIVIDE=10, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=pll_sys
-            ),
-            Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
-            AsyncResetSynchronizer(self.cd_sys, ~pll_locked | cpu_reset),
-        ]
+        self.submodules.pll = pll = S7PLL(speedgrade=-1)
+        self.comb += pll.reset.eq(cpu_reset)
+        pll.register_clkin(clk100, 100e6)
+        pll.create_clkout(self.cd_sys, 100e6)
 
 
 class StatusLeds(Module):

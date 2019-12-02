@@ -4,6 +4,7 @@
 from migen.genlib.cdc import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from litex.soc.cores.clock import *
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.cores.uart import UARTWishboneBridge
 
@@ -19,40 +20,15 @@ class CRG(Module):
         self.clock_domains.cd_sys = ClockDomain()
 
         clk200 = platform.request("clk200")
-        clk200_se = Signal()
-        self.specials += Instance("IBUFDS", i_I=clk200.p, i_IB=clk200.n, o_O=clk200_se)
-
         try:
             cpu_reset = platform.request("cpu_reset")
         except:
             cpu_reset = ~platform.request("cpu_reset_n")
 
-        pll_locked = Signal()
-        pll_fb = Signal()
-        pll_sys = Signal()
-        self.specials += [
-            Instance("PLLE2_BASE",
-                p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
-
-                # VCO @ 1GHz
-                p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=5.0,
-                p_CLKFBOUT_MULT=5, p_DIVCLK_DIVIDE=1,
-                i_CLKIN1=clk200_se, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
-
-                # 200MHz
-                p_CLKOUT0_DIVIDE=5, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=pll_sys,
-
-                p_CLKOUT1_DIVIDE=2, p_CLKOUT1_PHASE=0.0, #o_CLKOUT1=,
-
-                p_CLKOUT2_DIVIDE=2, p_CLKOUT2_PHASE=0.0, #o_CLKOUT2=,
-
-                p_CLKOUT3_DIVIDE=2, p_CLKOUT3_PHASE=0.0, #o_CLKOUT3=,
-
-                p_CLKOUT4_DIVIDE=2, p_CLKOUT4_PHASE=0.0, #o_CLKOUT4=
-            ),
-            Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
-            AsyncResetSynchronizer(self.cd_sys, ~pll_locked | cpu_reset),
-        ]
+        self.submodules.pll = pll = S7PLL(speedgrade=-1)
+        self.comb += pll.reset.eq(cpu_reset)
+        pll.register_clkin(clk200, 200e6)
+        pll.create_clkout(self.cd_sys, 200e6)
 
 
 class StatusLeds(Module):
