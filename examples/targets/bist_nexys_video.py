@@ -88,10 +88,6 @@ class StatusLeds(Module):
 
 class BISTSoC(SoCMini):
     default_platform = "kc705"
-    csr_map = {
-        "sata_bist": 16
-    }
-    csr_map.update(SoCMini.csr_map)
     def __init__(self, platform, revision="sata_gen2", data_width=16):
         sys_clk_freq = int(100e6)
         SoCMini.__init__(self, platform, sys_clk_freq,
@@ -114,6 +110,7 @@ class BISTSoC(SoCMini):
         self.submodules.sata_core     = LiteSATACore(self.sata_phy)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
         self.submodules.sata_bist     = LiteSATABIST(self.sata_crossbar, with_csr=True)
+        self.add_csr("sata_bist")
 
         # Status Leds ------------------------------------------------------------------------------
         self.submodules.leds = StatusLeds(platform, self.sata_phy)
@@ -136,10 +133,6 @@ set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
 # BISTSoCDevel -------------------------------------------------------------------------------------
 
 class BISTSoCDevel(BISTSoC):
-    csr_map = {
-        "analyzer": 17
-    }
-    csr_map.update(BISTSoC.csr_map)
     def __init__(self, platform):
         from litescope import LiteScopeAnalyzer
         BISTSoC.__init__(self, platform)
@@ -161,5 +154,6 @@ class BISTSoCDevel(BISTSoC):
             self.sata_core.command.tx.fsm,
         ]
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, csr_csv="test/analyzer.csv")
+        self.add_csr("analyzer")
 
 default_subtarget = BISTSoCDevel

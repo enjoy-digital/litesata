@@ -20,13 +20,6 @@ from targets.bist import CRG, StatusLeds
 
 class MirroringSoC(SoCMini):
     default_platform = "kc705"
-    csr_map = {
-        "sata_bist0": 16,
-        "sata_bist1": 17,
-        "sata_bist2": 18,
-        "sata_bist3": 19,
-    }
-    csr_map.update(SoCMini.csr_map)
     def __init__(self, platform, revision="sata_gen3", data_width=16, nphys=4):
         self.nphys = nphys
         clk_freq = 200*1000000
@@ -75,6 +68,7 @@ class MirroringSoC(SoCMini):
             sata_bist = LiteSATABIST(self.sata_crossbars[i], with_csr=True)
             setattr(self.submodules, "sata_bist{}".format(str(i)), sata_bist)
             self.sata_bists.append(sata_bist)
+            self.add_csr("sata_bist" + str(i))
 
         # Status Leds ------------------------------------------------------------------------------
         self.submodules.status_leds = StatusLeds(platform, self.sata_phys)

@@ -20,10 +20,6 @@ from targets.bist import CRG, StatusLeds
 
 class StripingSoC(SoCMini):
     default_platform = "kc705"
-    csr_map = {
-        "sata_bist": 16
-    }
-    csr_map.update(SoCMini.csr_map)
     def __init__(self, platform, revision="sata_gen3", data_width=16, nphys=4):
         self.nphys = nphys
         clk_freq = 200*1000000
@@ -65,6 +61,7 @@ class StripingSoC(SoCMini):
 
         # SATA Application -------------------------------------------------------------------------
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
+        self.add_csr("sata_bist")
 
         # Status Leds ------------------------------------------------------------------------------
         self.submodules.status_leds = StatusLeds(platform, self.sata_phys)
