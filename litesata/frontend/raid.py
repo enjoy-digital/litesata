@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from functools import reduce
@@ -9,7 +9,7 @@ from litesata.frontend.arbitration import LiteSATAUserPort
 
 from litex.soc.interconnect.stream_packet import Status, Arbiter, Dispatcher
 
-# striping
+# LiteSATA Striping --------------------------------------------------------------------------------
 
 class LiteSATAStripingTX(Module):
     """SATA Striping TX
@@ -127,7 +127,8 @@ class LiteSATAStriping(Module):
     def __init__(self, controllers):
 
         # # #
-        n = len(controllers)
+
+        n  = len(controllers)
         dw = len(controllers[0].sink.data)
 
         self.submodules.tx = LiteSATAStripingTX(n, dw)
@@ -139,19 +140,18 @@ class LiteSATAStriping(Module):
             ]
         self.sink, self.source = self.tx.sink, self.rx.source
 
-# mirroring
-
+# LiteSATA Mirroring -------------------------------------------------------------------------------
 
 class LiteSATAMirroringCtrl(Module):
     def __init__(self, n):
-        self.new_cmds = Signal(n)
-        self.ack_cmds = Signal(n)
+        self.new_cmds    = Signal(n)
+        self.ack_cmds    = Signal(n)
 
-        self.reading = Signal()
-        self.writing = Signal()
+        self.reading     = Signal()
+        self.writing     = Signal()
 
         self.wants_write = Signal()
-        self.write_sel = Signal(max=n)
+        self.write_sel   = Signal(max=n)
 
         # # #
 
@@ -188,10 +188,10 @@ class LiteSATAMirroringTX(Module):
         reading = Signal()
         writing = Signal()
 
-        reads = [stream.Endpoint(command_tx_description(dw)) for i in range(dw)]
+        reads  = [stream.Endpoint(command_tx_description(dw)) for i in range(dw)]
         writes = [stream.Endpoint(command_tx_description(dw)) for i in range(dw)]
         for sink, read, write in zip(sinks, reads, writes):
-            read_stall = Signal()
+            read_stall  = Signal()
             read_status = Status(read)
             self.submodules += read_status
             self.comb += [
@@ -246,7 +246,7 @@ class LiteSATAMirroringRX(Module):
         self.submodules += muxs
 
         writes = [mux.sink0 for mux in muxs]
-        reads = [mux.sink1 for mux in muxs]
+        reads  = [mux.sink1 for mux in muxs]
 
         for mux, source in zip(muxs, sources):
             self.comb += [
@@ -299,15 +299,15 @@ class LiteSATAMirroring(Module):
     Can be used for data redundancy and/or to increase total reads speed.
     """
     def __init__(self, controllers):
-        n = len(controllers)
+        n  = len(controllers)
         dw = len(controllers[0].sink.data)
         self.ports = [LiteSATAUserPort(dw) for i in range(n)]
 
         # # #
 
         self.submodules.ctrl = LiteSATAMirroringCtrl(n)
-        self.submodules.tx = LiteSATAMirroringTX(n, dw, self.ctrl)
-        self.submodules.rx = LiteSATAMirroringRX(n, dw, self.ctrl)
+        self.submodules.tx   = LiteSATAMirroringTX(n, dw, self.ctrl)
+        self.submodules.rx   = LiteSATAMirroringRX(n, dw, self.ctrl)
         for i in range(n):
             self.comb += [
                 self.ports[i].sink.connect(self.tx.sinks[i]),

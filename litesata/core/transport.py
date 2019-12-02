@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from litesata.common import *
@@ -7,7 +7,7 @@ from litesata.common import *
 def test_type(name, signal):
     return signal == fis_types[name]
 
-# transport tx
+# Transport TX -------------------------------------------------------------------------------------
 
 class LiteSATATransportTX(Module):
     def __init__(self, link):
@@ -15,12 +15,11 @@ class LiteSATATransportTX(Module):
 
         # # #
 
-        cmd_ndwords = max(fis_reg_h2d_header.length,
-                          fis_data_header.length)
+        cmd_ndwords = max(fis_reg_h2d_header.length, fis_data_header.length)
         encoded_cmd = Signal(cmd_ndwords*32)
 
-        counter = Signal(max=cmd_ndwords+1)
-        counter_ce = Signal()
+        counter       = Signal(max=cmd_ndwords+1)
+        counter_ce    = Signal()
         counter_reset = Signal()
         self.sync += \
             If(counter_reset,
@@ -29,14 +28,14 @@ class LiteSATATransportTX(Module):
                 counter.eq(counter + 1)
             )
 
-        cmd_len = Signal(len(counter))
+        cmd_len       = Signal(len(counter))
         cmd_with_data = Signal()
 
-        cmd_send = Signal()
+        cmd_send  = Signal()
         data_send = Signal()
-        cmd_done = Signal()
+        cmd_done  = Signal()
 
-        fis_type = Signal(8)
+        fis_type        = Signal(8)
         update_fis_type = Signal()
 
         def test_type_tx(name):
@@ -110,7 +109,7 @@ class LiteSATATransportTX(Module):
             )
         ]
 
-# transport rx
+# Transport RX -------------------------------------------------------------------------------------
 
 class LiteSATATransportRX(Module):
     def __init__(self, link):
@@ -124,8 +123,8 @@ class LiteSATATransportRX(Module):
                           fis_data_header.length)
         encoded_cmd = Signal(cmd_ndwords*32)
 
-        counter = Signal(max=cmd_ndwords+1)
-        counter_ce = Signal()
+        counter       = Signal(max=cmd_ndwords+1)
+        counter_ce    = Signal()
         counter_reset = Signal()
         self.sync += \
             If(counter_reset,
@@ -136,10 +135,10 @@ class LiteSATATransportRX(Module):
 
         cmd_len = Signal(len(counter))
 
-        cmd_receive = Signal()
+        cmd_receive  = Signal()
         data_receive = Signal()
-        cmd_done = Signal()
-        data_done = Signal()
+        cmd_done     = Signal()
+        data_done    = Signal()
 
         def test_type_rx(name):
             return test_type(name, link.source.data[:8])
@@ -147,7 +146,7 @@ class LiteSATATransportRX(Module):
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
 
-        fis_type = Signal(8)
+        fis_type        = Signal(8)
         update_fis_type = Signal()
 
         fsm.act("IDLE",
@@ -236,7 +235,7 @@ class LiteSATATransportRX(Module):
             )
         self.comb += cmd_done.eq((counter == cmd_len) & link.source.ready)
 
-# transport
+# Transport ----------------------------------------------------------------------------------------
 
 class LiteSATATransport(Module):
     def __init__(self, link):

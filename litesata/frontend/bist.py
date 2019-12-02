@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
 # License: BSD
 
@@ -7,29 +7,31 @@ from litesata.core.link import Scrambler
 
 from litex.soc.interconnect.csr import *
 
+# LiteSATABISTGenerator ----------------------------------------------------------------------------
+
 class LiteSATABISTGenerator(Module):
     def __init__(self, user_port, counter_width=32):
-        self.start = Signal()
-        self.sector = Signal(48)
-        self.count = Signal(16)
-        self.random = Signal()
+        self.start   = Signal()
+        self.sector  = Signal(48)
+        self.count   = Signal(16)
+        self.random  = Signal()
 
-        self.done = Signal()
+        self.done    = Signal()
         self.aborted = Signal()
-        self.errors = Signal(32)  # Note: Not used for writes
+        self.errors  = Signal(32)  # Note: Not used for writes
 
         # # #
 
-        n = user_port.dw//32
+        n          = user_port.dw//32
         count_mult = user_port.dw//user_port.controller_dw
         if count_mult == 0:
             raise ValueError
 
         source, sink = user_port.sink, user_port.source
 
-        counter = Signal(counter_width)
+        counter       = Signal(counter_width)
         counter_reset = Signal()
-        counter_ce = Signal()
+        counter_ce    = Signal()
         self.sync += \
             If(counter_reset,
                 counter.eq(0)
@@ -87,29 +89,30 @@ class LiteSATABISTGenerator(Module):
                 self.aborted.eq(self.aborted | sink.failed)
             )
 
+# LiteSATABISTChecker ------------------------------------------------------------------------------
 
 class LiteSATABISTChecker(Module):
     def __init__(self, user_port, counter_width=32):
-        self.start = Signal()
-        self.sector = Signal(48)
-        self.count = Signal(16)
-        self.random = Signal()
+        self.start   = Signal()
+        self.sector  = Signal(48)
+        self.count   = Signal(16)
+        self.random  = Signal()
 
-        self.done = Signal()
+        self.done    = Signal()
         self.aborted = Signal()
-        self.errors = Signal(counter_width)
+        self.errors  = Signal(counter_width)
 
         # # #
 
-        n = user_port.dw//32
+        n          = user_port.dw//32
         count_mult = user_port.dw//user_port.controller_dw
         if count_mult == 0:
             raise ValueError
 
         source, sink = user_port.sink, user_port.source
 
-        counter = Signal(counter_width)
-        counter_ce = Signal()
+        counter       = Signal(counter_width)
+        counter_ce    = Signal()
         counter_reset = Signal()
         self.sync += \
             If(counter_reset,
@@ -118,8 +121,8 @@ class LiteSATABISTChecker(Module):
                 counter.eq(counter + 1)
             )
 
-        error_counter = Signal(counter_width)
-        error_counter_ce = Signal()
+        error_counter       = Signal(counter_width)
+        error_counter_ce    = Signal()
         error_counter_reset = Signal()
         self.sync += \
             If(error_counter_reset,
@@ -196,26 +199,27 @@ class LiteSATABISTChecker(Module):
                 self.aborted.eq(self.aborted | sink.failed)
             )
 
+# LiteSATABISTUnitCSR ------------------------------------------------------------------------------
 
 class LiteSATABISTUnitCSR(Module, AutoCSR):
     def __init__(self, bist_unit):
-        self._start = CSR()
-        self._sector = CSRStorage(48)
-        self._count = CSRStorage(16)
-        self._loops = CSRStorage(8)
-        self._random = CSRStorage()
+        self._start   = CSR()
+        self._sector  = CSRStorage(48)
+        self._count   = CSRStorage(16)
+        self._loops   = CSRStorage(8)
+        self._random  = CSRStorage()
 
-        self._done = CSRStatus()
+        self._done    = CSRStatus()
         self._aborted = CSRStatus()
-        self._errors = CSRStatus(32)
-        self._cycles = CSRStatus(32)
+        self._errors  = CSRStatus(32)
+        self._cycles  = CSRStatus(32)
 
         # # #
 
         self.submodules += bist_unit
 
         start = self._start.r & self._start.re
-        done = self._done.status
+        done  = self._done.status
         loops = self._loops.storage
 
         self.comb += [
@@ -229,9 +233,9 @@ class LiteSATABISTUnitCSR(Module, AutoCSR):
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
-        loop_counter = Signal(8)
+        loop_counter       = Signal(8)
         loop_counter_reset = Signal()
-        loop_counter_ce = Signal()
+        loop_counter_ce    = Signal()
         self.sync += \
             If(loop_counter_reset,
                 loop_counter.eq(0)
@@ -264,9 +268,9 @@ class LiteSATABISTUnitCSR(Module, AutoCSR):
             )
         )
 
-        cycles_counter = Signal(32)
+        cycles_counter       = Signal(32)
         cycles_counter_reset = Signal()
-        cycles_counter_ce = Signal()
+        cycles_counter_ce    = Signal()
         self.sync += \
             If(cycles_counter_reset,
                 cycles_counter.eq(0)
@@ -280,11 +284,12 @@ class LiteSATABISTUnitCSR(Module, AutoCSR):
             self._cycles.status.eq(cycles_counter)
         ]
 
+# LiteSATABISTIdentify -----------------------------------------------------------------------------
 
 class LiteSATABISTIdentify(Module):
     def __init__(self, user_port):
-        self.start = Signal()
-        self.done  = Signal()
+        self.start      = Signal()
+        self.done       = Signal()
         self.data_width = user_port.dw
 
         fifo = ResetInserter()(stream.SyncFIFO([("data", 32)], 512, buffered=True))
@@ -330,15 +335,16 @@ class LiteSATABISTIdentify(Module):
             )
         )
 
+# LiteSATABISTIdentifyCSR --------------------------------------------------------------------------
 
 class LiteSATABISTIdentifyCSR(Module, AutoCSR):
     def __init__(self, bist_identify):
-        self._start = CSR()
-        self._done = CSRStatus()
-        self._data_width = CSRStatus(16, reset=bist_identify.data_width)
+        self._start        = CSR()
+        self._done         = CSRStatus()
+        self._data_width   = CSRStatus(16, reset=bist_identify.data_width)
         self._source_valid = CSRStatus()
         self._source_ready = CSR()
-        self._source_data = CSRStatus(32)
+        self._source_data  = CSRStatus(32)
 
         # # #
 
@@ -352,16 +358,17 @@ class LiteSATABISTIdentifyCSR(Module, AutoCSR):
             bist_identify.source.ready.eq(self._source_ready.r & self._source_ready.re)
         ]
 
+# LiteSATABIST --------------------------------------------------------------------------
 
 class LiteSATABIST(Module, AutoCSR):
     def __init__(self, crossbar, with_csr=False, counter_width=32):
         generator = LiteSATABISTGenerator(crossbar.get_port(), counter_width)
-        checker = LiteSATABISTChecker(crossbar.get_port(), counter_width)
-        identify = LiteSATABISTIdentify(crossbar.get_port())
+        checker   = LiteSATABISTChecker(crossbar.get_port(), counter_width)
+        identify  = LiteSATABISTIdentify(crossbar.get_port())
         if with_csr:
             generator = LiteSATABISTUnitCSR(generator)
-            checker = LiteSATABISTUnitCSR(checker)
-            identify = LiteSATABISTIdentifyCSR(identify)
+            checker   = LiteSATABISTUnitCSR(checker)
+            identify  = LiteSATABISTIdentifyCSR(identify)
         self.submodules.generator = generator
-        self.submodules.checker = checker
-        self.submodules.identify = identify
+        self.submodules.checker   = checker
+        self.submodules.identify  = identify

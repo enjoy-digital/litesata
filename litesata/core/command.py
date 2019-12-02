@@ -1,27 +1,29 @@
-# This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
 # License: BSD
 
 from litesata.common import *
 
+# Layouts ------------------------------------------------------------------------------------------
+
 tx_to_rx = [
-    ("write", 1),
-    ("read", 1),
+    ("write",    1),
+    ("read",     1),
     ("identify", 1),
-    ("count", 16)
+    ("count",    16)
 ]
 
 rx_to_tx = [
     ("dma_activate", 1),
-    ("d2h_error", 1)
+    ("d2h_error",    1)
 ]
 
-# command tx
+# LiteSATA Command TX ------------------------------------------------------------------------------
 
 class LiteSATACommandTX(Module):
     def __init__(self, transport):
-        self.sink = sink = stream.Endpoint(command_tx_description(32))
-        self.to_rx = to_rx = stream.Endpoint(tx_to_rx)
+        self.sink    = sink    = stream.Endpoint(command_tx_description(32))
+        self.to_rx   = to_rx   = stream.Endpoint(tx_to_rx)
         self.from_rx = from_rx = stream.Endpoint(rx_to_tx)
 
         # # #
@@ -37,9 +39,9 @@ class LiteSATACommandTX(Module):
             transport.sink.data.eq(sink.data)
         ]
 
-        dwords_counter = Signal(max=fis_max_dwords)
+        dwords_counter       = Signal(max=fis_max_dwords)
         dwords_counter_reset = Signal()
-        dwords_counter_ce = Signal()
+        dwords_counter_ce    = Signal()
         self.sync += \
             If(dwords_counter_reset,
                 dwords_counter.eq(0)
@@ -47,8 +49,8 @@ class LiteSATACommandTX(Module):
                 dwords_counter.eq(dwords_counter + 1)
             )
 
-        is_write = Signal()
-        is_read = Signal()
+        is_write    = Signal()
+        is_read     = Signal()
         is_identify = Signal()
 
         self.fsm = fsm = FSM(reset_state="IDLE")
@@ -128,15 +130,15 @@ class LiteSATACommandTX(Module):
             )
         ]
 
-# command rx
+# LiteSATA Command RX ------------------------------------------------------------------------------
 
 class LiteSATACommandRX(Module):
     def __init__(self, transport):
-        self.source = source = stream.Endpoint(command_rx_description(32))
-        self.to_tx = to_tx = stream.Endpoint(rx_to_tx)
+        self.source  = source  = stream.Endpoint(command_rx_description(32))
+        self.to_tx   = to_tx   = stream.Endpoint(rx_to_tx)
         self.from_tx = from_tx = stream.Endpoint(tx_to_rx)
 
-        # debug
+        # Debug
         self.d2h_status = Signal(8)
         self.d2h_errors = Signal(8)
 
@@ -145,12 +147,12 @@ class LiteSATACommandRX(Module):
         def test_type(name):
             return transport.source.type == fis_types[name]
 
-        is_identify = Signal()
-        is_dma_activate = Signal()
-        read_ndwords = Signal(max=sectors2dwords(2**16))
-        dwords_counter = Signal(max=sectors2dwords(2**16))
+        is_identify          = Signal()
+        is_dma_activate      = Signal()
+        read_ndwords         = Signal(max=sectors2dwords(2**16))
+        dwords_counter       = Signal(max=sectors2dwords(2**16))
         dwords_counter_reset = Signal()
-        dwords_counter_ce = Signal()
+        dwords_counter_ce    = Signal()
         self.sync += \
             If(dwords_counter_reset,
                 dwords_counter.eq(0)
@@ -165,7 +167,7 @@ class LiteSATACommandRX(Module):
             )
         self.comb += read_done.eq(dwords_counter == read_ndwords)
 
-        d2h_error = Signal()
+        d2h_error     = Signal()
         clr_d2h_error = Signal()
         set_d2h_error = Signal()
         self.sync += \
@@ -175,7 +177,7 @@ class LiteSATACommandRX(Module):
                 d2h_error.eq(1)
             )
 
-        read_error = Signal()
+        read_error     = Signal()
         clr_read_error = Signal()
         set_read_error = Signal()
         self.sync += \
@@ -308,7 +310,7 @@ class LiteSATACommandRX(Module):
             to_tx.d2h_error.eq(d2h_error)
         ]
 
-# command
+# LiteSATA Command ---------------------------------------------------------------------------------
 
 class LiteSATACommand(Module):
     def __init__(self, transport):

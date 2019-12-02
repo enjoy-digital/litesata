@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
 # License: BSD
 
@@ -8,7 +8,7 @@ from operator import xor
 
 from litesata.common import *
 
-# link crc
+# Link CRC -----------------------------------------------------------------------------------------
 
 class CRCEngine(Module):
     """Cyclic Redundancy Check Engine
@@ -93,13 +93,13 @@ class LiteSATACRC(Module):
     error : out
         CRC error (used for checker).
     """
-    width = 32
+    width   = 32
     polynom = 0x04C11DB7
-    init = 0x52325032
-    check = 0x00000000
+    init    = 0x52325032
+    check   = 0x00000000
 
     def __init__(self):
-        self.data = Signal(self.width)
+        self.data  = Signal(self.width)
         self.value = Signal(self.width)
         self.error = Signal()
 
@@ -136,9 +136,9 @@ class LiteSATACRCInserter(Module):
         Packets output with CRC.
     """
     def __init__(self, description):
-        self.sink = sink = stream.Endpoint(description)
+        self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
-        self.busy = Signal()
+        self.busy   = Signal()
 
         # # #
 
@@ -191,9 +191,9 @@ class LiteSATACRCChecker(Module):
         on last when CRC OK / set to 1 when CRC KO.
     """
     def __init__(self, description):
-        self.sink = sink = stream.Endpoint(description)
+        self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
-        self.busy = Signal()
+        self.busy   = Signal()
 
         # # #
 
@@ -201,14 +201,14 @@ class LiteSATACRCChecker(Module):
         self.submodules += crc
 
         error = Signal()
-        fifo = ResetInserter()(stream.SyncFIFO(description, 2))
+        fifo  = ResetInserter()(stream.SyncFIFO(description, 2))
         self.submodules += fifo
 
         fsm = FSM(reset_state="RESET")
         self.submodules += fsm
 
-        fifo_in = Signal()
-        fifo_out = Signal()
+        fifo_in   = Signal()
+        fifo_out  = Signal()
         fifo_full = Signal()
 
         self.comb += [
@@ -251,7 +251,7 @@ class LiteSATACRCChecker(Module):
         )
         self.comb += self.busy.eq(~fsm.ongoing("IDLE"))
 
-# link scrambler
+# Link Scrambling ----------------------------------------------------------------------------------
 
 @CEInserter()
 class Scrambler(Module):
@@ -269,7 +269,7 @@ class Scrambler(Module):
 
         # # #
 
-        context = Signal(16, reset=0xf0f6)
+        context    = Signal(16, reset=0xf0f6)
         next_value = Signal(32)
         self.sync += context.eq(next_value[16:32])
 
@@ -321,7 +321,7 @@ class Scrambler(Module):
 @ResetInserter()
 class LiteSATAScrambler(Module):
     def __init__(self, description):
-        self.sink = sink = stream.Endpoint(description)
+        self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
         # # #
@@ -334,18 +334,18 @@ class LiteSATAScrambler(Module):
             source.data.eq(sink.data ^ scrambler.value)
         ]
 
-# link cont
+# Link Clock Compensation --------------------------------------------------------------------------
 
 class LiteSATACONTInserter(Module):
     def __init__(self, description):
-        self.sink = sink = stream.Endpoint(description)
+        self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
         # # #
 
-        counter = Signal(max=4)
+        counter       = Signal(max=4)
         counter_reset = Signal()
-        counter_ce = Signal()
+        counter_ce    = Signal()
         self.sync += \
             If(counter_reset,
                 counter.eq(0)
@@ -353,10 +353,10 @@ class LiteSATACONTInserter(Module):
                 counter.eq(counter + 1)
             )
 
-        is_data = Signal()
+        is_data  = Signal()
         was_data = Signal()
         was_hold = Signal()
-        change = Signal()
+        change   = Signal()
         self.comb += is_data.eq(sink.charisk == 0)
 
         last_data = Signal(32)
@@ -379,7 +379,7 @@ class LiteSATACONTInserter(Module):
             is_data
         )
 
-        # scrambler
+        # Scrambler
         scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler
 
@@ -414,17 +414,16 @@ class LiteSATACONTInserter(Module):
             )
         ]
 
-
 class LiteSATACONTRemover(Module):
     def __init__(self, description):
-        self.sink = sink = stream.Endpoint(description)
+        self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
         # # #
 
-        is_data = Signal()
-        is_cont = Signal()
-        in_cont = Signal()
+        is_data      = Signal()
+        is_cont      = Signal()
+        in_cont      = Signal()
         cont_ongoing = Signal()
 
         self.comb += [
@@ -458,11 +457,11 @@ class LiteSATACONTRemover(Module):
             )
         ]
 
-# link align
+# Link Alignment -----------------------------------------------------------------------------------
 
 class LiteSATAALIGNInserter(Module):
     def __init__(self, description):
-        self.sink = sink = stream.Endpoint(description)
+        self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
         # # #
@@ -470,7 +469,7 @@ class LiteSATAALIGNInserter(Module):
         # send 2 ALIGN every 256 DWORDs
         # used for clock compensation between
         # HOST and device
-        cnt = Signal(8)
+        cnt  = Signal(8)
         send = Signal()
         self.sync += \
             If(source.valid & source.ready,
@@ -494,13 +493,13 @@ class LiteSATAALIGNInserter(Module):
 
 class LiteSATAALIGNRemover(Module):
     def __init__(self, description):
-        self.sink = sink = stream.Endpoint(description)
+        self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
         # # #
 
         charisk_match = sink.charisk == 0b0001
-        data_match = sink.data == primitives["ALIGN"]
+        data_match    = sink.data == primitives["ALIGN"]
 
         self.comb += \
             If(sink.valid & charisk_match & data_match,
@@ -509,19 +508,19 @@ class LiteSATAALIGNRemover(Module):
                 sink.connect(source)
             )
 
-# link tx
+# Link TX ------------------------------------------------------------------------------------------
 
 from_rx = [
-    ("idle", 1),
-    ("insert", 32),
+    ("idle",            1),
+    ("insert",          32),
     ("primitive_valid", 1),
-    ("primitive", 32)
+    ("primitive",       32)
 ]
 
 class LiteSATALinkTX(Module):
     def __init__(self):
-        self.sink = sink = stream.Endpoint(link_description(32))
-        self.source = source = stream.Endpoint(phy_description(32))
+        self.sink    = sink   = stream.Endpoint(link_description(32))
+        self.source  = source = stream.Endpoint(phy_description(32))
         self.from_rx = stream.Endpoint(from_rx)
 
         self.error = Signal()
@@ -529,14 +528,14 @@ class LiteSATALinkTX(Module):
         # # #
 
         # CRC / Scrambler
-        crc = LiteSATACRCInserter(link_description(32))
+        crc       = LiteSATACRCInserter(link_description(32))
         scrambler = LiteSATAScrambler(link_description(32))
-        pipeline = Pipeline(sink, crc, scrambler)
+        pipeline  = Pipeline(sink, crc, scrambler)
         self.submodules += crc, scrambler, pipeline
 
         # datas / primitives mux
         insert = Signal(32)
-        copy = Signal()
+        copy   = Signal()
         self.comb += [
             If(self.from_rx.insert,
                 source.valid.eq(1),
@@ -636,25 +635,25 @@ class LiteSATALinkTX(Module):
             )
         ]
 
-# link rx
+# Link RX ------------------------------------------------------------------------------------------
 
 class LiteSATALinkRX(Module):
     def __init__(self):
-        self.sink = sink = stream.Endpoint(phy_description(32))
+        self.sink   = sink   = stream.Endpoint(phy_description(32))
         self.source = source = stream.Endpoint(link_description(32))
-        self.hold = Signal()
-        self.to_tx = stream.Endpoint(from_rx)
+        self.hold   = Signal()
+        self.to_tx  = stream.Endpoint(from_rx)
 
         # # #
 
-        # always ready from phy
+        # Always ready from phy
         self.comb += sink.ready.eq(1)
 
-        # datas / primitives detection
-        insert = Signal(32)
-        data_valid = Signal()
+        # Datas / primitives detection
+        insert          = Signal(32)
+        data_valid      = Signal()
         primitive_valid = Signal()
-        primitive = Signal(32)
+        primitive       = Signal(32)
         self.comb += [
             If(sink.valid,
                 data_valid.eq(sink.charisk == 0),
@@ -663,13 +662,13 @@ class LiteSATALinkRX(Module):
             primitive.eq(sink.data)
         ]
 
-        # descrambler / CRC
+        # Descrambler / CRC
         descrambler = LiteSATAScrambler(link_description(32))
-        crc = LiteSATACRCChecker(link_description(32))
-        pipeline = Pipeline(descrambler, crc, source)
+        crc         = LiteSATACRCChecker(link_description(32))
+        pipeline    = Pipeline(descrambler, crc, source)
         self.submodules += descrambler, crc, pipeline
 
-        # internal logic
+        # Internal logic
         self.crc_error = crc_error = Signal()
         self.sync += \
             If(crc.source.valid & crc.source.last & crc.source.ready,
@@ -746,7 +745,7 @@ class LiteSATALinkRX(Module):
             )
         )
 
-        # to TX
+        # To TX
         self.comb += [
             self.to_tx.idle.eq(fsm.ongoing("IDLE")),
             self.to_tx.insert.eq(insert),
@@ -754,31 +753,26 @@ class LiteSATALinkRX(Module):
             self.to_tx.primitive.eq(primitive)
         ]
 
-# link
+# Link ---------------------------------------------------------------------------------------------
 
 class LiteSATALink(Module):
     def __init__(self, phy):
-        # tx
+        # TX ---------------------------------------------------------------------------------------
         self.submodules.tx = BufferizeEndpoints({"source": DIR_SOURCE})(LiteSATALinkTX())
         self.submodules.tx_align = LiteSATAALIGNInserter(phy_description(32))
-        self.submodules.tx_pipeline = Pipeline(self.tx,
-                                               self.tx_align,
-                                               phy)
+        self.submodules.tx_pipeline = Pipeline(self.tx, self.tx_align, phy)
 
-        # rx
+        # RX ---------------------------------------------------------------------------------------
         self.submodules.rx_align = LiteSATAALIGNRemover(phy_description(32))
         self.submodules.rx_cont = LiteSATACONTRemover(phy_description(32))
         self.submodules.rx = BufferizeEndpoints({"sink": DIR_SINK})(LiteSATALinkRX())
         self.submodules.rx_buffer = stream.SyncFIFO(link_description(32), 128)
-        self.submodules.rx_pipeline = Pipeline(phy,
-                                               self.rx_align,
-                                               self.rx_cont,
-                                               self.rx,
-                                               self.rx_buffer)
-        # rx --> tx
+        self.submodules.rx_pipeline = Pipeline(phy, self.rx_align, self.rx_cont, self.rx, self.rx_buffer)
+
+        # RX --> TX --------------------------------------------------------------------------------
         self.comb += self.rx.to_tx.connect(self.tx.from_rx)
 
         self.sink, self.source = self.tx_pipeline.sink, self.rx_pipeline.source
 
-        # hold
+        # Hold -------------------------------------------------------------------------------------
         self.comb += self.rx.hold.eq(self.rx_buffer.level > 64)
