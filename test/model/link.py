@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import subprocess
@@ -8,6 +8,7 @@ from litesata.common import *
 
 from litex.soc.interconnect.stream_sim import randn
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_link(s, n=None):
     print("[LNK{}]: {}".format("" if n is None else str(n), s))
@@ -21,15 +22,17 @@ def import_scrambler_datas():
         out, err = process.communicate()
     return [int(e, 16) for e in out.decode("utf-8").split("\n")[:-1]]
 
+# LinkPacket ---------------------------------------------------------------------------------------
 
 class LinkPacket(list):
     def __init__(self, init=[]):
         self.ongoing = False
-        self.done = False
+        self.done    = False
         self.scrambled_datas = import_scrambler_datas()
         for dword in init:
             self.append(dword)
 
+# LinkRXPacket -------------------------------------------------------------------------------------
 
 class LinkRXPacket(LinkPacket):
     def descramble(self):
@@ -42,8 +45,8 @@ class LinkRXPacket(LinkPacket):
             stdin += "0x{:08x} ".format(v)
         stdin += "exit"
         with subprocess.Popen("./test/model/crc",
-                              stdin=subprocess.PIPE,
-                              stdout=subprocess.PIPE) as process:
+            stdin  = subprocess.PIPE,
+            stdout = subprocess.PIPE) as process:
             process.stdin.write(stdin.encode("ASCII"))
             out, err = process.communicate()
         crc = int(out.decode("ASCII"), 16)
@@ -55,6 +58,7 @@ class LinkRXPacket(LinkPacket):
         self.descramble()
         return self.check_crc()
 
+# LinkTXPacket -------------------------------------------------------------------------------------
 
 class LinkTXPacket(LinkPacket):
     def insert_crc(self):
@@ -63,8 +67,8 @@ class LinkTXPacket(LinkPacket):
             stdin += "0x{:08x} ".format(v)
         stdin += "exit"
         with subprocess.Popen("./test/model/crc",
-                              stdin=subprocess.PIPE,
-                              stdout=subprocess.PIPE) as process:
+            stdin  = subprocess.PIPE,
+            stdout = subprocess.PIPE) as process:
             process.stdin.write(stdin.encode("ASCII"))
             out, err = process.communicate()
         crc = int(out.decode("ASCII"), 16)
@@ -80,21 +84,22 @@ class LinkTXPacket(LinkPacket):
         if hasattr(self, "data_error_injection"):
             self[-1] = ~self[-1] # inverse bits of last data
 
+# LinkLayer ----------------------------------------------------------------------------------------
 
 class LinkLayer(Module):
     def __init__(self, phy, debug=False, random_level=0):
-        self.phy = phy
+        self.phy   = phy
         self.debug = debug
         self.random_level = random_level
         self.tx_packets = []
-        self.tx_packet = LinkTXPacket()
-        self.rx_packet = LinkRXPacket()
+        self.tx_packet  = LinkTXPacket()
+        self.rx_packet  = LinkRXPacket()
 
-        self.rx_cont = False
-        self.rx_last = 0
-        self.tx_cont = False
+        self.rx_cont    = False
+        self.rx_last    = 0
+        self.tx_cont    = False
         self.tx_cont_nb = -1
-        self.tx_lasts = [0, 0, 0]
+        self.tx_lasts   = [0, 0, 0]
 
         self.scrambled_datas = import_scrambler_datas()
 

@@ -1,15 +1,17 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from litesata.common import *
 
+# PHYDword -----------------------------------------------------------------------------------------
 
 class PHYDword:
     def __init__(self, dat=0):
-        self.dat = dat
+        self.dat   = dat
         self.start = 1
-        self.done = 0
+        self.done  = 0
 
+# PHYSource ----------------------------------------------------------------------------------------
 
 class PHYSource(Module):
     def __init__(self):
@@ -33,6 +35,7 @@ class PHYSource(Module):
             yield self.source.data.eq(self.dword.dat)
             yield
 
+# PHYSink ------------------------------------------------------------------------------------------
 
 class PHYSink(Module):
     def __init__(self):
@@ -57,6 +60,7 @@ class PHYSink(Module):
                 self.dword.dat = (yield self.sink.data)
             yield
 
+# PHY Layer model ----------------------------------------------------------------------------------
 
 class PHYLayer(Module):
     def __init__(self):
@@ -65,7 +69,7 @@ class PHYLayer(Module):
         self.submodules.tx = PHYSource()
 
         self.source = self.tx.source
-        self.sink = self.rx.sink
+        self.sink   = self.rx.sink
 
     def send(self, dword):
         packet = PHYDword(dword)

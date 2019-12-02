@@ -1,10 +1,11 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from litesata.common import *
 
 from test.model.link import LinkTXPacket
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_transport(s, n=None):
     print("[TRN{}]: {}".format("" if n is None else str(n), s))
@@ -13,12 +14,13 @@ def print_transport(s, n=None):
 def get_field_data(field, packet):
     return (packet[field.byte//4] >> field.offset) & (2**field.width-1)
 
+# FIS ----------------------------------------------------------------------------------------------
 
 class FIS:
     def __init__(self, packet, description, direction="H2D"):
-        self.packet = packet
+        self.packet      = packet
         self.description = description
-        self.direction = direction
+        self.direction   = direction
         self.decode()
 
     def decode(self):
@@ -39,11 +41,12 @@ class FIS:
             r += k + " : 0x{:x}".format(getattr(self, k)) + "\n"
         return r
 
+# FIS_REG_H2D --------------------------------------------------------------------------------------
 
 class FIS_REG_H2D(FIS):
     def __init__(self, packet=[0]*fis_reg_h2d_header.length):
         FIS.__init__(self, packet, fis_reg_h2d_header.fields)
-        self.type = fis_types["REG_H2D"]
+        self.type      = fis_types["REG_H2D"]
         self.direction = "H2D"
 
     def __repr__(self):
@@ -51,11 +54,12 @@ class FIS_REG_H2D(FIS):
         r += FIS.__repr__(self)
         return r
 
+# FIS_REG_D2H --------------------------------------------------------------------------------------
 
 class FIS_REG_D2H(FIS):
     def __init__(self, packet=[0]*fis_reg_d2h_header.length):
         FIS.__init__(self, packet, fis_reg_d2h_header.fields)
-        self.type = fis_types["REG_D2H"]
+        self.type      = fis_types["REG_D2H"]
         self.direction = "D2H"
 
     def __repr__(self):
@@ -63,11 +67,12 @@ class FIS_REG_D2H(FIS):
         r += FIS.__repr__(self)
         return r
 
+# FIS_DMA_ACTIVATE_D2H -----------------------------------------------------------------------------
 
 class FIS_DMA_ACTIVATE_D2H(FIS):
     def __init__(self, packet=[0]*fis_dma_activate_d2h_header.length):
         FIS.__init__(self, packet, fis_dma_activate_d2h_header.fields)
-        self.type = fis_types["DMA_ACTIVATE_D2H"]
+        self.type      = fis_types["DMA_ACTIVATE_D2H"]
         self.direction = "D2H"
 
     def __repr__(self):
@@ -75,6 +80,7 @@ class FIS_DMA_ACTIVATE_D2H(FIS):
         r += FIS.__repr__(self)
         return r
 
+# FIS_DATA -----------------------------------------------------------------------------------------
 
 class FIS_DATA(FIS):
     def __init__(self, packet=[0], direction="H2D"):
@@ -88,6 +94,7 @@ class FIS_DATA(FIS):
             r += "{:08x}\n".format(data)
         return r
 
+# FIS_UNKNOWN --------------------------------------------------------------------------------------
 
 class FIS_UNKNOWN(FIS):
     def __init__(self, packet=[0], direction="H2D"):
@@ -103,16 +110,17 @@ class FIS_UNKNOWN(FIS):
             r += "{:08x}\n".format(dword)
         return r
 
+# Transport Layer model ----------------------------------------------------------------------------
 
 class TransportLayer(Module):
     def __init__(self, link, debug=False, loopback=False):
-        self.link = link
-        self.debug = debug
+        self.link     = link
+        self.debug    = debug
         self.loopback = loopback
         self.link.set_transport(self)
 
         self.command = None
-        self.n = None
+        self.n       = None
 
     def set_command(self, command):
         self.command = command

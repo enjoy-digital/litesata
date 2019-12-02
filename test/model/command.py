@@ -1,10 +1,11 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from litesata.common import *
 
 from test.model.transport import FIS_REG_H2D, FIS_DATA
 
+# Command Layer model ------------------------------------------------------------------------------
 
 class CommandLayer(Module):
     def __init__(self, transport):
@@ -12,7 +13,7 @@ class CommandLayer(Module):
         self.transport.set_command(self)
 
         self.hdd = None
-        self.n = None
+        self.n   = None
 
     def set_hdd(self, hdd):
         self.hdd = hdd

@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import math
@@ -10,17 +10,20 @@ from test.model.link import *
 from test.model.transport import *
 from test.model.command import *
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_hdd(s, n=None):
     print( "[HDD{}]: {}".format("" if n is None else str(n), s))
 
+# HDD Mem Region -----------------------------------------------------------------------------------
 
 class HDDMemRegion:
     def __init__(self, base, count, sector_size):
-        self.base = base
+        self.base  = base
         self.count = count
-        self.data = [0]*(count*sector_size//4)
+        self.data  = [0]*(count*sector_size//4)
 
+# HDD model ----------------------------------------------------------------------------------------
 
 class HDD(Module):
     def __init__(self, n=None,
@@ -28,23 +31,23 @@ class HDD(Module):
             transport_debug=False, transport_loopback=False,
             hdd_debug=False):
         self.n = n
-        self.submodules.phy = PHYLayer()
-        self.submodules.link = LinkLayer(self.phy, link_debug, link_random_level)
+        self.submodules.phy       = PHYLayer()
+        self.submodules.link      = LinkLayer(self.phy, link_debug, link_random_level)
         self.submodules.transport = TransportLayer(self.link, transport_debug, transport_loopback)
-        self.submodules.command = CommandLayer(self.transport)
+        self.submodules.command   = CommandLayer(self.transport)
 
         self.command.set_hdd(self)
 
-        self.debug = hdd_debug
-        self.mem = None
-        self.wr_sector = 0
+        self.debug         = hdd_debug
+        self.mem           = None
+        self.wr_sector     = 0
         self.wr_end_sector = 0
-        self.rd_sector = 0
+        self.rd_sector     = 0
         self.rx_end_sector = 0
 
-        self.reg_d2h_status = 0
+        self.reg_d2h_status       = 0
         self.data_error_injection = 0
-        self.busy = 0
+        self.busy                 = 0
 
     def malloc(self, sector, count):
         if self.debug:
