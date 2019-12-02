@@ -101,26 +101,14 @@ class StripingSoCDevel(StripingSoC):
         from litescope import LiteScopeAnalyzer
         StripingSoC.__init__(self, platform)
 
-        self.sata_core0_link_tx_fsm_state = Signal(4)
-        self.sata_core0_link_rx_fsm_state = Signal(4)
-
-        self.sata_core1_link_tx_fsm_state = Signal(4)
-        self.sata_core1_link_rx_fsm_state = Signal(4)
-
-        self.sata_core2_link_tx_fsm_state = Signal(4)
-        self.sata_core2_link_rx_fsm_state = Signal(4)
-
-        self.sata_core3_link_tx_fsm_state = Signal(4)
-        self.sata_core3_link_rx_fsm_state = Signal(4)
-
-        debug = [
+        analyzer_signals = [
             self.sata_phy0.ctrl.ready,
             self.sata_phy1.ctrl.ready,
             self.sata_phy2.ctrl.ready,
             self.sata_phy3.ctrl.ready,
 
-            self.sata_core0_link_tx_fsm_state,
-            self.sata_core0_link_rx_fsm_state,
+            self.sata_core0.link.tx.fsm,
+            self.sata_core0.link.rx.fsm,
 
             self.sata_core0.sink.valid,
             self.sata_core0.source.valid,
@@ -133,8 +121,8 @@ class StripingSoCDevel(StripingSoC):
             self.sata_phy0.sink.data,
             self.sata_phy0.sink.charisk,
 
-            self.sata_core1_link_tx_fsm_state,
-            self.sata_core1_link_rx_fsm_state,
+            self.sata_core1.link.tx.fsm,
+            self.sata_core1.link.rx.fsm,
 
             self.sata_core1.sink.valid,
             self.sata_core1.source.valid,
@@ -147,8 +135,8 @@ class StripingSoCDevel(StripingSoC):
             self.sata_phy1.sink.data,
             self.sata_phy1.sink.charisk,
 
-            self.sata_core2_link_tx_fsm_state,
-            self.sata_core2_link_rx_fsm_state,
+            self.sata_core2.link.tx.fsm,
+            self.sata_core2.link.rx.fsm,
 
             self.sata_core2.sink.valid,
             self.sata_core2.source.valid,
@@ -161,8 +149,8 @@ class StripingSoCDevel(StripingSoC):
             self.sata_phy2.sink.data,
             self.sata_phy2.sink.charisk,
 
-            self.sata_core3_link_tx_fsm_state,
-            self.sata_core3_link_rx_fsm_state,
+            self.sata_core3.link.tx.fsm,
+            self.sata_core3.link.rx.fsm,
 
             self.sata_core3.sink.valid,
             self.sata_core3.source.valid,
@@ -176,23 +164,6 @@ class StripingSoCDevel(StripingSoC):
             self.sata_phy3.sink.charisk
         ]
 
-        self.submodules.analyzer = LiteScopeAnalyzer(debug, 2048)
-
-    def do_finalize(self):
-        StripingSoC.do_finalize(self)
-        self.comb += [
-            self.sata_core0_link_rx_fsm_state.eq(self.sata_core0.link.rx.fsm.state),
-            self.sata_core0_link_tx_fsm_state.eq(self.sata_core0.link.tx.fsm.state),
-            self.sata_core1_link_rx_fsm_state.eq(self.sata_core1.link.rx.fsm.state),
-            self.sata_core1_link_tx_fsm_state.eq(self.sata_core1.link.tx.fsm.state),
-            self.sata_core2_link_rx_fsm_state.eq(self.sata_core2.link.rx.fsm.state),
-            self.sata_core2_link_tx_fsm_state.eq(self.sata_core2.link.tx.fsm.state),
-            self.sata_core3_link_rx_fsm_state.eq(self.sata_core3.link.rx.fsm.state),
-            self.sata_core3_link_tx_fsm_state.eq(self.sata_core3.link.tx.fsm.state)
-        ]
-
-    def do_exit(self, vns):
-        self.analyzer.export_csv(vns, "test/analyzer.csv")
-
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="test/analyzer.csv")
 
 default_subtarget = StripingSoC

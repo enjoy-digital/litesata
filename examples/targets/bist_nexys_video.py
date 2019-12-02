@@ -167,9 +167,6 @@ class BISTSoCDevel(BISTSoC):
             self.sata_core.command.tx.fsm,
         ]
 
-        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256)
-
-    def do_exit(self, vns):
-        self.analyzer.export_csv(vns, "test/analyzer.csv")
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, csr_csv="test/analyzer.csv")
 
 default_subtarget = BISTSoCDevel
