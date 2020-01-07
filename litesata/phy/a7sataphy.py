@@ -727,7 +727,7 @@ class A7LiteSATAPHY(Module):
             p_PCS_PCIE_EN                            ="FALSE",
 
             # PCS Attributes
-            p_PCS_RSVD_ATTR                          =0x000000000000,
+            p_PCS_RSVD_ATTR                          =0x100,
 
             # RX Buffer Attributes
             p_RXBUF_ADDR_MODE                        ="FAST",
@@ -919,7 +919,7 @@ class A7LiteSATAPHY(Module):
             p_PMA_LOOPBACK_CFG                       =0b0,
 
             # RX OOB Signalling Attributes
-            p_RXOOB_CLK_CFG                          ="PMA",
+            p_RXOOB_CLK_CFG                          ="FABRIC",
 
             # TX OOB Signalling Attributes
             p_TXOOB_CFG                              =0b0,
@@ -991,12 +991,12 @@ class A7LiteSATAPHY(Module):
             i_EYESCANTRIGGER                 =0,
 
             # Receive Ports
-            i_CLKRSVD0                       =oobclk,
-            i_CLKRSVD1                       =oobclk,
+            i_CLKRSVD0                       =0,
+            i_CLKRSVD1                       =0,
             i_DMONFIFORESET                  =0,
             i_DMONITORCLK                    =0,
             #o_RXPMARESETDONE                 =, FIXME
-            i_SIGVALIDCLK                    =0,
+            i_SIGVALIDCLK                    =oobclk,
 
             # Receive Ports - CDR Ports
             i_RXCDRFREQRESET                 =0,
