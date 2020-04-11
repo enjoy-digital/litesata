@@ -1,13 +1,18 @@
-              __   _ __      _______ _________
-             / /  (_) /____ / __/ _ /_  __/ _ |
-            / /__/ / __/ -_)\ \/ __ |/ / / __ |
-           /____/_/\__/\__/___/_/ |_/_/ /_/ |_|
+```
+                                    __   _ __      _______ _________
+                                   / /  (_) /____ / __/ _ /_  __/ _ |
+                                  / /__/ / __/ -_)\ \/ __ |/ / / __ |
+                                 /____/_/\__/\__/___/_/ |_/_/ /_/ |_|
 
-               Copyright 2014-2015 / HKU
-            Copyright 2015-2019 / EnjoyDigital
+                                     Copyright 2014-2015 / HKU
+                                  Copyright 2015-2020 / EnjoyDigital
 
-        A small footprint and configurable SATA core
-                powered by Migen & LiteX
+                              A small footprint and configurable SATA core
+                                      powered by Migen & LiteX
+```
+
+[![](https://travis-ci.com/enjoy-digital/litesata.svg?branch=master)](https://travis-ci.com/enjoy-digital/litesata) ![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)
+
 
 [> Intro
 --------
@@ -31,14 +36,16 @@ PHY:
   - Errors detection and reporting
   - 32 bits interface
   - 1.5/3.0/6.0GBps supported speeds (respectively 37.5/75/150MHz system clk)
+
 Core:
-  Link:
+
+ - Link:
     - CONT inserter/remover
     - Scrambling/Descrambling of data
     - CRC inserter/checker
     - HOLD insertion/detection
     - Errors detection and reporting
-  Transport/Command:
+  - Transport/Command:
     - Easy to use user interfaces (Can be used with or without CPU)
     - 48 bits sector addressing
     - 3 supported commands: READ_DMA(_EXT), WRITE_DMA(_EXT), IDENTIFY_DEVICE
@@ -75,14 +82,18 @@ enjoy-digital.fr.
 
 [> Getting started
 ------------------
-1. Install Python 3.5, Migen and FPGA vendor's development tools.
-   Get Migen from: https://github.com/m-labs/migen
+1. Install Python 3.6+ and FPGA vendor's development tools.
+2. Install Migen/LiteX and the LiteX's cores:
 
-2. Obtain LiteX and install it:
-  git clone https://github.com/enjoy-digital/litex --recursive
-  cd litex
-  python3 setup.py develop
-  cd ..
+```sh
+$ wget https://raw.githubusercontent.com/enjoy-digital/litex/master/litex_setup.py
+$ chmod +x litex_setup.py
+$ ./litex_setup.py init install --user (--user to install to user directory)
+```
+  Later, if you need to update all repositories:
+```sh
+$ ./litex_setup.py update
+```
 
 3. TODO: add/describe examples
 
@@ -90,9 +101,14 @@ enjoy-digital.fr.
 --------
 Unit tests are available in ./test/.
 To run all the unit tests:
-  ./setup.py test
+```sh
+$ ./setup.py test
+```
+
 Tests can also be run individually:
-  python3 -m unittest test.test_name
+```sh
+$ python3 -m unittest test.test_name
+```
 
 [> License
 ----------
