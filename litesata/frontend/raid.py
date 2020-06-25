@@ -7,7 +7,7 @@ from operator import and_, or_
 from litesata.common import *
 from litesata.frontend.arbitration import LiteSATAUserPort
 
-from litex.soc.interconnect.stream_packet import Status, Arbiter, Dispatcher
+from litex.soc.interconnect.packet import Status, Arbiter, Dispatcher
 
 # LiteSATA Striping --------------------------------------------------------------------------------
 

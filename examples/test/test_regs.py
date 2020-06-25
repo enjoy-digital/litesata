@@ -17,9 +17,6 @@ for i in range(256):
         break
 print("fpga_id: " + fpga_id)
 
-# get frequency
-print("frequency : {}MHz".format(wb.constants.system_clock_frequency/1000000))
-
 # # #
 
 wb.close()

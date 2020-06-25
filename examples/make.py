@@ -13,7 +13,7 @@ from migen.fhdl.structure import _Fragment
 from litex.build.tools import write_to_file
 from litex.build.xilinx.common import *
 
-from litex.soc.integration import cpu_interface
+from litex.soc.integration import export
 
 litesata_path = "../"
 sys.path.append(litesata_path) # XXX
@@ -144,7 +144,7 @@ System Clk: {} MHz (min: {} MHz)
         subprocess.call(["rm", "-rf", "build/*"])
 
     if actions["build-csr-csv"]:
-        csr_csv = cpu_interface.get_csr_csv(soc.csr_regions, soc.constants, soc.mem_regions)
+        csr_csv = export.get_csr_csv(soc.csr_regions, soc.constants, soc.mem_regions)
         write_to_file(args.csr_csv, csr_csv)
 
     if actions["build-core"]:

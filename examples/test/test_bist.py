@@ -30,7 +30,7 @@ class LiteSATABISTUnitDriver:
     def __init__(self, regs, constants, name):
         self.regs = regs
         self.name = name
-        self.frequency = constants.system_clock_frequency
+        self.frequency = constants.config_clock_frequency
         self.time = 0
         for s in ["start", "sector", "count", "loops", "random", "done", "aborted", "errors", "cycles"]:
             setattr(self, s, getattr(regs, name + "_" + s))
