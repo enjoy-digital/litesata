@@ -1,6 +1,9 @@
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
-# This file is Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
-# License: BSD
+#
+# This file is part of LiteSATA.
+#
+# Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
 
 from collections import OrderedDict
 from functools import reduce

@@ -4,8 +4,8 @@
                                   / /__/ / __/ -_)\ \/ __ |/ / / __ |
                                  /____/_/\__/\__/___/_/ |_/_/ /_/ |_|
 
+                                  Copyright 2014-2020 / EnjoyDigital
                                      Copyright 2014-2015 / HKU
-                                  Copyright 2015-2020 / EnjoyDigital
 
                               A small footprint and configurable SATA core
                                       powered by Migen & LiteX

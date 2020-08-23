@@ -1,7 +1,10 @@
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
-# This file is Copyright (c) 2017 Johan Klockars <Johan.Klockars@hasselblad.com>
-# This file is Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
-# License: BSD
+#
+# This file is part of LiteSATA.
+#
+# Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2017 Johan Klockars <Johan.Klockars@hasselblad.com>
+# Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
 
 from litesata.common import *
 
