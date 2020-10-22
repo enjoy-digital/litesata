@@ -144,6 +144,10 @@ set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
         # Analyzer ---------------------------------------------------------------------------------
         if with_analyzer:
             analyzer_signals = [
+                self.sata_phy.crg.tx_startup_fsm,
+                self.sata_phy.crg.rx_startup_fsm,
+                self.sata_phy.ctrl.fsm,
+
                 self.sata_phy.ctrl.ready,
                 self.sata_phy.source,
                 self.sata_phy.sink,
