@@ -19,20 +19,20 @@ class LiteSATAPHY(Module):
     For now, the Kintex7/Zynq(with PL based on K7) PHY is the only one available,
     but the achitecture is modular enough to accept others PHYs.
     """
-    def __init__(self, device, clock_pads_or_refclk, pads, revision, clk_freq, data_width=16):
-        self.clock_pads = clock_pads_or_refclk
-        self.pads = pads
-        self.revision = revision
+    def __init__(self, device, clock_pads, pads, revision, clk_freq, data_width=16):
+        self.clock_pads = clock_pads
+        self.pads       = pads
+        self.revision   = revision
 
         # Transceiver / Clocks
         if device[:4] == "xc7k": # Kintex 7
             from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHY
             self.submodules.phy = K7LiteSATAPHY(pads, revision, data_width)
-            self.submodules.crg = K7LiteSATAPHYCRG(clock_pads_or_refclk, pads, self.phy, revision, clk_freq)
+            self.submodules.crg = K7LiteSATAPHYCRG(clock_pads, pads, self.phy, revision, clk_freq)
         elif device[:4] == "xc7a": # Artix 7
             from litesata.phy.a7sataphy import A7LiteSATAPHYCRG, A7LiteSATAPHY
             self.submodules.phy = A7LiteSATAPHY(pads, revision, data_width)
-            self.submodules.crg = A7LiteSATAPHYCRG(clock_pads_or_refclk, pads, self.phy, revision, clk_freq)
+            self.submodules.crg = A7LiteSATAPHYCRG(clock_pads, pads, self.phy, revision, clk_freq)
         else:
             raise NotImplementedError
 
