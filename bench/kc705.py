@@ -107,11 +107,11 @@ class SATATestSoC(SoCMini):
 
         # SATA PHY/Core/Frontend -------------------------------------------------------------------
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
-            platform.request("sata_clocks"),
-            platform.request("sata", 0),
-            revision,
-            sys_clk_freq,
-            data_width)
+            clock_pads = platform.request("sata_clocks"),
+            pads       = platform.request("sata", 0),
+            revision   = revision,
+            clk_freq   = sys_clk_freq,
+            data_width = data_width)
         self.submodules.sata_core     = LiteSATACore(self.sata_phy)
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
         self.submodules.sata_bist     = LiteSATABIST(self.sata_crossbar, with_csr=True)
@@ -153,7 +153,7 @@ set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
                 self.sata_core.command.rx.fsm,
                 self.sata_core.command.tx.fsm,
             ]
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="analyzer.csv")
+            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="analyzer.csv")
             self.add_csr("analyzer")
 
 # Build --------------------------------------------------------------------------------------------
