@@ -10,14 +10,18 @@ import time
 import argparse
 import random as rand
 from collections import OrderedDict
+
 from litex import RemoteClient
 
-KB = 1024
-MB = 1024*KB
-GB = 1024*MB
+# Constants ----------------------------------------------------------------------------------------
+
+kb = 1024
+mb = 1024*kb
+gb = 1024*mb
 
 logical_sector_size = 512
 
+# Timer --------------------------------------------------------------------------------------------
 
 class Timer:
     def __init__(self):
@@ -30,13 +34,14 @@ class Timer:
         self._stop = time.time()
         self.value = max(self._stop - self._start, 1/1000000)
 
+# BIST Driver --------------------------------------------------------------------------------------
 
 class LiteSATABISTUnitDriver:
     def __init__(self, regs, constants, name):
-        self.regs = regs
-        self.name = name
+        self.regs      = regs
+        self.name      = name
         self.frequency = constants.config_clock_frequency
-        self.time = 0
+        self.time      = 0
         for s in ["start", "sector", "count", "loops", "random", "done", "aborted", "errors", "cycles"]:
             setattr(self, s, getattr(regs, name + "_" + s))
 
@@ -65,16 +70,20 @@ class LiteSATABISTUnitDriver:
             errors = -1
         return (aborted, errors, speed)
 
+# Generator Driver ---------------------------------------------------------------------------------
 
 class LiteSATABISTGeneratorDriver(LiteSATABISTUnitDriver):
     def __init__(self, regs, constants, name):
         LiteSATABISTUnitDriver.__init__(self, regs, constants, name + "_generator")
 
 
+# Checker Driver -----------------------------------------------------------------------------------
+
 class LiteSATABISTCheckerDriver(LiteSATABISTUnitDriver):
     def __init__(self, regs, constants, name):
         LiteSATABISTUnitDriver.__init__(self, regs, constants,name + "_checker")
 
+# Identify Driver ----------------------------------------------------------------------------------
 
 class LiteSATABISTIdentifyDriver:
     def __init__(self, regs, constants, name):
@@ -87,7 +96,7 @@ class LiteSATABISTIdentifyDriver:
     def read_fifo(self):
         self.data = []
         while self.source_valid.read():
-            dword = self.source_data.read()
+            dword    = self.source_data.read()
             word_lsb = dword & 0xffff
             word_msb = (dword >> 16) & 0xffff
             self.data += [word_lsb, word_msb]
@@ -131,65 +140,67 @@ class LiteSATABISTIdentifyDriver:
         info = "Serial Number: " + self.serial_number + "\n"
         info += "Firmware Revision: " + self.firmware_revision + "\n"
         info += "Model Number: " + self.model_number + "\n"
-        info += "Capacity: {:3.2f} GB\n".format((self.total_sectors*logical_sector_size)/GB)
+        info += "Capacity: {:3.2f} GiB\n".format((self.total_sectors*logical_sector_size)/gb)
         for k, v in self.capabilities.items():
             info += k + ": " + str(v) + "\n"
         print(info, end="")
 
+# Identify Driver ----------------------------------------------------------------------------------
+
 
 def _get_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="""\
-SATA BIST utility.
-""")
-    parser.add_argument("-s", "--transfer_size", default=1024, help="transfer sizes (in KB, up to 16MB)")
-    parser.add_argument("-l", "--total_length", default=256, help="total transfer length (in MB, up to HDD capacity)")
-    parser.add_argument("-n", "--loops", default=1, help="number of loop per transfer (allow more precision on speed calculation for small transfers)")
-    parser.add_argument("-r", "--random", action="store_true", help="use random data")
-    parser.add_argument("-c", "--continuous", action="store_true", help="continuous mode (Escape to exit)")
-    parser.add_argument("-i", "--identify", action="store_true", help="only run identify")
-    parser.add_argument("-t", "--software_timer", action="store_true", help="use software timer")
-    parser.add_argument("-a", "--random_addressing", action="store_true", help="use random addressing")
-    parser.add_argument("-d", "--delayed_read", action="store_true", help="read after total length has been written")
+        description="""LiteSATA bench BIST utility.""")
+    parser.add_argument("-s", "--transfer_size",     default=1024,        help="Transfer size (in KiB, up to 16MiB)")
+    parser.add_argument("-l", "--total_length",      default=256,         help="Total transfer length (in MiB, up to HDD capacity)")
+    parser.add_argument("-n", "--loops",             default=1,           help="Number of loop per transfer (improve precision on speed calculation for small transfers)")
+    parser.add_argument("-r", "--random",            action="store_true", help="Use random data")
+    parser.add_argument("-c", "--continuous",        action="store_true", help="Continuous mode (Escape to exit)")
+    parser.add_argument("-i", "--identify",          action="store_true", help="Only run identify")
+    parser.add_argument("-t", "--software_timer",    action="store_true", help="Use software timer")
+    parser.add_argument("-a", "--random_addressing", action="store_true", help="Use random addressing")
+    parser.add_argument("-d", "--delayed_read",      action="store_true", help="Read after total length has been written")
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = _get_args()
-    wb = RemoteClient()
+    wb   = RemoteClient()
     wb.open()
+
     # # #
-    identify = LiteSATABISTIdentifyDriver(wb.regs, wb.constants, "sata_bist")
+
+    identify  = LiteSATABISTIdentifyDriver(wb.regs,  wb.constants, "sata_bist")
     generator = LiteSATABISTGeneratorDriver(wb.regs, wb.constants, "sata_bist")
-    checker = LiteSATABISTCheckerDriver(wb.regs, wb.constants, "sata_bist")
+    checker   = LiteSATABISTCheckerDriver(wb.regs,   wb.constants, "sata_bist")
 
     identify.run()
     identify.hdd_info()
 
     if not int(args.identify):
-        count = int(args.transfer_size)*KB//logical_sector_size
-        loops = int(args.loops)
-        length = int(args.total_length)*MB
-        random = int(args.random)
-        continuous = int(args.continuous)
-        sw_timer = int(args.software_timer)
+        count             = int(args.transfer_size)*kb//logical_sector_size
+        loops             = int(args.loops)
+        length            = int(args.total_length)*mb
+        random            = int(args.random)
+        continuous        = int(args.continuous)
+        sw_timer          = int(args.software_timer)
         random_addressing = int(args.random_addressing)
 
         write_and_read_sequence = {"write": 1, "read": 1}
-        write_sequence = {"write": 1, "read": 0}
-        read_sequence = {"write": 0, "read": 1}
+        write_sequence          = {"write": 1, "read": 0}
+        read_sequence           = {"write": 0, "read": 1}
         if int(args.delayed_read):
             sequences = [write_sequence, read_sequence]
         else:
             sequences = [write_and_read_sequence]
 
         for sequence in sequences:
-            sector = 0
+            sector      = 0
             run_sectors = 0
             try:
                 while ((run_sectors*logical_sector_size < length) or continuous) and (sector < identify.total_sectors):
                     retry = 0
                     if sequence["write"]:
-                        # generator (write data to HDD)
+                        # Generator (write data to HDD)
                         write_done = False
                         while not write_done:
                             write_aborted, write_errors, write_speed = generator.run(sector, count, loops, random, True, not sw_timer)
@@ -200,7 +211,7 @@ if __name__ == "__main__":
                         write_error, write_speed = 0, 0
 
                     if sequence["read"]:
-                        # checker (read and check data from HDD)
+                        # Checker (read and check data from HDD)
                         read_done = False
                         while not read_done:
                             read_aborted, read_errors, read_speed = checker.run(sector, count, loops, random, True, not sw_timer)
@@ -211,13 +222,13 @@ if __name__ == "__main__":
                         read_errors, read_speed = 0, 0
 
                     ratio = identify.data_width.read()//32
-                    print("sector={:d} wr_speed={:4.2f}MB/s rd_speed={:4.2f}MB/s errors={:d} retry={:d} ({:d}MB)".format(
+                    print("sector:{:8d} writes:{:7.2f}MiB/s reads:{:7.2f}MiB/s errors:{:d} retry:{:d} ({:d}MiB)".format(
                         sector,
-                        write_speed/MB*ratio,
-                        read_speed/MB*ratio,
+                        write_speed/mb*ratio,
+                        read_speed/mb*ratio,
                         write_errors + read_errors,
                         retry,
-                        int(run_sectors*logical_sector_size/MB)*ratio))
+                        int(run_sectors*logical_sector_size/mb)*ratio))
                     if random_addressing:
                         sector = rand.randint(0, identify.total_sectors//(256*2))*256
                     else:
@@ -227,4 +238,5 @@ if __name__ == "__main__":
             except KeyboardInterrupt:
                 pass
     # # #
+
     wb.close()
