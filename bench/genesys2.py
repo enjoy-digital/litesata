@@ -40,24 +40,6 @@ _sata_io = [ # AB09-FMCRAID
         Subsignal("rxp", Pins("HPC:DP0_M2C_P")),
         Subsignal("rxn", Pins("HPC:DP0_M2C_N"))
     ),
-    ("sata", 1,
-        Subsignal("txp", Pins("HPC:DP1_C2M_P")),
-        Subsignal("txn", Pins("HPC:DP1_C2M_N")),
-        Subsignal("rxp", Pins("HPC:DP1_M2C_P")),
-        Subsignal("rxn", Pins("HPC:DP1_M2C_N"))
-    ),
-    ("sata", 2,
-        Subsignal("txp", Pins("HPC:DP2_C2M_P")),
-        Subsignal("txn", Pins("HPC:DP2_C2M_N")),
-        Subsignal("rxp", Pins("HPC:DP2_M2C_P")),
-        Subsignal("rxn", Pins("HPC:DP2_M2C_N"))
-    ),
-    ("sata", 3,
-        Subsignal("txp", Pins("HPC:DP3_C2M_P")),
-        Subsignal("txn", Pins("HPC:DP3_C2M_N")),
-        Subsignal("rxp", Pins("HPC:DP3_M2C_P")),
-        Subsignal("rxn", Pins("HPC:DP3_M2C_N"))
-    )
 ]
 
 # StatusLeds ---------------------------------------------------------------------------------------
