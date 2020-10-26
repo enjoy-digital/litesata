@@ -18,12 +18,14 @@ from litex.build.generic_platform import *
 from litex.soc.cores.clock import S7MMCM
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
+from litex.soc.interconnect import wishbone
 
 from litesata.common import *
 from litesata.phy import LiteSATAPHY
 from litesata.core import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABIST
+from litesata.frontend.dma import LiteSATABlock2MemDMA
 
 from litescope import LiteScopeAnalyzer
 
@@ -85,10 +87,12 @@ class SATATestSoC(SoCMini):
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, sys_clk_freq,
-            ident         = "LiteSATA bench on KC705",
-            ident_version = True,
-            with_uart     = True,
-            uart_name     = "bridge")
+            integrated_sram_size = 0x1000,
+            ident                = "LiteSATA bench on KC705",
+            ident_version        = True,
+            with_uart            = True,
+            uart_name            = "bridge",
+        )
 
         # SATA -------------------------------------------------------------------------------------
         # RefClk
@@ -119,6 +123,12 @@ class SATATestSoC(SoCMini):
         # BIST
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
         self.add_csr("sata_bist")
+
+        # Block2Mem DMA
+        bus =  wishbone.Interface(data_width=32, adr_width=32)
+        self.submodules.sata_block2mem = LiteSATABlock2MemDMA(self.sata_crossbar.get_port(), bus)
+        self.bus.add_master("sata_block2mem", master=bus)
+        self.add_csr("sata_block2mem")
 
         # Timing constraints
         platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/300e6 if data_width == 16 else 1e9/150e6)
