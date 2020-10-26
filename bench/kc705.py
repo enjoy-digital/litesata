@@ -50,35 +50,6 @@ _sata_io = [
     ),
 ]
 
-# StatusLeds ---------------------------------------------------------------------------------------
-
-class StatusLeds(Module):
-    def __init__(self, platform, sata_phys):
-        if not isinstance(sata_phys, list):
-            sata_phys = [sata_phys]
-            use_cd_num = False
-        else:
-            use_cd_num = True
-        for i, sata_phy in enumerate(sata_phys):
-            # 1Hz blinking leds (sata_rx and sata_tx clocks)
-            rx_led = platform.request("user_led", 2*i)
-
-            rx_cnt = Signal(32)
-
-            freq = int(frequencies[sata_phy.revision]*1e6)
-
-            rx_sync = getattr(self.sync, "sata_rx{}".format(str(i) if use_cd_num else ""))
-            rx_sync += \
-                If(rx_cnt == 0,
-                    rx_led.eq(~rx_led),
-                    rx_cnt.eq(freq//2)
-                ).Else(
-                    rx_cnt.eq(rx_cnt-1)
-                )
-
-            # Ready leds
-            self.comb += platform.request("user_led", 2*i+1).eq(sata_phy.ctrl.ready)
-
 # CRG ----------------------------------------------------------------------------------------------
 
 class _CRG(Module):
@@ -141,11 +112,7 @@ class SATATestSoC(SoCMini):
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
         self.add_csr("sata_bist")
 
-        # Status Leds ------------------------------------------------------------------------------
-        self.submodules.leds = StatusLeds(platform, self.sata_phy)
-
-        # Timing constraints -----------------------------------------------------------------------
-        # FIXME: update.
+        # Timing constraints FIXME: update.
         self.sata_phy.crg.cd_sata_rx.clk.attr.add("keep")
         self.sata_phy.crg.cd_sata_tx.clk.attr.add("keep")
         platform.add_platform_command("""
@@ -159,6 +126,22 @@ set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_tx_clk]
 set_false_path -from [get_clocks sata_rx_clk] -to [get_clocks sys_clk]
 set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
 """.format(sata_clk_period="3.3" if data_width == 16 else "6.6"))
+
+        # Leds -------------------------------------------------------------------------------------
+        # sys_clk
+        sys_counter = Signal(32)
+        self.sync.sys += sys_counter.eq(sys_counter + 1)
+        self.comb += platform.request("user_led", 0).eq(sys_counter[26])
+        # tx_clk
+        tx_counter = Signal(32)
+        self.sync.sata_tx += tx_counter.eq(tx_counter + 1)
+        self.comb += platform.request("user_led", 1).eq(tx_counter[26])
+        # rx_clk
+        rx_counter = Signal(32)
+        self.sync.sata_rx += rx_counter.eq(rx_counter + 1)
+        self.comb += platform.request("user_led", 2).eq(rx_counter[26])
+        # ready
+        self.comb += platform.request("user_led", 3).eq(self.sata_phy.ctrl.ready)
 
         # Analyzer ---------------------------------------------------------------------------------
         if with_analyzer:
