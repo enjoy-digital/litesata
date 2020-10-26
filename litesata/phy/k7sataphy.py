@@ -20,10 +20,9 @@ from liteiclink.serdes.gtx_7series_init import GTXTXInit, GTXRXInit
 # --------------------------------------------------------------------------------------------------
 
 class K7LiteSATAPHYCRG(Module):
-    def __init__(self, refclk, pads, gtx, gen, clk_freq):
+    def __init__(self, refclk, pads, gtx, gen):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
-        self.ready    = Signal()
 
         self.clock_domains.cd_sata_tx = ClockDomain()
         self.clock_domains.cd_sata_rx = ClockDomain()
@@ -72,35 +71,6 @@ class K7LiteSATAPHYCRG(Module):
         self.comb += gtx.rxusrclk.eq(self.cd_sata_rx.clk)
         self.comb += gtx.rxusrclk2.eq(self.cd_sata_rx.clk)
 
-        # TX Init ----------------------------------------------------------------------------------
-        self.submodules.tx_init = tx_init = GTXTXInit(clk_freq, buffer_enable=False)
-        self.tx_ready = Signal()
-        self.comb += self.tx_ready.eq(tx_init.done)
-        self.comb += tx_init.plllock.eq(gtx.cplllock & tx_mmcm.locked)
-        self.comb += gtx.cpllreset.eq(tx_init.pllreset)
-        self.comb += tx_mmcm.reset.eq(tx_init.pllreset)
-        self.comb += gtx.gttxreset.eq(tx_init.gtXxreset)
-        self.comb += tx_init.Xxresetdone.eq(gtx.txresetdone)
-        self.comb += gtx.txdlyreset.eq(tx_init.Xxdlysreset),
-        self.comb += tx_init.Xxdlysresetdone.eq(gtx.txdlyresetdone)
-        self.comb += tx_init.Xxphaligndone.eq(gtx.txphaligndone)
-        self.comb += gtx.txuserrdy.eq(tx_init.Xxuserrdy)
-
-        # RX Init ----------------------------------------------------------------------------------
-        self.submodules.rx_init = rx_init = GTXRXInit(clk_freq, buffer_enable=False)
-        self.rx_ready  = Signal()
-        self.comb += self.rx_ready.eq(rx_init.done)
-        self.comb += rx_init.plllock.eq(gtx.cplllock)
-        self.comb += gtx.gtrxreset.eq(rx_init.gtXxreset)
-        self.comb += rx_init.Xxresetdone.eq(gtx.rxresetdone)
-        self.comb += gtx.rxdlyreset.eq(rx_init.Xxdlysreset),
-        self.comb += rx_init.Xxdlysresetdone.eq(gtx.rxdlyresetdone)
-        self.comb += rx_init.Xxphaligndone.eq(gtx.rxphaligndone)
-        self.comb += gtx.rxuserrdy.eq(rx_init.Xxuserrdy)
-
-        # Ready ------------------------------------------------------------------------------------
-        self.comb += self.ready.eq(self.tx_ready & self.rx_ready)
-
         # Reset for SATA TX/RX clock domains -------------------------------------------------------
         self.specials += [
             AsyncResetSynchronizer(self.cd_sata_tx, ~(gtx.cplllock & tx_mmcm.locked) | self.tx_reset),
@@ -110,10 +80,12 @@ class K7LiteSATAPHYCRG(Module):
 # --------------------------------------------------------------------------------------------------
 
 class K7LiteSATAPHY(Module):
-    def __init__(self, pads, gen, data_width=16):
+    def __init__(self, pads, gen, clk_freq, data_width=16):
         assert data_width in [16, 32]
         # Common signals
         self.data_width = data_width
+
+        self.ready = Signal()
 
         # Control
         self.tx_idle        = Signal()  #i
@@ -142,49 +114,28 @@ class K7LiteSATAPHY(Module):
 
         # Channel PLL
         self.cplllock  = Signal()
-        self.cpllreset = Signal()
-
-        # Receive Ports
-        self.rxuserrdy = Signal()
 
         # Receive Ports - 8b10b Decoder
         self.rxcharisk = Signal(data_width//8)
 
         # Receive Ports - RX Data Path interface
-        self.gtrxreset = Signal()
         self.rxdata    = Signal(data_width)
         self.rxoutclk  = Signal()
         self.rxusrclk  = Signal()
         self.rxusrclk2 = Signal()
 
-        # Receive Ports - RX PLL Ports
-        self.rxresetdone    = Signal()
-        self.rxdlyreset     = Signal()
-        self.rxdlyresetdone = Signal()
-        self.rxphaligndone  = Signal()
-
         # Receive Ports - RX Ports for SATA
         self.rxcominitdet = Signal()
         self.rxcomwakedet = Signal()
-
-        # Transmit Ports
-        self.txuserrdy = Signal()
 
         # Transmit Ports - 8b10b Encoder Control Ports
         self.txcharisk = Signal(data_width//8)
 
         # Transmit Ports - TX Data Path interface
-        self.gttxreset = Signal()
         self.txdata    = Signal(data_width)
         self.txoutclk  = Signal()
         self.txusrclk  = Signal()
         self.txusrclk2 = Signal()
-
-        # Transmit Ports - TX PLL Ports
-        self.txresetdone    = Signal()
-        self.txdlyreset     = Signal()
-        self.txdlyresetdone = Signal()
-        self.txphaligndone  = Signal()
 
         # Transmit Ports - TX Ports for PCI Express
         self.txelecidle = Signal(reset=1)
@@ -204,7 +155,7 @@ class K7LiteSATAPHY(Module):
             "gen1": 4,
             "gen2": 2,
             "gen3": 1
-            }
+        }
         rxout_div = div_config[gen]
         txout_div = div_config[gen]
 
@@ -214,6 +165,17 @@ class K7LiteSATAPHY(Module):
             "gen3": 0x0380008BFF10200010
         }
         rxcdr_cfg = cdr_config[gen]
+
+        # TX Init ----------------------------------------------------------------------------------
+        self.submodules.tx_init = tx_init = GTXTXInit(clk_freq, buffer_enable=False)
+        self.comb += tx_init.plllock.eq(self.cplllock)
+
+        # RX Init ----------------------------------------------------------------------------------
+        self.submodules.rx_init = rx_init = GTXRXInit(clk_freq, buffer_enable=False)
+        self.comb += rx_init.plllock.eq(self.cplllock)
+
+        # Ready ------------------------------------------------------------------------------------
+        self.comb += self.ready.eq(tx_init.done & rx_init.done)
 
         # Specific / Generic signals encoding/decoding ---------------------------------------------
         self.comb += [
@@ -242,58 +204,32 @@ class K7LiteSATAPHY(Module):
 
         # Internals and clock domain crossing ------------------------------------------------------
         # sys_clk --> sata_tx clk
-        txuserrdy      = Signal()
         txpd           = Signal()
         txelecidle     = Signal(reset=1)
         txcominit      = Signal()
         txcomwake      = Signal()
-        txdlyreset     = Signal()
-        txdlyresetdone = Signal()
-        txphaligndone  = Signal()
-        gttxreset      = Signal()
         self.specials += [
-            MultiReg(self.txuserrdy,   txuserrdy, "sata_tx"),
             MultiReg(self.txpd,             txpd, "sata_tx"),
             MultiReg(self.txelecidle, txelecidle, "sata_tx"),
-            MultiReg(self.gttxreset,   gttxreset, "sata_tx")
         ]
         self.submodules += [
             _PulseSynchronizer(self.txcominit,  "sys",  txcominit, "sata_tx"),
             _PulseSynchronizer(self.txcomwake,  "sys",  txcomwake, "sata_tx"),
-            _PulseSynchronizer(self.txdlyreset, "sys", txdlyreset, "sata_tx")
         ]
 
         # sata_tx clk --> sys clk
-        txresetdone = Signal()
         txcomfinish = Signal()
-        self.specials += [
-            MultiReg(txresetdone,    self.txresetdone,    "sys"),
-            MultiReg(txdlyresetdone, self.txdlyresetdone, "sys"),
-            MultiReg(txphaligndone,  self.txphaligndone,  "sys")
-        ]
         self.submodules += _PulseSynchronizer(txcomfinish, "sata_tx", self.txcomfinish, "sys")
 
-        # sys clk --> sata_rx clk
-        rxuserrdy  = Signal()
-        rxdlyreset = Signal()
-        self.specials += MultiReg(self.rxuserrdy, rxuserrdy, "sata_rx")
-        self.submodules += _PulseSynchronizer(self.rxdlyreset, "sys", rxdlyreset, "sata_rx")
-
         # sata_rx clk --> sys clk
-        rxresetdone    = Signal()
         rxcominitdet   = Signal()
         rxcomwakedet   = Signal()
         rxratedone     = Signal()
-        rxdlyresetdone = Signal()
-        rxphaligndone  = Signal()
         rxdisperr      = Signal(data_width//8)
         rxnotintable   = Signal(data_width//8)
         self.specials += [
-            MultiReg(rxresetdone, self.rxresetdone, "sys"),
             MultiReg(rxcominitdet, self.rxcominitdet, "sys"),
             MultiReg(rxcomwakedet, self.rxcomwakedet, "sys"),
-            MultiReg(rxdlyresetdone, self.rxdlyresetdone, "sys"),
-            MultiReg(rxphaligndone, self.rxphaligndone, "sys"),
             MultiReg(rxdisperr, self.rxdisperr, "sys"),
             MultiReg(rxnotintable, self.rxnotintable, "sys")
         ]
@@ -593,7 +529,7 @@ class K7LiteSATAPHY(Module):
             i_CPLLPD                         =self.cpllpd,
             #o_CPLLREFCLKLOST                 =,
             i_CPLLREFCLKSEL                  =0b001,
-            i_CPLLRESET                      =self.cpllreset,
+            i_CPLLRESET                      =tx_init.pllreset,
             i_GTRSVD                         =0b0000000000000000,
             i_PCSRSVDIN                      =0b0000000000000000,
             i_PCSRSVDIN2                     =0b00000,
@@ -653,7 +589,7 @@ class K7LiteSATAPHY(Module):
 
             # RX Initialization and Reset Ports
             i_EYESCANRESET                   =0,
-            i_RXUSERRDY                      =rxuserrdy,
+            i_RXUSERRDY                      =rx_init.Xxuserrdy,
 
             # RX Margin Analysis Ports
             #o_EYESCANDATAERROR               =,
@@ -708,10 +644,10 @@ class K7LiteSATAPHY(Module):
             i_RXDLYBYPASS                    =1 if rx_buffer_enable else 0,
             i_RXDLYEN                        =0,
             i_RXDLYOVRDEN                    =0,
-            i_RXDLYSRESET                    =rxdlyreset,
-            o_RXDLYSRESETDONE                =rxdlyresetdone,
+            i_RXDLYSRESET                    =rx_init.Xxdlysreset,
+            o_RXDLYSRESETDONE                =rx_init.Xxdlysresetdone,
             i_RXPHALIGN                      =0,
-            o_RXPHALIGNDONE                  =rxphaligndone,
+            o_RXPHALIGNDONE                  =rx_init.Xxphaligndone,
             i_RXPHALIGNEN                    =0,
             i_RXPHDLYPD                      =0,
             i_RXPHDLYRESET                   =0,
@@ -790,7 +726,7 @@ class K7LiteSATAPHY(Module):
             i_RXGEARBOXSLIP                  =0,
 
             # Receive Ports - RX Initialization and Reset Ports
-            i_GTRXRESET                      =self.gtrxreset,
+            i_GTRXRESET                      =rx_init.gtXxreset,
             i_RXOOBRESET                     =0,
             i_RXPCSRESET                     =0,
             i_RXPMARESET                     =0,
@@ -823,7 +759,7 @@ class K7LiteSATAPHY(Module):
             i_RXCHBONDI                      =0b00000,
 
             # Receive Ports -RX Initialization and Reset Ports
-            o_RXRESETDONE                    =rxresetdone,
+            o_RXRESETDONE                    =rx_init.Xxresetdone,
 
             # Rx AFE Ports
             i_RXQPIEN                        =0,
@@ -844,9 +780,9 @@ class K7LiteSATAPHY(Module):
 
             # TX Initialization and Reset Ports
             i_CFGRESET                       =0,
-            i_GTTXRESET                      =gttxreset,
+            i_GTTXRESET                      =tx_init.gtXxreset,
             #o_PCSRSVDOUT                     =,
-            i_TXUSERRDY                      =txuserrdy,
+            i_TXUSERRDY                      =tx_init.Xxuserrdy,
 
             # Transceiver Reset Mode Operation
             i_GTRESETSEL                     =0,
@@ -874,11 +810,11 @@ class K7LiteSATAPHY(Module):
             i_TXDLYEN                        =0,
             i_TXDLYHOLD                      =0,
             i_TXDLYOVRDEN                    =0,
-            i_TXDLYSRESET                    =txdlyreset,
-            o_TXDLYSRESETDONE                =txdlyresetdone,
+            i_TXDLYSRESET                    =tx_init.Xxdlysreset,
+            o_TXDLYSRESETDONE                =tx_init.Xxdlysresetdone,
             i_TXDLYUPDOWN                    =0,
             i_TXPHALIGN                      =0,
-            o_TXPHALIGNDONE                  =txphaligndone,
+            o_TXPHALIGNDONE                  =tx_init.Xxphaligndone,
             i_TXPHALIGNEN                    =0,
             i_TXPHDLYPD                      =0,
             i_TXPHDLYRESET                   =0,
@@ -922,7 +858,7 @@ class K7LiteSATAPHY(Module):
             # Transmit Ports - TX Initialization and Reset Ports
             i_TXPCSRESET                     =0,
             i_TXPMARESET                     =0,
-            o_TXRESETDONE                    =txresetdone,
+            o_TXRESETDONE                    =tx_init.Xxresetdone,
 
             # Transmit Ports - TX OOB signaling Ports
             o_TXCOMFINISH                    =txcomfinish,

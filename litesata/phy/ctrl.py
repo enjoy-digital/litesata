@@ -84,7 +84,7 @@ class LiteSATAPHYCtrl(Module):
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             non_align_counter_reset.eq(1),
-            If(crg.ready,
+            If(trx.ready,
                 NextState("COMINIT")
             )
         )
@@ -185,7 +185,7 @@ class LiteSATAPHYCtrl(Module):
             )
         )
         fsm.act("RESET_RX",
-            If(crg.ready,
+            If(trx.ready,
                 NextState("READY")
             )
         )

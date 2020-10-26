@@ -27,12 +27,12 @@ class LiteSATAPHY(Module):
         # Transceiver / Clocks
         if device[:4] == "xc7k": # Kintex 7
             from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHY
-            self.submodules.phy = K7LiteSATAPHY(pads, gen, data_width)
-            self.submodules.crg = K7LiteSATAPHYCRG(refclk, pads, self.phy, gen, clk_freq)
+            self.submodules.phy = K7LiteSATAPHY(pads, gen, clk_freq, data_width)
+            self.submodules.crg = K7LiteSATAPHYCRG(refclk, pads, self.phy, gen)
         elif device[:4] == "xc7a": # Artix 7
             from litesata.phy.a7sataphy import A7LiteSATAPHYCRG, A7LiteSATAPHY
-            self.submodules.phy = A7LiteSATAPHY(pads, gen, data_width)
-            self.submodules.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen, clk_freq)
+            self.submodules.phy = A7LiteSATAPHY(pads, gen, clk_freq, data_width)
+            self.submodules.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen)
         else:
             raise NotImplementedError
 
