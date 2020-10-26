@@ -7,6 +7,7 @@
 from math import ceil
 
 from migen import *
+from migen.genlib.cdc import PulseSynchronizer
 
 from litex.soc.interconnect import stream
 from litex.soc.interconnect.stream import *
@@ -28,6 +29,7 @@ frequencies = {
 
 
 # PHY / Link Layers --------------------------------------------------------------------------------
+
 primitives = {
     "ALIGN": 0x7b4a4abc,
     "CONT":  0x9999aa7c,
@@ -74,8 +76,22 @@ def link_description(dw):
     ]
     return EndpointDescription(layout)
 
+class _PulseSynchronizer(PulseSynchronizer):
+    def __init__(self, i, idomain, o, odomain):
+        PulseSynchronizer.__init__(self, idomain, odomain)
+        self.comb += [
+            self.i.eq(i),
+            o.eq(self.o)
+        ]
+
+class _RisingEdge(Module):
+    def __init__(self, i, o):
+        i_d = Signal()
+        self.sync += i_d.eq(i)
+        self.comb += o.eq(i & ~i_d)
 
 # Transport Layer ----------------------------------------------------------------------------------
+
 fis_max_dwords = 2048
 
 fis_types = {
@@ -202,6 +218,7 @@ def transport_rx_description(dw):
 
 
 # Command Layer ------------------------------------------------------------------------------------
+
 regs = {
     "WRITE_DMA_EXT":   0x35,
     "READ_DMA_EXT":    0x25,
@@ -263,6 +280,7 @@ def command_rx_data_description(dw):
 
 
 # HDD ----------------------------------------------------------------------------------------------
+
 logical_sector_size = 512  # constant since all HDDs use this
 
 def dwords2sectors(n):

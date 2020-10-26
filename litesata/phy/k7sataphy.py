@@ -1,34 +1,19 @@
 #
 # This file is part of LiteSATA.
 #
-# Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2017 Johan Klockars <Johan.Klockars@hasselblad.com>
 # Copyright (c) 2015-2016 Olof Kindgren <olof.kindgren@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from litesata.common import *
+from litesata.common import _PulseSynchronizer, _RisingEdge
 
-from migen.genlib.cdc import PulseSynchronizer, MultiReg
+from migen.genlib.cdc import MultiReg
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.misc import WaitTimer
 
 from litex.soc.cores.clock import S7MMCM
-
-
-class _PulseSynchronizer(PulseSynchronizer):
-    def __init__(self, i, idomain, o, odomain):
-        PulseSynchronizer.__init__(self, idomain, odomain)
-        self.comb += [
-            self.i.eq(i),
-            o.eq(self.o)
-        ]
-
-
-class _RisingEdge(Module):
-    def __init__(self, i, o):
-        i_d = Signal()
-        self.sync += i_d.eq(i)
-        self.comb += o.eq(i & ~i_d)
 
 # --------------------------------------------------------------------------------------------------
 
@@ -422,64 +407,52 @@ class K7LiteSATAPHY(Module):
 
         # Internals and clock domain crossing ------------------------------------------------------
         # sys_clk --> sata_tx clk
-        txuserrdy = Signal()
-        txpd = Signal()
-        txelecidle = Signal(reset=1)
-        txcominit = Signal()
-        txcomwake = Signal()
-        txdlyreset = Signal()
+        txuserrdy      = Signal()
+        txpd           = Signal()
+        txelecidle     = Signal(reset=1)
+        txcominit      = Signal()
+        txcomwake      = Signal()
+        txdlyreset     = Signal()
         txdlyresetdone = Signal()
-        txphaligndone = Signal()
-        gttxreset = Signal()
-
+        txphaligndone  = Signal()
+        gttxreset      = Signal()
         self.specials += [
-            MultiReg(self.txuserrdy, txuserrdy, "sata_tx"),
-            MultiReg(self.txpd, txpd, "sata_tx"),
+            MultiReg(self.txuserrdy,   txuserrdy, "sata_tx"),
+            MultiReg(self.txpd,             txpd, "sata_tx"),
             MultiReg(self.txelecidle, txelecidle, "sata_tx"),
-            MultiReg(self.gttxreset, gttxreset, "sata_tx")
+            MultiReg(self.gttxreset,   gttxreset, "sata_tx")
         ]
         self.submodules += [
-            _PulseSynchronizer(self.txcominit, "sys", txcominit, "sata_tx"),
-            _PulseSynchronizer(self.txcomwake, "sys", txcomwake, "sata_tx"),
+            _PulseSynchronizer(self.txcominit,  "sys",  txcominit, "sata_tx"),
+            _PulseSynchronizer(self.txcomwake,  "sys",  txcomwake, "sata_tx"),
             _PulseSynchronizer(self.txdlyreset, "sys", txdlyreset, "sata_tx")
         ]
 
         # sata_tx clk --> sys clk
         txresetdone = Signal()
         txcomfinish = Signal()
-
         self.specials += [
-            MultiReg(txresetdone, self.txresetdone, "sys"),
+            MultiReg(txresetdone,    self.txresetdone,    "sys"),
             MultiReg(txdlyresetdone, self.txdlyresetdone, "sys"),
-            MultiReg(txphaligndone, self.txphaligndone, "sys")
+            MultiReg(txphaligndone,  self.txphaligndone,  "sys")
         ]
-
-        self.submodules += [
-            _PulseSynchronizer(txcomfinish, "sata_tx", self.txcomfinish, "sys")
-        ]
+        self.submodules += _PulseSynchronizer(txcomfinish, "sata_tx", self.txcomfinish, "sys")
 
         # sys clk --> sata_rx clk
-        rxuserrdy = Signal()
+        rxuserrdy  = Signal()
         rxdlyreset = Signal()
-
-        self.specials += [
-            MultiReg(self.rxuserrdy, rxuserrdy, "sata_rx")
-        ]
-
-        self.submodules += [
-            _PulseSynchronizer(self.rxdlyreset, "sys", rxdlyreset, "sata_rx")
-        ]
+        self.specials += MultiReg(self.rxuserrdy, rxuserrdy, "sata_rx")
+        self.submodules += _PulseSynchronizer(self.rxdlyreset, "sys", rxdlyreset, "sata_rx")
 
         # sata_rx clk --> sys clk
-        rxresetdone = Signal()
-        rxcominitdet = Signal()
-        rxcomwakedet = Signal()
-        rxratedone = Signal()
+        rxresetdone    = Signal()
+        rxcominitdet   = Signal()
+        rxcomwakedet   = Signal()
+        rxratedone     = Signal()
         rxdlyresetdone = Signal()
-        rxphaligndone = Signal()
-        rxdisperr = Signal(data_width//8)
-        rxnotintable = Signal(data_width//8)
-
+        rxphaligndone  = Signal()
+        rxdisperr      = Signal(data_width//8)
+        rxnotintable   = Signal(data_width//8)
         self.specials += [
             MultiReg(rxresetdone, self.rxresetdone, "sys"),
             MultiReg(rxcominitdet, self.rxcominitdet, "sys"),
@@ -491,16 +464,19 @@ class K7LiteSATAPHY(Module):
         ]
 
         # QPLL input clock -------------------------------------------------------------------------
-        self.qpllclk = Signal()
+        self.qpllclk    = Signal()
         self.qpllrefclk = Signal()
 
         # OOB clock (75MHz) ------------------------------------------------------------------------
         oobclk = Signal()
-        self.specials += \
-            Instance("FDPE",
-                p_INIT=1, i_CE=1, i_PRE=0,
-                i_C=self.gtrefclk0,
-                i_D=~oobclk, o_Q=oobclk)
+        self.specials += Instance("FDPE",
+            p_INIT = 1,
+            i_CE   = 1,
+            i_PRE  = 0,
+            i_C    = self.gtrefclk0,
+            i_D    = ~oobclk,
+            o_Q    = oobclk
+        )
 
         # GTXE2_CHANNEL Instance -------------------------------------------------------------------
         tx_buffer_enable = False
