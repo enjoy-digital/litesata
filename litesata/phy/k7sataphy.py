@@ -11,7 +11,6 @@ from litesata.common import _PulseSynchronizer, _RisingEdge
 
 from migen.genlib.cdc import MultiReg
 from migen.genlib.resetsync import AsyncResetSynchronizer
-from migen.genlib.misc import WaitTimer
 
 from litex.soc.cores.clock import S7MMCM
 
