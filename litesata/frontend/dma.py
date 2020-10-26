@@ -33,7 +33,8 @@ class LiteSATABlock2MemDMA(Module, AutoCSR):
         count = Signal(7)
 
         # DMA
-        self.submodules.dma  = dma  = WishboneDMAWriter(bus, with_csr=False, endianness=endianness)
+        self.submodules.dma  = dma = WishboneDMAWriter(bus, with_csr=False,
+            endianness={"big": "little", "little": "big"}[endianness]) # FIXME
 
         # FIFO
         self.submodules.fifo = fifo = stream.SyncFIFO([("data", 32)], fifo_depth)
@@ -67,7 +68,7 @@ class LiteSATABlock2MemDMA(Module, AutoCSR):
             fifo.source.ready.eq(dma.sink.ready),
             If(dma.sink.valid & dma.sink.ready,
                 NextValue(count, count + 1),
-                If(count == 127,
+                If(count == (512//4 - 1),
                     NextState("IDLE")
                 )
             )
