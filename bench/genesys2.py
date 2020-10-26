@@ -29,12 +29,13 @@ from litescope import LiteScopeAnalyzer
 
 # IOs ----------------------------------------------------------------------------------------------
 
-_sata_io = [ # AB09-FMCRAID
-    ("sata_clocks", 0,
-        Subsignal("refclk_p", Pins("HPC:GBTCLK0_M2C_P")),
-        Subsignal("refclk_n", Pins("HPC:GBTCLK0_M2C_N"))
+_sata_io = [
+    # AB09-FMCRAID / https://www.dgway.com/AB09-FMCRAID_E.html
+    ("fmc_refclk", 0, # 150MHz
+        Subsignal("p", Pins("HPC:GBTCLK0_M2C_P")),
+        Subsignal("n", Pins("HPC:GBTCLK0_M2C_N"))
     ),
-    ("sata", 0,
+    ("fmc", 0,
         Subsignal("txp", Pins("HPC:DP0_C2M_P")),
         Subsignal("txn", Pins("HPC:DP0_C2M_N")),
         Subsignal("rxp", Pins("HPC:DP0_M2C_P")),
@@ -88,15 +89,22 @@ class SATATestSoC(SoCMini):
             uart_name     = "bridge")
 
         # SATA PHY/Core/Frontend -------------------------------------------------------------------
+        # PHY
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
-            clock_pads = platform.request("sata_clocks"),
-            pads       = platform.request("sata", 0),
+            refclk     = platform.request("fmc_refclk"), # Use 150MHz refclk provided by FMC.
+            pads       = platform.request("fmc"),
             revision   = revision,
             clk_freq   = sys_clk_freq,
             data_width = data_width)
-        self.submodules.sata_core     = LiteSATACore(self.sata_phy)
+
+        # Core
+        self.submodules.sata_core = LiteSATACore(self.sata_phy)
+
+        # Crossbar
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
-        self.submodules.sata_bist     = LiteSATABIST(self.sata_crossbar, with_csr=True)
+
+        # BIST
+        self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
         self.add_csr("sata_bist")
 
         # Status Leds ------------------------------------------------------------------------------

@@ -12,10 +12,10 @@ import argparse
 from migen import *
 
 from litex.boards.platforms import kc705
-from litex.boards.targets.kc705 import _CRG
 
 from litex.build.generic_platform import *
 
+from litex.soc.cores.clock import S7MMCM
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 
@@ -29,16 +29,24 @@ from litescope import LiteScopeAnalyzer
 
 # IOs ----------------------------------------------------------------------------------------------
 
-_sata_io = [ # AB09-FMCRAID
-    ("sata_clocks", 0,
-        Subsignal("refclk_p", Pins("HPC:GBTCLK0_M2C_P")),
-        Subsignal("refclk_n", Pins("HPC:GBTCLK0_M2C_N"))
+_sata_io = [
+    # AB09-FMCRAID / https://www.dgway.com/AB09-FMCRAID_E.html
+    ("fmc_refclk", 0, # 150MHz
+        Subsignal("p", Pins("HPC:GBTCLK0_M2C_P")),
+        Subsignal("n", Pins("HPC:GBTCLK0_M2C_N"))
     ),
-    ("sata", 0,
+    ("fmc", 0,
         Subsignal("txp", Pins("HPC:DP0_C2M_P")),
         Subsignal("txn", Pins("HPC:DP0_C2M_N")),
         Subsignal("rxp", Pins("HPC:DP0_M2C_P")),
         Subsignal("rxn", Pins("HPC:DP0_M2C_N"))
+    ),
+    # SFP 2 SATA Adapter / https://shop.trenz-electronic.de/en/TE0424-01-SFP-2-SATA-Adapter
+    ("sfp", 0,
+        Subsignal("txp", Pins("H2")),
+        Subsignal("txn", Pins("H1")),
+        Subsignal("rxp", Pins("G4")),
+        Subsignal("rxn", Pins("G3")),
     ),
 ]
 
@@ -71,10 +79,26 @@ class StatusLeds(Module):
             # Ready leds
             self.comb += platform.request("user_led", 2*i+1).eq(sata_phy.ctrl.ready)
 
+# CRG ----------------------------------------------------------------------------------------------
+
+class _CRG(Module):
+    def __init__(self, platform, sys_clk_freq):
+        self.clock_domains.cd_sys    = ClockDomain()
+        self.clock_domains.cd_sys4x  = ClockDomain(reset_less=True)
+        self.clock_domains.cd_idelay = ClockDomain()
+
+        # # #
+
+        self.submodules.pll = pll = S7MMCM(speedgrade=-2)
+        self.comb += pll.reset.eq(platform.request("cpu_reset"))
+        pll.register_clkin(platform.request("clk200"), 200e6)
+        pll.create_clkout(self.cd_sys,    sys_clk_freq)
+
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, revision="sata_gen3", data_width=16, with_analyzer=False):
+    def __init__(self, platform, connector="fmc", revision="sata_gen3", data_width=16, with_analyzer=False):
+        assert connector in ["fmc", "sfp"]
         sys_clk_freq = int(200e6)
 
         # CRG --------------------------------------------------------------------------------------
@@ -87,16 +111,34 @@ class SATATestSoC(SoCMini):
             with_uart     = True,
             uart_name     = "bridge")
 
-        # SATA PHY/Core/Frontend -------------------------------------------------------------------
+        # SATA -------------------------------------------------------------------------------------
+        # RefClk
+        if connector == "fmc":
+            # Use 150MHz refclk provided by FMC.
+            sata_refclk = platform.request("fmc_refclk")
+        else:
+            # Generate 150MHz from PLL.
+            self.clock_domains.cd_sata_refclk = ClockDomain()
+            self.crg.pll.create_clkout(self.cd_sata_refclk, 150e6)
+            sata_refclk = ClockSignal("sata_refclk")
+            platform.add_platform_command("set_property SEVERITY {{Warning}} [get_drc_checks REQP-52]")
+
+        # PHY
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
-            clock_pads = platform.request("sata_clocks"),
-            pads       = platform.request("sata", 0),
+            refclk     = sata_refclk,
+            pads       = platform.request(connector),
             revision   = revision,
             clk_freq   = sys_clk_freq,
             data_width = data_width)
-        self.submodules.sata_core     = LiteSATACore(self.sata_phy)
+
+        # Core
+        self.submodules.sata_core = LiteSATACore(self.sata_phy)
+
+        # Crossbar
         self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
-        self.submodules.sata_bist     = LiteSATABIST(self.sata_crossbar, with_csr=True)
+
+        # BIST
+        self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
         self.add_csr("sata_bist")
 
         # Status Leds ------------------------------------------------------------------------------
@@ -148,12 +190,13 @@ def main():
     parser = argparse.ArgumentParser(description="LiteSATA bench on KC705")
     parser.add_argument("--build",         action="store_true", help="Build bitstream")
     parser.add_argument("--load",          action="store_true", help="Load bitstream (to SRAM)")
+    parser.add_argument("--connector",     default="fmc",       help="Connector: fmc (default) or sfp")
     parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer")
     args = parser.parse_args()
 
     platform = kc705.Platform()
     platform.add_extension(_sata_io)
-    soc = SATATestSoC(platform, with_analyzer=args.with_analyzer)
+    soc = SATATestSoC(platform, args.connector, with_analyzer=args.with_analyzer)
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)
 
