@@ -15,15 +15,15 @@ from litex.soc.interconnect.packet import Header, HeaderField
 # Bitrates/Frequencies -----------------------------------------------------------------------------
 
 bitrates = {
-    "sata_gen3": 6.0,
-    "sata_gen2": 3.0,
-    "sata_gen1": 1.5,
+    "gen3": 6.0,
+    "gen2": 3.0,
+    "gen1": 1.5,
 }
 
 frequencies = {
-    "sata_gen3": 150.0,
-    "sata_gen2": 75.0,
-    "sata_gen1": 37.5,
+    "gen3": 150.0,
+    "gen2": 75.0,
+    "gen1": 37.5,
 }
 
 

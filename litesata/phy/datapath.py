@@ -72,9 +72,9 @@ class LiteSATAPHYDatapathRX(Module):
             self.comb += converter.reset.eq(converter.source.charisk[2:] != 0)
 
         # clock domain crossing
-        #   (sata_gen3) 300MHz (16 bits) / 150MHz (32 bits) sata_rx clk to sys_clk
-        #   (sata_gen2) 150MHz (16 bits) / 75MHz (32 bits) sata_rx clk to sys_clk
-        #   (sata_gen1) 75MHz (16 bits) / 37.5MHz (32 bits) sata_rx clk to sys_clk
+        #   (gen3) 300MHz (16 bits) / 150MHz (32 bits) sata_rx clk to sys_clk
+        #   (gen2) 150MHz (16 bits) / 75MHz (32 bits) sata_rx clk to sys_clk
+        #   (gen1) 75MHz (16 bits) / 37.5MHz (32 bits) sata_rx clk to sys_clk
         #   requirements:
         #     due to the convertion ratio of 2, sys_clk need to be > sata_rx/2
         #     source destination is always able to accept data (ready always 1)
@@ -105,9 +105,9 @@ class LiteSATAPHYDatapathTX(Module):
         # # #
 
         # clock domain crossing
-        #   (sata_gen3) sys_clk to 300MHz (16 bits) / 150MHz (32 bits) sata_tx clk
-        #   (sata_gen2) sys_clk to 150MHz (16 bits) / 75MHz (32 bits) sata_tx clk
-        #   (sata_gen1) sys_clk to 75MHz (16 bits) / 37.5MHz (32 bits) sata_tx clk
+        #   (gen3) sys_clk to 300MHz (16 bits) / 150MHz (32 bits) sata_tx clk
+        #   (gen2) sys_clk to 150MHz (16 bits) / 75MHz (32 bits) sata_tx clk
+        #   (gen1) sys_clk to 75MHz (16 bits) / 37.5MHz (32 bits) sata_tx clk
         #   requirements:
         #     source destination is always able to accept data (ready always 1)
         fifo = stream.AsyncFIFO(phy_description(32), 8)

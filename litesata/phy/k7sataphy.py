@@ -31,7 +31,7 @@ class _RisingEdge(Module):
 # --------------------------------------------------------------------------------------------------
 
 class K7LiteSATAPHYCRG(Module):
-    def __init__(self, refclk, pads, gtx, revision, clk_freq):
+    def __init__(self, refclk, pads, gtx, gen, clk_freq):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
         self.ready    = Signal()
@@ -41,8 +41,8 @@ class K7LiteSATAPHYCRG(Module):
         self.clock_domains.cd_sata_rx = ClockDomain()
 
         # CPLL -------------------------------------------------------------------------------------
-        #   (sata_gen3) 150MHz / VCO @ 3GHz / Line rate @ 6Gbps
-        #   (sata_gen2 & sata_gen1) VCO still @ 3 GHz, Line rate is
+        #   (gen3) 150MHz / VCO @ 3GHz / Line rate @ 6Gbps
+        #   (gen2 & gen1) VCO still @ 3 GHz, Line rate is
         #   decreased with output dividers.
         if isinstance(refclk, (Signal, ClockSignal)):
             self.refclk = refclk
@@ -59,16 +59,16 @@ class K7LiteSATAPHYCRG(Module):
         self.comb += gtx.gtrefclk0.eq(self.refclk)
 
         # TX clocking ------------------------------------------------------------------------------
-        #   (sata_gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
-        #   (sata_gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
-        #   (sata_gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
+        #   (gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
+        #   (gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
+        #   (gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
         mmcm_mult = 8.0
         mmcm_div_config = {
-            "sata_gen1":   16.0*gtx.data_width/16,
-            "sata_gen2":    8.0*gtx.data_width/16,
-            "sata_gen3":    4.0*gtx.data_width/16
+            "gen1":   16.0*gtx.data_width/16,
+            "gen2":    8.0*gtx.data_width/16,
+            "gen3":    4.0*gtx.data_width/16
         }
-        mmcm_div = mmcm_div_config[revision]
+        mmcm_div = mmcm_div_config[gen]
         use_mmcm = mmcm_mult/mmcm_div != 1.0
 
         if use_mmcm:
@@ -109,9 +109,9 @@ class K7LiteSATAPHYCRG(Module):
         ]
 
         # RX clocking ------------------------------------------------------------------------------
-        #   (sata_gen3) sata_rx recovered clk @  @ 300MHz (16-bits) /  150MHz (32-bits) from GTX RXOUTCLK
-        #   (sata_gen2) sata_rx recovered clk @  @ 150MHz (16-bits) /   75MHz (32-bits) from GTX RXOUTCLK
-        #   (sata_gen1) sata_rx recovered clk @  @ 75MHz  (16-bits) / 37.5MHz (32-bits) from GTX RXOUTCLK
+        #   (gen3) sata_rx recovered clk @  @ 300MHz (16-bits) /  150MHz (32-bits) from GTX RXOUTCLK
+        #   (gen2) sata_rx recovered clk @  @ 150MHz (16-bits) /   75MHz (32-bits) from GTX RXOUTCLK
+        #   (gen1) sata_rx recovered clk @  @ 75MHz  (16-bits) / 37.5MHz (32-bits) from GTX RXOUTCLK
         self.specials += [
             Instance("BUFG", i_I=gtx.rxoutclk, o_O=self.cd_sata_rx.clk),
         ]
@@ -322,7 +322,7 @@ class K7LiteSATAPHYCRG(Module):
 # --------------------------------------------------------------------------------------------------
 
 class K7LiteSATAPHY(Module):
-    def __init__(self, pads, revision, data_width=16):
+    def __init__(self, pads, gen, data_width=16):
         assert data_width in [16, 32]
         # Common signals
         self.data_width = data_width
@@ -413,19 +413,19 @@ class K7LiteSATAPHY(Module):
 
         # Config at startup
         div_config = {
-            "sata_gen1": 4,
-            "sata_gen2": 2,
-            "sata_gen3": 1
+            "gen1": 4,
+            "gen2": 2,
+            "gen3": 1
             }
-        rxout_div = div_config[revision]
-        txout_div = div_config[revision]
+        rxout_div = div_config[gen]
+        txout_div = div_config[gen]
 
         cdr_config = {
-            "sata_gen1": 0x0380008BFF40100008,
-            "sata_gen2": 0x0388008BFF40200008,
-            "sata_gen3": 0x0380008BFF10200010
+            "gen1": 0x0380008BFF40100008,
+            "gen2": 0x0388008BFF40200008,
+            "gen3": 0x0380008BFF10200010
         }
-        rxcdr_cfg = cdr_config[revision]
+        rxcdr_cfg = cdr_config[gen]
 
         # Specific / Generic signals encoding/decoding ---------------------------------------------
         self.comb += [
@@ -642,7 +642,7 @@ class K7LiteSATAPHY(Module):
             p_PCS_PCIE_EN                            ="FALSE",
 
             # PCS Attributes
-            p_PCS_RSVD_ATTR                          = 0x108 if revision == "sata_gen1" else 0x100,
+            p_PCS_RSVD_ATTR                          = 0x108 if gen == "gen1" else 0x100,
 
             # RX Buffer Attributes
             p_RXBUF_ADDR_MODE                        ="FAST",

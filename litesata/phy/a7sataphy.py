@@ -29,7 +29,7 @@ class _RisingEdge(Module):
 # --------------------------------------------------------------------------------------------------
 
 class A7LiteSATAPHYCRG(Module):
-    def __init__(self, refclk, pads, gtp, revision, clk_freq):
+    def __init__(self, refclk, pads, gtp, gen, clk_freq):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
         self.ready    = Signal()
@@ -40,8 +40,8 @@ class A7LiteSATAPHYCRG(Module):
         self.clock_domains.cd_sata_rx     = ClockDomain()
 
         # CPLL -------------------------------------------------------------------------------------
-        #   (sata_gen3) 150MHz / VCO @ 3GHz / Line rate @ 6Gbps
-        #   (sata_gen2 & sata_gen1) VCO still @ 3 GHz, Line rate is
+        #   (gen3) 150MHz / VCO @ 3GHz / Line rate @ 6Gbps
+        #   (gen2 & gen1) VCO still @ 3 GHz, Line rate is
         #   decreased with output dividers.
         if isinstance(refclk, (Signal, ClockSignal)):
             self.refclk = refclk
@@ -59,16 +59,16 @@ class A7LiteSATAPHYCRG(Module):
         self.comb += self.cd_sata_refclk.clk.eq(self.refclk)
 
         # TX clocking ------------------------------------------------------------------------------
-        #   (sata_gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
-        #   (sata_gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
-        #   (sata_gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
+        #   (gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
+        #   (gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
+        #   (gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
         mmcm_mult = 8.0
         mmcm_div_config = {
-            "sata_gen1":   16.0*gtp.data_width/16,
-            "sata_gen2":    8.0*gtp.data_width/16,
-            "sata_gen3":    4.0*gtp.data_width/16
+            "gen1":   16.0*gtp.data_width/16,
+            "gen2":    8.0*gtp.data_width/16,
+            "gen3":    4.0*gtp.data_width/16
         }
-        mmcm_div = mmcm_div_config[revision]
+        mmcm_div = mmcm_div_config[gen]
         use_mmcm = mmcm_mult/mmcm_div != 1.0
 
         if use_mmcm:
@@ -109,9 +109,9 @@ class A7LiteSATAPHYCRG(Module):
         ]
 
         # RX clocking ------------------------------------------------------------------------------
-        #   (sata_gen3) sata_rx recovered clk @  @ 300MHz (16-bits) /  150MHz (32-bits) from GTP RXOUTCLK
-        #   (sata_gen2) sata_rx recovered clk @  @ 150MHz (16-bits) /   75MHz (32-bits) from GTP RXOUTCLK
-        #   (sata_gen1) sata_rx recovered clk @  @ 75MHz  (16-bits) / 37.5MHz (32-bits) from GTP RXOUTCLK
+        #   (gen3) sata_rx recovered clk @  @ 300MHz (16-bits) /  150MHz (32-bits) from GTP RXOUTCLK
+        #   (gen2) sata_rx recovered clk @  @ 150MHz (16-bits) /   75MHz (32-bits) from GTP RXOUTCLK
+        #   (gen1) sata_rx recovered clk @  @ 75MHz  (16-bits) / 37.5MHz (32-bits) from GTP RXOUTCLK
         self.specials += [
             Instance("BUFG", i_I=gtp.rxoutclk, o_O=self.cd_sata_rx.clk),
         ]
@@ -389,7 +389,7 @@ CLKIN +----> /M  +-->       Charge Pump         +-> VCO +---> CLKOUT
 # --------------------------------------------------------------------------------------------------
 
 class A7LiteSATAPHY(Module):
-    def __init__(self, pads, revision, data_width=16):
+    def __init__(self, pads, gen, data_width=16):
         assert data_width in [16, 32]
         # Common signals
         self.data_width = data_width
@@ -484,19 +484,19 @@ class A7LiteSATAPHY(Module):
 
         # Config at startup
         div_config = {
-            "sata_gen1": 4,
-            "sata_gen2": 2,
-            "sata_gen3": 1
+            "gen1": 4,
+            "gen2": 2,
+            "gen3": 1
             }
-        rxout_div = div_config[revision]
-        txout_div = div_config[revision]
+        rxout_div = div_config[gen]
+        txout_div = div_config[gen]
 
         cdr_config = {
-            "sata_gen1": 0x0000047FE106024481010,
-            "sata_gen2": 0x0000047FE206024481010,
-            "sata_gen3": 0x0000087FE206024441010
+            "gen1": 0x0000047FE106024481010,
+            "gen2": 0x0000047FE206024481010,
+            "gen3": 0x0000087FE206024441010
         }
-        rxcdr_cfg = cdr_config[revision]
+        rxcdr_cfg = cdr_config[gen]
 
         # Specific / Generic signals encoding/decoding ---------------------------------------------
         self.comb += [
@@ -603,11 +603,11 @@ class A7LiteSATAPHY(Module):
 
         # QPLL ------------------------------------------------------------------------------------
         linerate_config = {
-            "sata_gen1": 1.5e9,
-            "sata_gen2": 3.0e9,
-            "sata_gen3": 6.0e9
+            "gen1": 1.5e9,
+            "gen2": 3.0e9,
+            "gen3": 6.0e9
         }
-        self.submodules.qpll = GTPQuadPLL(self.gtrefclk0, 150e6, linerate_config[revision])
+        self.submodules.qpll = GTPQuadPLL(self.gtrefclk0, 150e6, linerate_config[gen])
         self.comb += [
             self.qpll.pd.eq(self.qpllpd),
             self.qpll.reset.eq(self.qpllreset),
