@@ -68,8 +68,9 @@ class _CRG(Module):
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, connector="fmc", revision="sata_gen3", data_width=16, with_analyzer=False):
+    def __init__(self, platform, connector="fmc", gen="gen3", data_width=16, with_analyzer=False):
         assert connector in ["fmc", "sfp"]
+        assert gen in ["gen1", "gen2", "gen3"]
         sys_clk_freq = int(200e6)
 
         # CRG --------------------------------------------------------------------------------------
@@ -98,7 +99,7 @@ class SATATestSoC(SoCMini):
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
             refclk     = sata_refclk,
             pads       = platform.request(connector),
-            revision   = revision,
+            gen        = gen,
             clk_freq   = sys_clk_freq,
             data_width = data_width)
 
@@ -166,13 +167,14 @@ def main():
     parser = argparse.ArgumentParser(description="LiteSATA bench on KC705")
     parser.add_argument("--build",         action="store_true", help="Build bitstream")
     parser.add_argument("--load",          action="store_true", help="Load bitstream (to SRAM)")
-    parser.add_argument("--connector",     default="fmc",       help="Connector: fmc (default) or sfp")
+    parser.add_argument("--gen",           default="3",         help="SATA Gen: 1, 2 or 3 (default)")
+    parser.add_argument("--connector",     default="fmc",       help="SATA Connector: fmc (default) or sfp")
     parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer")
     args = parser.parse_args()
 
     platform = kc705.Platform()
     platform.add_extension(_sata_io)
-    soc = SATATestSoC(platform, args.connector, with_analyzer=args.with_analyzer)
+    soc = SATATestSoC(platform, args.connector, "gen" + args.gen, with_analyzer=args.with_analyzer)
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)
 
