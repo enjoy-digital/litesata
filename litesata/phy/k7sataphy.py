@@ -15,6 +15,8 @@ from migen.genlib.misc import WaitTimer
 
 from litex.soc.cores.clock import S7MMCM
 
+from liteiclink.serdes.gtx_7series_init import GTXTXInit
+
 # --------------------------------------------------------------------------------------------------
 
 class K7LiteSATAPHYCRG(Module):
@@ -81,100 +83,19 @@ class K7LiteSATAPHYCRG(Module):
         self.submodules += startup_timer
         self.comb += startup_timer.wait.eq(~(self.tx_reset | self.rx_reset))
 
-        # TX Startup FSM ---------------------------------------------------------------------------
-        self.tx_ready  = Signal()
-        self.gttxreset = Signal()
-        self.cpllreset = Signal()
-        self.txuserrdy = Signal()
-        self.tx_startup_fsm = tx_startup_fsm = ResetInserter()(FSM(reset_state="IDLE"))
-        self.submodules += tx_startup_fsm
-
-        txphaligndone        = Signal(reset=1)
-        txphaligndone_rising = Signal()
-        self.sync += txphaligndone.eq(gtx.txphaligndone)
-        self.sync += gtx.gttxreset.eq(self.gttxreset)
-        self.sync += gtx.cpllreset.eq(self.cpllreset)
-        self.sync += gtx.txuserrdy.eq(self.txuserrdy)
-        self.comb += txphaligndone_rising.eq(gtx.txphaligndone & ~txphaligndone)
-
-        # Wait 500ns of AR43482
-        tx_startup_fsm.act("IDLE",
-            If(startup_timer.done,
-                NextState("RESET_ALL")
-            )
-        )
-        # Reset CPLL, MMCM, GTX
-        tx_startup_fsm.act("RESET_ALL",
-            self.cpllreset.eq(1),
-            tx_mmcm.reset.eq(1),
-            self.gttxreset.eq(1),
-            If(~self.cplllock,
-               NextState("RELEASE_CPLL")
-            )
-        )
-        # Release CPLL reset and wait for lock
-        tx_startup_fsm.act("RELEASE_CPLL",
-            tx_mmcm.reset.eq(1),
-            self.gttxreset.eq(1),
-            If(self.cplllock,
-                NextState("RELEASE_MMCM")
-            )
-        )
-        # Release MMCM reset and wait for lock
-        tx_startup_fsm.act("RELEASE_MMCM",
-            self.gttxreset.eq(1),
-            If(tx_mmcm.locked,
-                NextState("RELEASE_GTX")
-            )
-        )
-        # Release GTX reset and wait for GTX resetdone
-        # (from UG476, GTX is reseted on falling edge
-        # of gttxreset)
-        tx_startup_fsm.act("RELEASE_GTX",
-            self.txuserrdy.eq(1),
-            If(gtx.txresetdone,
-                NextState("ALIGN")
-            )
-        )
-        # Start Delay alignment (Pulse)
-        tx_startup_fsm.act("ALIGN",
-            self.txuserrdy.eq(1),
-            gtx.txdlyreset.eq(1),
-            NextState("WAIT_ALIGN")
-        )
-        # Wait Delay alignment
-        tx_startup_fsm.act("WAIT_ALIGN",
-            self.txuserrdy.eq(1),
-            If(gtx.txdlyresetdone,
-                NextState("WAIT_FIRST_ALIGN_DONE")
-            )
-        )
-        # Wait 2 rising edges of txphaligndone
-        # (from UG476 in buffer bypass config)
-        tx_startup_fsm.act("WAIT_FIRST_ALIGN_DONE",
-            self.txuserrdy.eq(1),
-            If(txphaligndone_rising,
-               NextState("WAIT_SECOND_ALIGN_DONE")
-            )
-        )
-        tx_startup_fsm.act("WAIT_SECOND_ALIGN_DONE",
-            self.txuserrdy.eq(1),
-            If(txphaligndone_rising,
-               NextState("READY")
-            )
-        )
-        tx_startup_fsm.act("READY",
-            self.txuserrdy.eq(1),
-            self.tx_ready.eq(1)
-        )
-
-        tx_ready_timer = WaitTimer(int(2e-3*clk_freq))
-        self.submodules += tx_ready_timer
-        self.comb += [
-            tx_ready_timer.wait.eq(~self.tx_ready & ~tx_startup_fsm.reset),
-            tx_startup_fsm.reset.eq(self.tx_reset | tx_ready_timer.done),
-        ]
-
+        # TX Initialization ------------------------------------------------------------------------
+        self.submodules.tx_init = tx_init = GTXTXInit(clk_freq, buffer_enable=False)
+        self.tx_ready = Signal()
+        self.comb += self.tx_ready.eq(tx_init.done)
+        self.comb += tx_init.plllock.eq(gtx.cplllock & tx_mmcm.locked)
+        self.comb += gtx.cpllreset.eq(tx_init.pllreset)
+        self.comb += tx_mmcm.reset.eq(tx_init.pllreset)
+        self.comb += gtx.gttxreset.eq(tx_init.gtXxreset)
+        self.comb += tx_init.Xxresetdone.eq(gtx.txresetdone)
+        self.comb += gtx.txdlyreset.eq(tx_init.Xxdlysreset),
+        self.comb += tx_init.Xxdlysresetdone.eq(gtx.txdlyresetdone)
+        self.comb += tx_init.Xxphaligndone.eq(gtx.txphaligndone)
+        self.comb += gtx.txuserrdy.eq(tx_init.Xxuserrdy)
 
         # RX Startup FSM ---------------------------------------------------------------------------
         self.rx_ready  = Signal()
@@ -202,7 +123,7 @@ class K7LiteSATAPHYCRG(Module):
         # Reset GTX
         rx_startup_fsm.act("RESET_GTX",
             self.gtrxreset.eq(1),
-            If(~self.gttxreset,
+            If(~gtx.gttxreset,
                NextState("WAIT_CPLL")
             )
         )
