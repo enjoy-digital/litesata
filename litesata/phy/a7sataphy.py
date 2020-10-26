@@ -10,6 +10,7 @@ from migen.genlib.cdc import PulseSynchronizer, MultiReg
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.misc import WaitTimer
 
+from litex.soc.cores.clock import S7MMCM
 
 class _PulseSynchronizer(PulseSynchronizer):
     def __init__(self, i, idomain, o, odomain):
@@ -62,63 +63,28 @@ class A7LiteSATAPHYCRG(Module):
         #   (gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
         #   (gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
         #   (gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
-        mmcm_mult = 8.0
-        mmcm_div_config = {
-            "gen1":   16.0*gtp.data_width/16,
-            "gen2":    8.0*gtp.data_width/16,
-            "gen3":    4.0*gtp.data_width/16
+        tx_mmcm_clkin = Signal()
+        tx_mmcm = S7MMCM(speedgrade=-1)
+        tx_mmcm_clkout_freq = {
+            "gen1":  75e6/(gtp.data_width/16),
+            "gen2": 150e6/(gtp.data_width/16),
+            "gen3": 300e6/(gtp.data_width/16),
         }
-        mmcm_div = mmcm_div_config[gen]
-        use_mmcm = mmcm_mult/mmcm_div != 1.0
+        self.submodules += tx_mmcm
+        self.specials += Instance("BUFG", i_I=gtp.txoutclk, o_O=tx_mmcm_clkin)
+        tx_mmcm.register_clkin(tx_mmcm_clkin, 150e6)
+        tx_mmcm.create_clkout(self.cd_sata_tx, tx_mmcm_clkout_freq[gen], with_reset=False)
 
-        if use_mmcm:
-            mmcm_reset        = Signal()
-            mmcm_locked_async = Signal()
-            mmcm_locked       = Signal()
-            mmcm_fb           = Signal()
-            mmcm_clk_i        = Signal()
-            mmcm_clk0_o       = Signal()
-            self.specials += [
-                Instance("BUFG", i_I=gtp.txoutclk, o_O=mmcm_clk_i),
-                Instance("MMCME2_ADV",
-                     p_BANDWIDTH="HIGH", p_COMPENSATION="ZHOLD", i_RST=mmcm_reset, o_LOCKED=mmcm_locked_async,
-
-                     # DRP
-                     i_DCLK=0, i_DEN=0, i_DWE=0, #o_DRDY=,
-                     i_DADDR=0, i_DI=0, #o_DO=,
-
-                     # VCO
-                     p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=6.66667,
-                     p_CLKFBOUT_MULT_F=mmcm_mult, p_CLKFBOUT_PHASE=0.000, p_DIVCLK_DIVIDE=1,
-                     i_CLKIN1=mmcm_clk_i, i_CLKFBIN=mmcm_fb, o_CLKFBOUT=mmcm_fb,
-
-                     # CLK0
-                     p_CLKOUT0_DIVIDE_F=mmcm_div, p_CLKOUT0_PHASE=0.000, o_CLKOUT0=mmcm_clk0_o,
-                ),
-                Instance("BUFG", i_I=mmcm_clk0_o, o_O=self.cd_sata_tx.clk),
-                MultiReg(mmcm_locked_async, mmcm_locked, "sys"),
-            ]
-        else:
-            mmcm_locked = Signal(reset=1)
-            mmcm_reset  = Signal()
-            self.specials += Instance("BUFG", i_I=gtp.txoutclk, o_O=self.cd_sata_tx.clk)
-
-        self.comb += [
-            gtp.txusrclk.eq(self.cd_sata_tx.clk),
-            gtp.txusrclk2.eq(self.cd_sata_tx.clk)
-        ]
+        self.comb += gtp.txusrclk.eq(self.cd_sata_tx.clk)
+        self.comb += gtp.txusrclk2.eq(self.cd_sata_tx.clk)
 
         # RX clocking ------------------------------------------------------------------------------
         #   (gen3) sata_rx recovered clk @  @ 300MHz (16-bits) /  150MHz (32-bits) from GTP RXOUTCLK
         #   (gen2) sata_rx recovered clk @  @ 150MHz (16-bits) /   75MHz (32-bits) from GTP RXOUTCLK
         #   (gen1) sata_rx recovered clk @  @ 75MHz  (16-bits) / 37.5MHz (32-bits) from GTP RXOUTCLK
-        self.specials += [
-            Instance("BUFG", i_I=gtp.rxoutclk, o_O=self.cd_sata_rx.clk),
-        ]
-        self.comb += [
-            gtp.rxusrclk.eq(self.cd_sata_rx.clk),
-            gtp.rxusrclk2.eq(self.cd_sata_rx.clk)
-        ]
+        self.specials += Instance("BUFG", i_I=gtp.rxoutclk, o_O=self.cd_sata_rx.clk)
+        self.comb += gtp.rxusrclk.eq(self.cd_sata_rx.clk)
+        self.comb += gtp.rxusrclk2.eq(self.cd_sata_rx.clk)
 
         # Configuration Reset ----------------------------------------------------------------------
 
@@ -145,7 +111,7 @@ class A7LiteSATAPHYCRG(Module):
         self.comb += txphaligndone_rising.eq(gtp.txphaligndone & ~txphaligndone)
 
         tx_startup_fsm.act("PLL_RESET",
-            mmcm_reset.eq(1),
+            tx_mmcm.reset.eq(1),
             self.qpllreset.eq(1),
             pll_reset_timer.wait.eq(1),
             If(pll_reset_timer.done,
@@ -153,7 +119,7 @@ class A7LiteSATAPHYCRG(Module):
             )
         )
         tx_startup_fsm.act("GTP_RESET",
-            mmcm_reset.eq(1),
+            tx_mmcm.reset.eq(1),
             self.gttxreset.eq(1),
             If(self.qplllock,
                 NextState("WAIT_MMCM")
@@ -161,7 +127,7 @@ class A7LiteSATAPHYCRG(Module):
         )
         tx_startup_fsm.act("WAIT_MMCM",
             self.gttxreset.eq(1),
-            If(mmcm_locked,
+            If(tx_mmcm.locked,
                 NextState("WAIT_GTP_RESET_DONE")
             )
         )
@@ -287,7 +253,7 @@ class A7LiteSATAPHYCRG(Module):
 
         # Reset for SATA TX/RX clock domains -------------------------------------------------------
         self.specials += [
-            AsyncResetSynchronizer(self.cd_sata_tx, ~(gtp.qplllock & mmcm_locked) | self.tx_reset),
+            AsyncResetSynchronizer(self.cd_sata_tx, ~(gtp.qplllock & tx_mmcm.locked) | self.tx_reset),
             AsyncResetSynchronizer(self.cd_sata_rx, ~gtp.qplllock | self.rx_reset),
             MultiReg(gtp.qplllock, self.qplllock, "sys"),
         ]
