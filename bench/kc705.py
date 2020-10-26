@@ -112,20 +112,13 @@ class SATATestSoC(SoCMini):
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
         self.add_csr("sata_bist")
 
-        # Timing constraints FIXME: update.
-        self.sata_phy.crg.cd_sata_rx.clk.attr.add("keep")
-        self.sata_phy.crg.cd_sata_tx.clk.attr.add("keep")
-        platform.add_platform_command("""
-create_clock -name sys_clk -period 5 [get_nets sys_clk]
-
-create_clock -name sata_rx_clk -period {sata_clk_period} [get_nets sata_rx_clk]
-create_clock -name sata_tx_clk -period {sata_clk_period} [get_nets sata_tx_clk]
-
-set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_rx_clk]
-set_false_path -from [get_clocks sys_clk] -to [get_clocks sata_tx_clk]
-set_false_path -from [get_clocks sata_rx_clk] -to [get_clocks sys_clk]
-set_false_path -from [get_clocks sata_tx_clk] -to [get_clocks sys_clk]
-""".format(sata_clk_period="3.3" if data_width == 16 else "6.6"))
+        # Timing constraints
+        platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/300e6 if data_width == 16 else 1e9/150e6)
+        platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/300e6 if data_width == 16 else 1e9/150e6)
+        self.platform.add_false_path_constraints(
+            self.crg.cd_sys.clk,
+            self.sata_phy.crg.cd_sata_tx.clk,
+            self.sata_phy.crg.cd_sata_tx.clk)
 
         # Leds -------------------------------------------------------------------------------------
         # sys_clk
