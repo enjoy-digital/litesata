@@ -31,7 +31,7 @@ class _RisingEdge(Module):
 # --------------------------------------------------------------------------------------------------
 
 class K7LiteSATAPHYCRG(Module):
-    def __init__(self, clock_pads_or_refclk, pads, gtx, revision, clk_freq):
+    def __init__(self, refclk, pads, gtx, revision, clk_freq):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
         self.ready    = Signal()
@@ -44,16 +44,16 @@ class K7LiteSATAPHYCRG(Module):
         #   (sata_gen3) 150MHz / VCO @ 3GHz / Line rate @ 6Gbps
         #   (sata_gen2 & sata_gen1) VCO still @ 3 GHz, Line rate is
         #   decreased with output dividers.
-        if isinstance(clock_pads_or_refclk, Signal):
-            self.refclk = clock_pads_or_refclk
+        if isinstance(refclk, (Signal, ClockSignal)):
+            self.refclk = refclk
         else:
             self.refclk = Signal()
-            clock_pads = clock_pads_or_refclk
+            clock_pads = refclk
             self.specials += Instance("IBUFDS_GTE2",
-                i_CEB=0,
-                i_I=clock_pads.refclk_p,
-                i_IB=clock_pads.refclk_n,
-                o_O=self.refclk
+                i_CEB = 0,
+                i_I   = refclk.p,
+                i_IB  = refclk.n,
+                o_O   = self.refclk
             )
 
         self.comb += gtx.gtrefclk0.eq(self.refclk)
