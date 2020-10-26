@@ -48,6 +48,13 @@ _sata_io = [
         Subsignal("rxp", Pins("G4")),
         Subsignal("rxn", Pins("G3")),
     ),
+    # PCIe 2 SATA Custom Adapter (With PCIe Riser / SATA cable mod).
+    ("pcie", 0,
+        Subsignal("txp",  Pins("L4")),
+        Subsignal("txn",  Pins("L3")),
+        Subsignal("rxp",  Pins("M6")),
+        Subsignal("rxn",  Pins("M5")),
+    ),
 ]
 
 # CRG ----------------------------------------------------------------------------------------------
@@ -69,7 +76,7 @@ class _CRG(Module):
 
 class SATATestSoC(SoCMini):
     def __init__(self, platform, connector="fmc", gen="gen3", data_width=16, with_analyzer=False):
-        assert connector in ["fmc", "sfp"]
+        assert connector in ["fmc", "sfp", "pcie"]
         assert gen in ["gen1", "gen2", "gen3"]
         sys_clk_freq = int(200e6)
 
@@ -168,7 +175,7 @@ def main():
     parser.add_argument("--build",         action="store_true", help="Build bitstream")
     parser.add_argument("--load",          action="store_true", help="Load bitstream (to SRAM)")
     parser.add_argument("--gen",           default="3",         help="SATA Gen: 1, 2 or 3 (default)")
-    parser.add_argument("--connector",     default="fmc",       help="SATA Connector: fmc (default) or sfp")
+    parser.add_argument("--connector",     default="fmc",       help="SATA Connector: fmc (default) , sfp or pcie")
     parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer")
     args = parser.parse_args()
 
