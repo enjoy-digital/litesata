@@ -1,7 +1,7 @@
 #
 # This file is part of LiteSATA.
 #
-# Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
@@ -13,7 +13,7 @@ from litex.soc.interconnect.csr import *
 # LiteSATABISTGenerator ----------------------------------------------------------------------------
 
 class LiteSATABISTGenerator(Module):
-    def __init__(self, user_port, counter_width=32):
+    def __init__(self, user_port, count_width=32):
         self.start   = Signal()
         self.sector  = Signal(48)
         self.count   = Signal(16)
@@ -32,70 +32,59 @@ class LiteSATABISTGenerator(Module):
 
         source, sink = user_port.sink, user_port.source
 
-        counter       = Signal(counter_width)
-        counter_reset = Signal()
-        counter_ce    = Signal()
-        self.sync += \
-            If(counter_reset,
-                counter.eq(0)
-            ).Elif(counter_ce,
-                counter.eq(counter + 1)
-            )
-
+        count     = Signal(count_width)
         scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler
-        self.comb += [
-            scrambler.reset.eq(counter_reset),
-            scrambler.ce.eq(counter_ce)
-        ]
 
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             self.done.eq(1),
-            counter_reset.eq(1),
+            scrambler.reset.eq(1),
+            NextValue(count, 0),
             If(self.start,
-                NextState("SEND_CMD_AND_DATA")
+                NextState("SEND-CMD-AND-DATA")
             )
         )
         self.comb += [
-            source.last.eq(counter == (logical_sector_size//4*self.count)-1),
+            source.last.eq(count == (logical_sector_size//4*self.count)-1),
             source.write.eq(1),
             source.sector.eq(self.sector),
             source.count.eq(self.count*count_mult),
             If(self.random,
                 source.data.eq(Replicate(scrambler.value, n))
             ).Else(
-                source.data.eq(Replicate(counter, n))
+                source.data.eq(Replicate(count, n))
             )
         ]
-        fsm.act("SEND_CMD_AND_DATA",
+        fsm.act("SEND-CMD-AND-DATA",
             source.valid.eq(1),
             If(source.valid & source.ready,
-                counter_ce.eq(1),
+                scrambler.ce.eq(1),
+                NextValue(count, count + 1),
                 If(source.last,
-                    NextState("WAIT_ACK")
+                    NextState("WAIT-ACK")
                 )
             )
         )
-        fsm.act("WAIT_ACK",
+        fsm.act("WAIT-ACK",
             sink.ready.eq(1),
             If(sink.valid,
                 NextState("IDLE")
             )
         )
 
-        self.sync += \
+        self.sync += [
             If(self.start,
                 self.aborted.eq(0)
             ).Elif(sink.valid & sink.ready,
                 self.aborted.eq(self.aborted | sink.failed)
             )
+        ]
 
 # LiteSATABISTChecker ------------------------------------------------------------------------------
 
 class LiteSATABISTChecker(Module):
-    def __init__(self, user_port, counter_width=32):
+    def __init__(self, user_port, count_width=32):
         self.start   = Signal()
         self.sector  = Signal(48)
         self.count   = Signal(16)
@@ -103,7 +92,7 @@ class LiteSATABISTChecker(Module):
 
         self.done    = Signal()
         self.aborted = Signal()
-        self.errors  = Signal(counter_width)
+        self.errors  = Signal(count_width)
 
         # # #
 
@@ -114,43 +103,21 @@ class LiteSATABISTChecker(Module):
 
         source, sink = user_port.sink, user_port.source
 
-        counter       = Signal(counter_width)
-        counter_ce    = Signal()
-        counter_reset = Signal()
-        self.sync += \
-            If(counter_reset,
-                counter.eq(0)
-            ).Elif(counter_ce,
-                counter.eq(counter + 1)
-            )
-
-        error_counter       = Signal(counter_width)
-        error_counter_ce    = Signal()
-        error_counter_reset = Signal()
-        self.sync += \
-            If(error_counter_reset,
-                error_counter.eq(0)
-            ).Elif(error_counter_ce,
-                error_counter.eq(error_counter + 1)
-            )
-
-        self.comb += self.errors.eq(error_counter)
+        count  = Signal(count_width)
+        errors = Signal(count_width)
+        self.comb += self.errors.eq(errors)
 
         scrambler = ResetInserter()(Scrambler())
         self.submodules += scrambler
-        self.comb += [
-            scrambler.reset.eq(counter_reset),
-            scrambler.ce.eq(counter_ce)
-        ]
 
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        self.submodules += self.fsm
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             self.done.eq(1),
-            counter_reset.eq(1),
+            scrambler.reset.eq(1),
+            NextValue(count, 0),
             If(self.start,
-                error_counter_reset.eq(1),
-                NextState("SEND_CMD")
+                NextValue(errors, 0),
+                NextState("SEND-CMD")
             )
         )
         self.comb += [
@@ -159,48 +126,52 @@ class LiteSATABISTChecker(Module):
             source.sector.eq(self.sector),
             source.count.eq(self.count*count_mult),
         ]
-        fsm.act("SEND_CMD",
+        fsm.act("SEND-CMD",
             source.valid.eq(1),
             If(source.ready,
-                counter_reset.eq(1),
-                NextState("WAIT_ACK")
+                NextState("WAIT-ACK")
             )
         )
-        fsm.act("WAIT_ACK",
+        fsm.act("WAIT-ACK",
             If(sink.valid & sink.read,
-                NextState("RECEIVE_DATA")
+                NextState("RECEIVE-DATA")
             )
         )
         expected_data = Signal(n*32)
-        self.comb += \
+        self.comb += [
             If(self.random,
                 expected_data.eq(Replicate(scrambler.value, n))
             ).Else(
-                expected_data.eq(Replicate(counter, n))
+                expected_data.eq(Replicate(count, n))
             )
-        fsm.act("RECEIVE_DATA",
+        ]
+        fsm.act("RECEIVE-DATA",
             sink.ready.eq(1),
             If(sink.valid,
-                counter_ce.eq(1),
+                scrambler.ce.eq(1),
+                NextValue(count, count + 1),
                 If(sink.data != expected_data,
-                    error_counter_ce.eq(~sink.end)
+                    If(~sink.end,
+                        NextValue(errors, errors + 1)
+                    )
                 ),
                 If(sink.end,
                     If(sink.last,
                         NextState("IDLE")
                     ).Else(
-                        NextState("WAIT_ACK")
+                        NextState("WAIT-ACK")
                     )
                 )
             )
         )
 
-        self.sync += \
+        self.sync += [
             If(self.start,
                 self.aborted.eq(0)
             ).Elif(sink.valid & sink.ready,
                 self.aborted.eq(self.aborted | sink.failed)
             )
+        ]
 
 # LiteSATABISTUnitCSR ------------------------------------------------------------------------------
 
@@ -234,58 +205,40 @@ class LiteSATABISTUnitCSR(Module, AutoCSR):
             self._errors.status.eq(bist_unit.errors)
         ]
 
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
-        loop_counter       = Signal(8)
-        loop_counter_reset = Signal()
-        loop_counter_ce    = Signal()
-        self.sync += \
-            If(loop_counter_reset,
-                loop_counter.eq(0)
-            ).Elif(loop_counter_ce,
-                loop_counter.eq(loop_counter + 1)
-            )
+        loop   = Signal(8)
+        cycles = Signal(32)
+        self.comb += self._cycles.status.eq(cycles)
 
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             self._done.status.eq(1),
-            loop_counter_reset.eq(1),
+            NextValue(loop, 0),
             If(start,
+                NextValue(cycles, 0),
                 NextState("CHECK")
             )
         )
         fsm.act("CHECK",
-            If(loop_counter < loops,
+            If(loop < loops,
                 NextState("START")
             ).Else(
                 NextState("IDLE")
-            )
+            ),
+            NextValue(cycles, cycles + 1),
         )
         fsm.act("START",
             bist_unit.start.eq(1),
-            NextState("WAIT_DONE")
+            NextState("WAIT-DONE"),
+            NextValue(cycles, cycles + 1),
         )
-        fsm.act("WAIT_DONE",
+        fsm.act("WAIT-DONE",
             If(bist_unit.done,
-                loop_counter_ce.eq(1),
+                NextValue(loop, loop + 1),
                 NextState("CHECK")
-            )
+            ),
+            NextValue(cycles, cycles + 1),
         )
 
-        cycles_counter       = Signal(32)
-        cycles_counter_reset = Signal()
-        cycles_counter_ce    = Signal()
-        self.sync += \
-            If(cycles_counter_reset,
-                cycles_counter.eq(0)
-            ).Elif(cycles_counter_ce,
-                cycles_counter.eq(cycles_counter + 1)
-            )
-
-        self.sync += [
-            cycles_counter_reset.eq(start),
-            cycles_counter_ce.eq(~fsm.ongoing("IDLE")),
-            self._cycles.status.eq(cycles_counter)
-        ]
 
 # LiteSATABISTIdentify -----------------------------------------------------------------------------
 
@@ -303,32 +256,31 @@ class LiteSATABISTIdentify(Module):
 
         source, sink = user_port.sink, user_port.source
 
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             self.done.eq(1),
             If(self.start,
-                NextState("SEND_CMD")
+                NextState("SEND-CMD")
             )
         )
         self.comb += [
             source.last.eq(1),
             source.identify.eq(1),
         ]
-        fsm.act("SEND_CMD",
+        fsm.act("SEND-CMD",
             fifo.reset.eq(1),
             source.valid.eq(1),
             If(source.valid & source.ready,
-                NextState("WAIT_ACK")
+                NextState("WAIT-ACK")
             )
         )
-        fsm.act("WAIT_ACK",
+        fsm.act("WAIT-ACK",
             If(sink.valid & sink.identify,
-                NextState("RECEIVE_DATA")
+                NextState("RECEIVE-DATA")
             )
         )
         self.comb += fifo.sink.data.eq(sink.data)
-        fsm.act("RECEIVE_DATA",
+        fsm.act("RECEIVE-DATA",
             sink.ready.eq(fifo.sink.ready),
             If(sink.valid,
                 fifo.sink.valid.eq(1),
@@ -364,9 +316,9 @@ class LiteSATABISTIdentifyCSR(Module, AutoCSR):
 # LiteSATABIST --------------------------------------------------------------------------
 
 class LiteSATABIST(Module, AutoCSR):
-    def __init__(self, crossbar, with_csr=False, counter_width=32):
-        generator = LiteSATABISTGenerator(crossbar.get_port(), counter_width)
-        checker   = LiteSATABISTChecker(crossbar.get_port(), counter_width)
+    def __init__(self, crossbar, with_csr=False, count_width=32):
+        generator = LiteSATABISTGenerator(crossbar.get_port(), count_width)
+        checker   = LiteSATABISTChecker(crossbar.get_port(), count_width)
         identify  = LiteSATABISTIdentify(crossbar.get_port())
         if with_csr:
             generator = LiteSATABISTUnitCSR(generator)
