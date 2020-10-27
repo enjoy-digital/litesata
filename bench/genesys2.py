@@ -103,12 +103,11 @@ class SATATestSoC(SoCMini):
         # ready
         self.comb += platform.request("user_led", 3).eq(self.sata_phy.ctrl.ready)
 
-
         # Analyzer ---------------------------------------------------------------------------------
         if with_analyzer:
             analyzer_signals = [
-                self.sata_phy.crg.tx_startup_fsm,
-                self.sata_phy.crg.rx_startup_fsm,
+                self.sata_phy.phy.tx_init.fsm,
+                self.sata_phy.phy.rx_init.fsm,
                 self.sata_phy.ctrl.fsm,
 
                 self.sata_phy.ctrl.ready,
