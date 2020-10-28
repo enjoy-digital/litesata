@@ -6,6 +6,7 @@
 
 from migen import *
 
+from litex.gen import *
 from litex.soc.interconnect.csr import *
 from litex.soc.interconnect import stream
 
@@ -33,8 +34,7 @@ class LiteSATABlock2MemDMA(Module, AutoCSR):
         count = Signal(7)
 
         # DMA
-        self.submodules.dma  = dma = WishboneDMAWriter(bus, with_csr=False,
-            endianness={"big": "little", "little": "big"}[endianness]) # FIXME
+        self.submodules.dma  = dma = WishboneDMAWriter(bus, with_csr=False, endianness=endianness)
 
         # FIFO
         self.submodules.fifo = fifo = stream.SyncFIFO([("data", 32)], fifo_depth)
@@ -64,7 +64,7 @@ class LiteSATABlock2MemDMA(Module, AutoCSR):
         fsm.act("RECEIVE_DATA",
             dma.sink.valid.eq(fifo.source.valid),
             dma.sink.address.eq(self.base.storage[2:] + count),
-            dma.sink.data.eq(fifo.source.data),
+            dma.sink.data.eq(reverse_bytes(fifo.source.data)),
             fifo.source.ready.eq(dma.sink.ready),
             If(dma.sink.valid & dma.sink.ready,
                 NextValue(count, count + 1),

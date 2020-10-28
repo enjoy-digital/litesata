@@ -36,7 +36,7 @@ def block2mem_test(port, sector, count):
                         print("")
                     print("0x{:08x}".format(addr), end="  ")
                 data = wb.read(addr)
-                for i in reversed(range(4)):
+                for i in range(4):
                     print("{:02x}".format((data >> (8*i)) & 0xff), end=" ")
             print("")
 
