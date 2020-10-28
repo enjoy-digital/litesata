@@ -12,6 +12,8 @@ from litex.soc.interconnect import stream
 
 from litex.soc.cores.dma import WishboneDMAWriter
 
+from litesata.common import logical_sector_size
+
 # SATA Block2Mem DMA ---------------------------------------------------------------------------------
 
 class LiteSATABlock2MemDMA(Module, AutoCSR):
@@ -19,7 +21,7 @@ class LiteSATABlock2MemDMA(Module, AutoCSR):
 
     Read a of block from the SATA drive and write it to memory through DMA.
     """
-    def __init__(self, user_port, bus, endianness="little", fifo_depth=128):
+    def __init__(self, user_port, bus, endianness="little"):
         self.user_port = user_port
         self.bus       = bus
         assert user_port.dw   == 32 # FIXME: remove limitation.
@@ -28,22 +30,26 @@ class LiteSATABlock2MemDMA(Module, AutoCSR):
         self.base   = CSRStorage(64)
         self.start  = CSR()
         self.done   = CSRStatus()
+        self.error  = CSRStatus()
 
         # # #
 
-        count = Signal(7)
+        count = Signal(max=logical_sector_size//4)
 
         # DMA
         self.submodules.dma  = dma = WishboneDMAWriter(bus, with_csr=False, endianness=endianness)
 
         # FIFO
-        self.submodules.fifo = fifo = stream.SyncFIFO([("data", 32)], fifo_depth)
+        self.submodules.fifo = fifo = stream.SyncFIFO([("data", 32), ("failed", 1)], logical_sector_size//4)
+        self.comb += user_port.source.connect(fifo.sink, keep={"valid", "ready", "last", "data"})
+        self.comb += fifo.sink.failed.eq(user_port.source.failed)
 
         # FSM
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(self.start.re,
                 NextValue(count, 0),
+                NextValue(self.error.status, 0),
                 NextState("SEND-CMD")
             ).Else(
                 self.done.status.eq(1)
@@ -60,15 +66,18 @@ class LiteSATABlock2MemDMA(Module, AutoCSR):
                 NextState("RECEIVE_DATA")
             )
         )
-        self.comb += user_port.source.connect(fifo.sink, keep={"valid", "ready", "data"})
         fsm.act("RECEIVE_DATA",
             dma.sink.valid.eq(fifo.source.valid),
             dma.sink.address.eq(self.base.storage[2:] + count),
             dma.sink.data.eq(reverse_bytes(fifo.source.data)),
             fifo.source.ready.eq(dma.sink.ready),
-            If(dma.sink.valid & dma.sink.ready,
+            If(fifo.source.valid & fifo.source.ready,
                 NextValue(count, count + 1),
-                If(count == (512//4 - 1),
+                If(fifo.source.last,
+                     NextState("IDLE")
+                ),
+                If(fifo.source.failed,
+                    NextValue(self.error.status, 1),
                     NextState("IDLE")
                 )
             )

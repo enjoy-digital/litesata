@@ -28,6 +28,7 @@ def block2mem_test(port, sector, count):
             wb.regs.sata_block2mem_start.write(1)
             while wb.regs.sata_block2mem_done.read() == 0:
                 time.sleep(0.1)
+            return wb.regs.sata_block2mem_error.read()
 
         def dump(self):
             for addr in range(self.base, self.base + 512, 4):
@@ -43,8 +44,9 @@ def block2mem_test(port, sector, count):
     block2mem = Block2MemDriver(base=wb.mems.sram.base)
     for s in range(sector, sector + count):
         print("Sector {:d}:".format(s))
-        block2mem.read(s)
+        error = block2mem.read(s)
         block2mem.dump()
+        print("Error: {:d}".format(error))
 
     wb.close()
 
