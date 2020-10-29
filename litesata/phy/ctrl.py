@@ -1,7 +1,7 @@
 #
 # This file is part of LiteSATA.
 #
-# Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2017 Johan Klockars <Johan.Klockars@hasselblad.com>
 # Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
@@ -23,13 +23,13 @@ class LiteSATAPHYCtrl(Module):
     - Wait for link to be stable before declaring it ready.
     - Re-initialize the link when invalid data are received.
 
-    The state machine is robust enough to handle hot plug/ power off/on
-    sequences of the device without reseting the FPGA core.
+    The state machine is robust enough to handle hot plug/ power off/on sequences of the device
+    # without reseting the FPGA core.
     """
     def __init__(self, trx, crg, clk_freq):
         self.clk_freq = clk_freq
         self.ready    = Signal()
-        self.sink     = sink = stream.Endpoint(phy_description(32))
+        self.sink     = sink   = stream.Endpoint(phy_description(32))
         self.source   = source = stream.Endpoint(phy_description(32))
         self.misalign = Signal()
         self.tx_idle  = Signal()
@@ -39,51 +39,34 @@ class LiteSATAPHYCtrl(Module):
 
         # # #
 
-        self.comb += [
-            source.valid.eq(1),
-            sink.ready.eq(1)
-        ]
+        # Always transmitting / receiving
+        self.comb += source.valid.eq(1)
+        self.comb += sink.ready.eq(1)
 
+        # Retry / Align count/timers.
         retry_timer = WaitTimer(self.us(10000))
         align_timer = WaitTimer(self.us(873))
+        align_count = Signal(4)
         self.submodules += align_timer, retry_timer
 
-        align_det    = Signal()
-        misalign_det = Signal()
-        non_align_counter       = Signal(4)
-        non_align_counter_reset = Signal()
-        non_align_counter_ce    = Signal()
-        self.sync += \
-            If(non_align_counter_reset,
-                non_align_counter.eq(0)
-            ).Elif(non_align_counter_ce,
-                non_align_counter.eq(non_align_counter + 1)
-            )
-        self.sync += trx.tx_idle.eq(self.tx_idle);
-        self.sync += crg.rx_reset.eq(self.rx_reset);
-        self.sync += crg.tx_reset.eq(self.tx_reset);
+        # Drive Transceiver/CRG idle/reset from internal logic.
+        self.sync += trx.tx_idle.eq(self.tx_idle)
+        self.sync += crg.rx_reset.eq(self.rx_reset)
+        self.sync += crg.tx_reset.eq(self.tx_reset)
 
-        self.comb +=  [
-            If(sink.valid,
-                align_det.eq((self.sink.charisk == 0b0001) &
-                             (self.sink.data == primitives["ALIGN"]))
-            )
-        ]
-
-        self.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
-        self.submodules += fsm
+        self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
         fsm.act("RESET",
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             self.rx_reset.eq(1),
             self.tx_reset.eq(1),
-            NextState("AWAIT_CRG_RESET")
+            NextState("AWAIT-CRG-RESET")
         )
-        fsm.act("AWAIT_CRG_RESET",
+        fsm.act("AWAIT-CRG-RESET",
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
-            non_align_counter_reset.eq(1),
+            NextValue(align_count, 4-1),
             If(trx.ready,
                 NextState("COMINIT")
             )
@@ -93,18 +76,18 @@ class LiteSATAPHYCtrl(Module):
             trx.rx_cdrhold.eq(1),
             trx.tx_cominit_stb.eq(1),
             If(trx.tx_cominit_ack & ~trx.rx_cominit_stb,
-                NextState("AWAIT_COMINIT")
+                NextState("AWAIT-COMINIT")
             )
         )
-        fsm.act("AWAIT_COMINIT",
+        fsm.act("AWAIT-COMINIT",
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             retry_timer.wait.eq(1),
             If(trx.rx_cominit_stb,
-                NextState("AWAIT_NO_COMINIT")
+                NextState("AWAIT-NO-COMINIT")
             )
         )
-        fsm.act("AWAIT_NO_COMINIT",
+        fsm.act("AWAIT-NO-COMINIT",
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             retry_timer.wait.eq(1),
@@ -122,54 +105,55 @@ class LiteSATAPHYCtrl(Module):
             trx.rx_cdrhold.eq(1),
             trx.tx_comwake_stb.eq(1),
             If(trx.tx_comwake_ack,
-                NextState("AWAIT_COMWAKE")
+                NextState("AWAIT-COMWAKE")
             )
         )
-        fsm.act("AWAIT_COMWAKE",
+        fsm.act("AWAIT-COMWAKE",
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             retry_timer.wait.eq(1),
             If(trx.rx_comwake_stb,
-                NextState("AWAIT_NO_COMWAKE")
+                NextState("AWAIT-NO-COMWAKE")
             )
         )
-        fsm.act("AWAIT_NO_COMWAKE",
+        fsm.act("AWAIT-NO-COMWAKE",
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             If(~trx.rx_comwake_stb,
-                NextState("AWAIT_ALIGN")
+                NextState("AWAIT-ALIGN")
             )
         )
-        fsm.act("AWAIT_ALIGN",
+        fsm.act("AWAIT-ALIGN",
             trx.rx_cdrhold.eq(1),
-            source.data.eq(0x4A4A4A4A),  # D10.2
+            source.data.eq(0x4a4a4a4a),  # D10.2
             source.charisk.eq(0b0000),
             align_timer.wait.eq(1),
-            If(align_det & ~trx.rx_idle,
-                self.rx_reset.eq(1),
-                NextState("SEND_ALIGN")
+            If(~trx.rx_idle,
+                If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN"]),
+                    self.rx_reset.eq(1),
+                    NextState("SEND-ALIGN")
+                )
             )
         )
-        fsm.act("SEND_ALIGN",
+        fsm.act("SEND-ALIGN",
             align_timer.wait.eq(1),
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
-            If(sink.valid &
-               (sink.charisk == 0b0001),
-               If(sink.data[0:8] == 0x7C,
-                   non_align_counter_ce.eq(1)
-               ).Else(
-                   non_align_counter_reset.eq(1)
-               )
+            If(sink.valid & (sink.charisk == 0b0001),
+                If(sink.data[0:8] == 0x7c,
+                    NextValue(align_count, align_count - 1),
+                ).Else(
+                    NextValue(align_count, 4-1),
+                )
             ),
-            If(non_align_counter == 3,
+            If(align_count == 0,
                 NextState("READY")
             )
         )
 
         # Wait alignment stability for 5ms before declaring ctrl is ready, reset the RX part of
         # the transceiver when misalignment is detected.
-        stability_timer = WaitTimer(5*clk_freq//1000)
+        stability_timer = WaitTimer(int(5e-3*clk_freq))
         self.submodules += stability_timer
 
         fsm.act("READY",
@@ -191,5 +175,5 @@ class LiteSATAPHYCtrl(Module):
         )
 
     def us(self, t):
-        clk_period_us = 1000000/self.clk_freq
+        clk_period_us = 1e6/self.clk_freq
         return ceil(t/clk_period_us)
