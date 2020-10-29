@@ -11,8 +11,8 @@ import argparse
 
 from migen import *
 
-from litex.boards.platforms import nexys_video
-from litex.boards.targets.nexys_video import _CRG
+from litex_boards.platforms import nexys_video
+from litex_boards.targets.nexys_video import _CRG
 
 from litex.build.generic_platform import *
 

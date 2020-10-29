@@ -11,8 +11,8 @@ import argparse
 
 from migen import *
 
-from litex.boards.platforms import genesys2
-from litex.boards.targets.genesys2 import _CRG
+from litex_boards.platforms import genesys2
+from litex_boards.targets.genesys2 import _CRG
 
 from litex.build.generic_platform import *
 
