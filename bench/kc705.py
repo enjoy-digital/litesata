@@ -113,6 +113,7 @@ class SATATestSoC(SoCMini):
             gen        = gen,
             clk_freq   = sys_clk_freq,
             data_width = data_width)
+        self.add_csr("sata_phy")
 
         # Core
         self.submodules.sata_core = LiteSATACore(self.sata_phy)
