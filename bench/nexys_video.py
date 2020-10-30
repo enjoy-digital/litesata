@@ -46,9 +46,10 @@ _sata_io = [
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, gen="gen2", data_width=16, with_analyzer=False):
+    def __init__(self, platform, gen="gen2", with_analyzer=False):
         assert gen in ["gen1", "gen2"]
-        sys_clk_freq = int(100e6)
+        sys_clk_freq  = int(100e6)
+        sata_clk_freq = {"gen1": 75e6, "gen2": 150e6, "gen3": 300e6}[gen]
 
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = _CRG(platform, sys_clk_freq)
@@ -67,7 +68,7 @@ class SATATestSoC(SoCMini):
             pads       = platform.request("fmc"),
             gen        = gen,
             clk_freq   = sys_clk_freq,
-            data_width = data_width)
+            data_width = 16)
         self.add_csr("sata_phy")
 
         # Core
@@ -81,8 +82,8 @@ class SATATestSoC(SoCMini):
         self.add_csr("sata_bist")
 
         # Timing constraints
-        platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/150e6 if data_width == 16 else 1e9/75e6)
-        platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/150e6 if data_width == 16 else 1e9/75e6)
+        platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
+        platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
             self.sata_phy.crg.cd_sata_tx.clk,
