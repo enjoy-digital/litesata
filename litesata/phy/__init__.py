@@ -19,10 +19,10 @@ class LiteSATAPHY(Module, AutoCSR):
     For now, the Kintex7/Zynq(with PL based on K7) PHY is the only one available,
     but the achitecture is modular enough to accept others PHYs.
     """
-    def __init__(self, device, refclk, pads, gen, clk_freq, data_width=16):
-        self.refclk = refclk
+    def __init__(self, device, pads, gen, clk_freq, refclk=None, data_width=16):
         self.pads   = pads
         self.gen    = gen
+        self.refclk = refclk
 
         # Registers
         self.enable = CSRStorage(reset=1)

@@ -32,11 +32,10 @@ class A7LiteSATAPHYCRG(Module):
             self.refclk = refclk
         else:
             self.refclk = Signal()
-            clock_pads = refclk
             self.specials += Instance("IBUFDS_GTE2",
                 i_CEB = 0,
-                i_I   = refclk.p,
-                i_IB  = refclk.n,
+                i_I   = pads.clk_p,
+                i_IB  = pads.clk_n,
                 o_O   = self.refclk
             )
         self.comb += gtp.gtrefclk0.eq(self.refclk)
@@ -674,8 +673,8 @@ class A7LiteSATAPHY(Module):
             o_RXNOTINTABLE         = rxnotintable,
 
             # Receive Ports - RX AFE Ports
-            i_GTPRXN               = pads.rxn,
-            i_GTPRXP               = pads.rxp,
+            i_GTPRXN               = pads.rx_n,
+            i_GTPRXP               = pads.rx_p,
             i_PMARSVDIN2           = 0b0,
             o_PMARSVDOUT0          = Open(),
             o_PMARSVDOUT1          = Open(),
@@ -873,8 +872,8 @@ class A7LiteSATAPHY(Module):
             o_TXSYNCOUT            = Open(),
 
             # Transmit Ports - TX Configurable Driver Ports
-            o_GTPTXN               = pads.txn,
-            o_GTPTXP               = pads.txp,
+            o_GTPTXN               = pads.tx_n,
+            o_GTPTXP               = pads.tx_p,
             i_TXBUFDIFFCTRL        = 0b100,
             i_TXDEEMPH             = 0,
             i_TXDIFFCTRL           = 0b1000,

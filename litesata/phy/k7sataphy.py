@@ -33,11 +33,10 @@ class K7LiteSATAPHYCRG(Module):
             self.refclk = refclk
         else:
             self.refclk = Signal()
-            clock_pads = refclk
             self.specials += Instance("IBUFDS_GTE2",
                 i_CEB = 0,
-                i_I   = refclk.p,
-                i_IB  = refclk.n,
+                i_I   = pads.clk_p,
+                i_IB  = pads.clk_n,
                 o_O   = self.refclk
             )
         self.comb += gtx.gtrefclk0.eq(self.refclk)
@@ -632,8 +631,8 @@ class K7LiteSATAPHY(Module):
             o_RXNOTINTABLE     = rxnotintable,
 
             # Receive Ports - RX AFE
-            i_GTXRXP           = pads.rxp,
-            i_GTXRXN           = pads.rxn,
+            i_GTXRXP           = pads.rx_p,
+            i_GTXRXN           = pads.rx_n,
 
             # Receive Ports - RX Buffer Bypass Ports
             i_RXBUFRESET       = 0,
@@ -836,8 +835,8 @@ class K7LiteSATAPHY(Module):
             i_TXDATA           = self.txdata,
 
             # Transmit Ports - TX Driver and OOB signaling
-            o_GTXTXP           = pads.txp,
-            o_GTXTXN           = pads.txn,
+            o_GTXTXP           = pads.tx_p,
+            o_GTXTXN           = pads.tx_n,
 
             # Transmit Ports - TX Fabric Clock Output Control Ports
             o_TXOUTCLK         = self.txoutclk,
