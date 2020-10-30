@@ -78,7 +78,7 @@ class K7LiteSATAPHYCRG(Module):
 # --------------------------------------------------------------------------------------------------
 
 class K7LiteSATAPHY(Module):
-    def __init__(self, pads, gen, clk_freq, data_width=16):
+    def __init__(self, pads, gen, clk_freq, data_width=16, tx_buffer_enable=False, rx_buffer_enable=False):
         assert data_width in [16, 32]
         # Common signals
         self.data_width     = data_width
@@ -165,11 +165,11 @@ class K7LiteSATAPHY(Module):
         rxcdr_cfg = cdr_config[gen]
 
         # TX Init ----------------------------------------------------------------------------------
-        self.submodules.tx_init = tx_init = GTXTXInit(clk_freq, buffer_enable=False)
+        self.submodules.tx_init = tx_init = GTXTXInit(clk_freq, buffer_enable=tx_buffer_enable)
         self.comb += tx_init.plllock.eq(self.cplllock)
 
         # RX Init ----------------------------------------------------------------------------------
-        self.submodules.rx_init = rx_init = GTXRXInit(clk_freq, buffer_enable=False)
+        self.submodules.rx_init = rx_init = GTXRXInit(clk_freq, buffer_enable=rx_buffer_enable)
         self.comb += rx_init.plllock.eq(self.cplllock)
 
         # Ready ------------------------------------------------------------------------------------
@@ -247,8 +247,6 @@ class K7LiteSATAPHY(Module):
 
         # GTXE2_CHANNEL Instance -------------------------------------------------------------------
         class Open(Signal): pass
-        tx_buffer_enable = False
-        rx_buffer_enable = False
         gtx_params = dict(
             # Simulation-Only Attributes
             p_SIM_RECEIVER_DETECT_PASS     = "TRUE",

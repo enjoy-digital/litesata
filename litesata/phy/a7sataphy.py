@@ -77,7 +77,7 @@ class A7LiteSATAPHYCRG(Module):
 # --------------------------------------------------------------------------------------------------
 
 class A7LiteSATAPHY(Module):
-    def __init__(self, pads, gen, clk_freq, data_width=16):
+    def __init__(self, pads, gen, clk_freq, data_width=16, tx_buffer_enable=False, rx_buffer_enable=False):
         assert data_width in [16, 32]
         # Common signals
         self.data_width     = data_width
@@ -164,11 +164,11 @@ class A7LiteSATAPHY(Module):
         rxcdr_cfg = cdr_config[gen]
 
         # TX Init ----------------------------------------------------------------------------------
-        self.submodules.tx_init = tx_init = GTPTXInit(clk_freq, buffer_enable=False)
+        self.submodules.tx_init = tx_init = GTPTXInit(clk_freq, buffer_enable=tx_buffer_enable)
         self.comb += tx_init.plllock.eq(self.qplllock)
 
         # RX Init ----------------------------------------------------------------------------------
-        self.submodules.rx_init = rx_init = GTPRXInit(clk_freq, buffer_enable=False)
+        self.submodules.rx_init = rx_init = GTPRXInit(clk_freq, buffer_enable=rx_buffer_enable)
         self.comb += rx_init.plllock.eq(self.qplllock)
 
         # Ready ------------------------------------------------------------------------------------
@@ -252,8 +252,6 @@ class A7LiteSATAPHY(Module):
 
         # GTPE2_CHANNEL Instance -------------------------------------------------------------------
         class Open(Signal): pass
-        tx_buffer_enable = False
-        rx_buffer_enable = False
         rxphaligndone = Signal()
         gtp_params = dict(
             # Simulation-Only Attributes
