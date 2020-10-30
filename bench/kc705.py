@@ -33,29 +33,27 @@ from litescope import LiteScopeAnalyzer
 
 _sata_io = [
     # AB09-FMCRAID / https://www.dgway.com/AB09-FMCRAID_E.html
-    ("fmc_refclk", 0, # 150MHz
-        Subsignal("p", Pins("HPC:GBTCLK0_M2C_P")),
-        Subsignal("n", Pins("HPC:GBTCLK0_M2C_N"))
-    ),
-    ("fmc", 0,
-        Subsignal("txp", Pins("HPC:DP0_C2M_P")),
-        Subsignal("txn", Pins("HPC:DP0_C2M_N")),
-        Subsignal("rxp", Pins("HPC:DP0_M2C_P")),
-        Subsignal("rxn", Pins("HPC:DP0_M2C_N"))
+    ("fmc2sata", 0,
+        Subsignal("clk_p", Pins("HPC:GBTCLK0_M2C_P")),
+        Subsignal("clk_n", Pins("HPC:GBTCLK0_M2C_N")),
+        Subsignal("tx_p",  Pins("HPC:DP0_C2M_P")),
+        Subsignal("tx_n",  Pins("HPC:DP0_C2M_N")),
+        Subsignal("rx_p",  Pins("HPC:DP0_M2C_P")),
+        Subsignal("rx_n",  Pins("HPC:DP0_M2C_N"))
     ),
     # SFP 2 SATA Adapter / https://shop.trenz-electronic.de/en/TE0424-01-SFP-2-SATA-Adapter
-    ("sfp", 0,
-        Subsignal("txp", Pins("H2")),
-        Subsignal("txn", Pins("H1")),
-        Subsignal("rxp", Pins("G4")),
-        Subsignal("rxn", Pins("G3")),
+    ("sfp2sata", 0,
+        Subsignal("tx_p", Pins("H2")),
+        Subsignal("tx_n", Pins("H1")),
+        Subsignal("rx_p", Pins("G4")),
+        Subsignal("rx_n", Pins("G3")),
     ),
     # PCIe 2 SATA Custom Adapter (With PCIe Riser / SATA cable mod).
-    ("pcie", 0,
-        Subsignal("txp",  Pins("L4")),
-        Subsignal("txn",  Pins("L3")),
-        Subsignal("rxp",  Pins("M6")),
-        Subsignal("rxn",  Pins("M5")),
+    ("pcie2sata", 0,
+        Subsignal("tx_p", Pins("L4")),
+        Subsignal("tx_n", Pins("L3")),
+        Subsignal("rx_p", Pins("M6")),
+        Subsignal("rx_n", Pins("M5")),
     ),
 ]
 
@@ -100,10 +98,8 @@ class SATATestSoC(SoCMini):
 
         # SATA -------------------------------------------------------------------------------------
         # RefClk
-        if connector == "fmc":
-            # Use 150MHz refclk provided by FMC.
-            sata_refclk = platform.request("fmc_refclk")
-        else:
+        sata_refclk = None
+        if connector != "fmc":
             # Generate 150MHz from PLL.
             self.clock_domains.cd_sata_refclk = ClockDomain()
             self.crg.pll.create_clkout(self.cd_sata_refclk, 150e6)
@@ -113,7 +109,7 @@ class SATATestSoC(SoCMini):
         # PHY
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
             refclk     = sata_refclk,
-            pads       = platform.request(connector),
+            pads       = platform.request(connector+"2sata"),
             gen        = gen,
             clk_freq   = sys_clk_freq,
             data_width = 16)

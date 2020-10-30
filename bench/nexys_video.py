@@ -31,15 +31,13 @@ from litescope import LiteScopeAnalyzer
 
 _sata_io = [
     # AB09-FMCRAID / https://www.dgway.com/AB09-FMCRAID_E.html
-    ("fmc_refclk", 0, # 150MHz
-        Subsignal("p", Pins("LPC:GBTCLK0_M2C_P")),
-        Subsignal("n", Pins("LPC:GBTCLK0_M2C_N"))
-    ),
-    ("fmc", 0,
-        Subsignal("txp", Pins("LPC:DP0_C2M_P")),
-        Subsignal("txn", Pins("LPC:DP0_C2M_N")),
-        Subsignal("rxp", Pins("LPC:DP0_M2C_P")),
-        Subsignal("rxn", Pins("LPC:DP0_M2C_N"))
+    ("fmc2sata", 0,
+        Subsignal("clk_p", Pins("LPC:GBTCLK0_M2C_P")),
+        Subsignal("clk_n", Pins("LPC:GBTCLK0_M2C_N")),
+        Subsignal("tx_p",  Pins("LPC:DP0_C2M_P")),
+        Subsignal("tx_n",  Pins("LPC:DP0_C2M_N")),
+        Subsignal("rx_p",  Pins("LPC:DP0_M2C_P")),
+        Subsignal("rx_n",  Pins("LPC:DP0_M2C_N"))
     ),
 ]
 
@@ -49,7 +47,7 @@ class SATATestSoC(SoCMini):
     def __init__(self, platform, gen="gen2", with_analyzer=False):
         assert gen in ["gen1", "gen2"]
         sys_clk_freq  = int(100e6)
-        sata_clk_freq = {"gen1": 75e6, "gen2": 150e6, "gen3": 300e6}[gen]
+        sata_clk_freq = {"gen1": 75e6, "gen2": 150e6}[gen]
 
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = _CRG(platform, sys_clk_freq)
@@ -64,8 +62,7 @@ class SATATestSoC(SoCMini):
         # SATA -------------------------------------------------------------------------------------
         # PHY
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
-            refclk     = platform.request("fmc_refclk"), # Use 150MHz refclk provided by FMC.
-            pads       = platform.request("fmc"),
+            pads       = platform.request("fmc2sata"),
             gen        = gen,
             clk_freq   = sys_clk_freq,
             data_width = 16)
