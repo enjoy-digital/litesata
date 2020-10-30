@@ -82,6 +82,7 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
         fsm.act("RECEIVE-DATA-DMA",
             # Connect Converter to DMA.
             dma.sink.valid.eq(conv.source.valid),
+            dma.sink.last.eq(conv.source.last),
             dma.sink.address.eq(self.base.storage[int(log2(dma_bytes)):] + count),
             dma.sink.data.eq(reverse_bytes(conv.source.data)),
             conv.source.ready.eq(dma.sink.ready),
@@ -177,7 +178,9 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
             If(port.sink.ready,
                 conv.source.ready.eq(1),
                 NextValue(count, count + 1),
-                NextState("WAIT-ACK")
+                If(port.sink.last,
+                    NextState("WAIT-ACK")
+                )
             ),
 
             # Monitor errors
