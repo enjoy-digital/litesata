@@ -59,7 +59,6 @@ class LiteSATAPHY(Module, AutoCSR):
         self.comb += [
             self.phy.tx_init.restart.eq(~self.enable.storage),
             self.phy.rx_init.restart.eq(~self.enable.storage),
-            self.status.fields.ready.eq(self.phy.ready),
             self.status.fields.tx_ready.eq(self.phy.tx_init.done),
             self.status.fields.rx_ready.eq(self.phy.rx_init.done),
         ]
@@ -67,6 +66,7 @@ class LiteSATAPHY(Module, AutoCSR):
         # Control
         self.submodules.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq)
         self.comb += self.status.fields.ctrl_ready.eq(self.ctrl.ready)
+        self.comb += self.status.fields.ready.eq(self.phy.ready & self.ctrl.ready)
 
         # Datapath
         self.submodules.datapath = LiteSATAPHYDatapath(self.phy, self.ctrl)
