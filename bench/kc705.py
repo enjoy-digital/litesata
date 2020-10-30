@@ -25,7 +25,7 @@ from litesata.phy import LiteSATAPHY
 from litesata.core import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABIST
-from litesata.frontend.dma import LiteSATASector2MemDMA
+from litesata.frontend.dma import LiteSATASector2MemDMA, LiteSATAMem2SectorDMA
 
 from litescope import LiteScopeAnalyzer
 
@@ -130,6 +130,12 @@ class SATATestSoC(SoCMini):
         self.submodules.sata_sector2mem = LiteSATASector2MemDMA(self.sata_crossbar.get_port(), bus)
         self.bus.add_master("sata_sector2mem", master=bus)
         self.add_csr("sata_sector2mem")
+
+        # Mem2Sector DMA
+        bus =  wishbone.Interface(data_width=32, adr_width=32)
+        self.submodules.sata_mem2sector = LiteSATAMem2SectorDMA(bus, self.sata_crossbar.get_port())
+        self.bus.add_master("sata_mem2sector", master=bus)
+        self.add_csr("sata_mem2sector")
 
         # Timing constraints
         platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/300e6 if data_width == 16 else 1e9/150e6)
