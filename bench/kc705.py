@@ -77,7 +77,10 @@ class _CRG(Module):
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, connector="fmc", gen="gen3", with_analyzer=False):
+    def __init__(self, platform, connector="fmc", gen="gen3",
+        with_global_analyzer     = False,
+        with_sector2mem_analyzer = False,
+        with_mem2sector_analyzer = False):
         assert connector in ["fmc", "sfp", "pcie"]
         assert gen in ["gen1", "gen2", "gen3"]
         sys_clk_freq  = int(200e6)
@@ -162,8 +165,8 @@ class SATATestSoC(SoCMini):
         # ready
         self.comb += platform.request("user_led", 3).eq(self.sata_phy.ctrl.ready)
 
-        # Analyzer ---------------------------------------------------------------------------------
-        if with_analyzer:
+        # Analyzers ---------------------------------------------------------------------------------
+        if with_global_analyzer:
             analyzer_signals = [
                 self.sata_phy.phy.tx_init.fsm,
                 self.sata_phy.phy.rx_init.fsm,
@@ -183,23 +186,51 @@ class SATATestSoC(SoCMini):
                 self.sata_core.command.rx.fsm,
                 self.sata_core.command.tx.fsm,
             ]
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="analyzer.csv")
-            self.add_csr("analyzer")
+            self.submodules.global_analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="global_analyzer.csv")
+            self.add_csr("global_analyzer")
+
+        if with_sector2mem_analyzer:
+            analyzer_signals = [
+                self.sata_sector2mem.start.re,
+                self.sata_sector2mem.fsm,
+                self.sata_sector2mem.port.sink,
+                self.sata_sector2mem.port.source,
+                self.sata_sector2mem.bus,
+            ]
+            self.submodules.sector2mem_analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="sector2mem_analyzer.csv")
+            self.add_csr("sector2mem_analyzer")
+
+        if with_mem2sector_analyzer:
+            analyzer_signals = [
+                self.sata_mem2sector.start.re,
+                self.sata_mem2sector.fsm,
+                self.sata_mem2sector.port.sink,
+                self.sata_mem2sector.port.source,
+                self.sata_mem2sector.bus,
+            ]
+            self.submodules.mem2sector_analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="mem2sector_analyzer.csv")
+            self.add_csr("mem2sector_analyzer")
 
 # Build --------------------------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="LiteSATA bench on KC705")
-    parser.add_argument("--build",         action="store_true", help="Build bitstream")
-    parser.add_argument("--load",          action="store_true", help="Load bitstream (to SRAM)")
-    parser.add_argument("--gen",           default="3",         help="SATA Gen: 1, 2 or 3 (default)")
-    parser.add_argument("--connector",     default="fmc",       help="SATA Connector: fmc (default) , sfp or pcie")
-    parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer")
+    parser.add_argument("--build",                    action="store_true", help="Build bitstream")
+    parser.add_argument("--load",                     action="store_true", help="Load bitstream (to SRAM)")
+    parser.add_argument("--gen",                      default="3",         help="SATA Gen: 1, 2 or 3 (default)")
+    parser.add_argument("--connector",                default="fmc",       help="SATA Connector: fmc (default) , sfp or pcie")
+    parser.add_argument("--with-global-analyzer",     action="store_true", help="Add Global LiteScope Analyzer")
+    parser.add_argument("--with-sector2mem-analyzer", action="store_true", help="Add Sector2Mem LiteScope Analyzer")
+    parser.add_argument("--with-mem2sector-analyzer", action="store_true", help="Add Mem2Sector LiteScope Analyzer")
     args = parser.parse_args()
 
     platform = kc705.Platform()
     platform.add_extension(_sata_io)
-    soc = SATATestSoC(platform, args.connector, "gen" + args.gen, with_analyzer=args.with_analyzer)
+    soc = SATATestSoC(platform, args.connector, "gen" + args.gen,
+        with_global_analyzer     = args.with_global_analyzer,
+        with_sector2mem_analyzer = args.with_sector2mem_analyzer,
+        with_mem2sector_analyzer = args.with_mem2sector_analyzer,
+    )
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)
 
