@@ -130,7 +130,6 @@ class LiteSATAPHYCtrl(Module):
             align_timer.wait.eq(1),
             If(~trx.rx_idle,
                 If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN"]),
-                    self.rx_reset.eq(1),
                     NextState("SEND-ALIGN")
                 )
             )

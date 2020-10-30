@@ -56,17 +56,10 @@ class LiteSATAPHY(Module, AutoCSR):
             self.submodules.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen)
         else:
             raise NotImplementedError
-        self.comb += [
-            self.phy.tx_init.restart.eq(~self.enable.storage),
-            self.phy.rx_init.restart.eq(~self.enable.storage),
-            self.status.fields.tx_ready.eq(self.phy.tx_init.done),
-            self.status.fields.rx_ready.eq(self.phy.rx_init.done),
-        ]
 
         # Control
         self.submodules.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq)
-        self.comb += self.status.fields.ctrl_ready.eq(self.ctrl.ready)
-        self.comb += self.status.fields.ready.eq(self.phy.ready & self.ctrl.ready)
+
 
         # Datapath
         self.submodules.datapath = LiteSATAPHYDatapath(self.phy, self.ctrl)
@@ -75,3 +68,13 @@ class LiteSATAPHY(Module, AutoCSR):
             self.ctrl.misalign.eq(self.datapath.misalign)
         ]
         self.sink, self.source = self.datapath.sink, self.datapath.source
+
+        # Restart/Status
+        self.comb += [
+            self.phy.tx_init.restart.eq(~self.enable.storage),
+            self.phy.rx_init.restart.eq(~self.enable.storage | self.ctrl.rx_reset),
+            self.status.fields.ctrl_ready.eq(self.ctrl.ready),
+            self.status.fields.ready.eq(self.phy.ready & self.ctrl.ready),
+            self.status.fields.tx_ready.eq(self.phy.tx_init.done),
+            self.status.fields.rx_ready.eq(self.phy.rx_init.done),
+        ]
