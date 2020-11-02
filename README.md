@@ -30,6 +30,7 @@ design flow by generating the verilog rtl that you will use as a standard core.
 [> Features
 -----------
 PHY:
+  - Xilinx 7-Series (Kintex7, Artix7)
   - OOB, COMWAKE, COMINIT
   - ALIGN inserter/remover and bytes alignment on K28.5
   - 8B/10B encoding/decoding in transceiver
@@ -72,8 +73,6 @@ LiteSATA is already used in commercial and open-source designs:
 - add on-the-flow compression/decompression
 - add support for Altera PHYs.
 - add support for Lattice PHYs.
-- add support for Xilinx 7-Series GTP/GTH (currently only 7-Series GTX are
-  supported)
 - add Zynq Linux drivers.
 - ... See below Support and consulting :)
 
