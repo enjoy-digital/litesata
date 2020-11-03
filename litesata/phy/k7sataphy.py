@@ -19,7 +19,7 @@ from liteiclink.serdes.gtx_7series_init import GTXTXInit, GTXRXInit
 # --------------------------------------------------------------------------------------------------
 
 class K7LiteSATAPHYCRG(Module):
-    def __init__(self, refclk, pads, gtx, gen):
+    def __init__(self, refclk, pads, gtx, gen, tx_buffer_enable=False):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
 
@@ -45,17 +45,20 @@ class K7LiteSATAPHYCRG(Module):
         #   (gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
         #   (gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
         #   (gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
-        tx_mmcm_clkin = Signal()
-        tx_mmcm = S7MMCM(speedgrade=-1)
-        tx_mmcm_clkout_freq = {
-            "gen1":  75e6/(gtx.data_width/16),
-            "gen2": 150e6/(gtx.data_width/16),
-            "gen3": 300e6/(gtx.data_width/16),
-        }
-        self.submodules += tx_mmcm
-        self.specials += Instance("BUFG", i_I=gtx.txoutclk, o_O=tx_mmcm_clkin)
-        tx_mmcm.register_clkin(tx_mmcm_clkin, 150e6)
-        tx_mmcm.create_clkout(self.cd_sata_tx, tx_mmcm_clkout_freq[gen], with_reset=False)
+        if tx_buffer_enable:
+            self.specials += Instance("BUFG", i_I=gtp.txoutclk, o_O=self.cd_sata_tx.clk)
+        else:
+            tx_mmcm_clkin = Signal()
+            tx_mmcm = S7MMCM(speedgrade=-1)
+            tx_mmcm_clkout_freq = {
+                "gen1":  75e6/(gtx.data_width/16),
+                "gen2": 150e6/(gtx.data_width/16),
+                "gen3": 300e6/(gtx.data_width/16),
+            }
+            self.submodules += tx_mmcm
+            self.specials += Instance("BUFG", i_I=gtx.txoutclk, o_O=tx_mmcm_clkin)
+            tx_mmcm.register_clkin(tx_mmcm_clkin, 150e6)
+            tx_mmcm.create_clkout(self.cd_sata_tx, tx_mmcm_clkout_freq[gen], with_reset=False)
 
         self.comb += gtx.txusrclk.eq(self.cd_sata_tx.clk)
         self.comb += gtx.txusrclk2.eq(self.cd_sata_tx.clk)
@@ -71,7 +74,7 @@ class K7LiteSATAPHYCRG(Module):
 
         # Reset for SATA TX/RX clock domains -------------------------------------------------------
         self.specials += [
-            AsyncResetSynchronizer(self.cd_sata_tx, ~(gtx.cplllock & tx_mmcm.locked) | self.tx_reset),
+            AsyncResetSynchronizer(self.cd_sata_tx, ~gtx.cplllock | self.tx_reset),
             AsyncResetSynchronizer(self.cd_sata_rx, ~gtx.cplllock | self.rx_reset)
         ]
 
