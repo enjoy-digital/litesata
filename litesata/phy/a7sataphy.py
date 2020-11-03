@@ -552,7 +552,7 @@ class A7LiteSATAPHY(Module):
             p_PMA_LOOPBACK_CFG           = 0b0,
 
             # RX OOB Signalling Attributes
-            p_RXOOB_CLK_CFG              = "FABRIC" if gen == "gen1" else "PMA",
+            p_RXOOB_CLK_CFG              = "PMA",
 
             # TX OOB Signalling Attributes
             p_TXOOB_CFG                  = 0b0,
@@ -887,7 +887,7 @@ class A7LiteSATAPHY(Module):
             o_TXOUTCLK             = self.txoutclk,
             o_TXOUTCLKFABRIC       = Open(),
             o_TXOUTCLKPCS          = Open(),
-            i_TXOUTCLKSEL          = 0b010 if tx_buffer_enable else 0b011,
+            i_TXOUTCLKSEL          = 0b010 if tx_buffer_enable else 0b011 if gen == "gen2" else 0b100,
             o_TXRATEDONE           = Open(),
 
             # Transmit Ports - TX Gearbox Ports
