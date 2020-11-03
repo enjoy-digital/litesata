@@ -18,7 +18,7 @@ from liteiclink.serdes.gtp_7series import GTPQuadPLL
 # --------------------------------------------------------------------------------------------------
 
 class A7LiteSATAPHYCRG(Module):
-    def __init__(self, refclk, pads, gtp, gen):
+    def __init__(self, refclk, pads, gtp, gen, tx_buffer_enable=False):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
 
@@ -44,17 +44,20 @@ class A7LiteSATAPHYCRG(Module):
         #   (gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
         #   (gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
         #   (gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
-        tx_mmcm_clkin = Signal()
-        tx_mmcm = S7MMCM(speedgrade=-1)
-        tx_mmcm_clkout_freq = {
-            "gen1":  75e6/(gtp.data_width/16),
-            "gen2": 150e6/(gtp.data_width/16),
-            "gen3": 300e6/(gtp.data_width/16),
-        }
-        self.submodules += tx_mmcm
-        self.specials += Instance("BUFG", i_I=gtp.txoutclk, o_O=tx_mmcm_clkin)
-        tx_mmcm.register_clkin(tx_mmcm_clkin, 150e6)
-        tx_mmcm.create_clkout(self.cd_sata_tx, tx_mmcm_clkout_freq[gen], with_reset=False)
+        if tx_buffer_enable:
+            self.specials += Instance("BUFG", i_I=gtp.txoutclk, o_O=self.cd_sata_tx.clk)
+        else:
+            tx_mmcm_clkin = Signal()
+            tx_mmcm = S7MMCM(speedgrade=-1)
+            tx_mmcm_clkout_freq = {
+                "gen1":  75e6/(gtp.data_width/16),
+                "gen2": 150e6/(gtp.data_width/16),
+                "gen3": 300e6/(gtp.data_width/16),
+            }
+            self.submodules += tx_mmcm
+            self.specials += Instance("BUFG", i_I=gtp.txoutclk, o_O=tx_mmcm_clkin)
+            tx_mmcm.register_clkin(tx_mmcm_clkin, 150e6)
+            tx_mmcm.create_clkout(self.cd_sata_tx, tx_mmcm_clkout_freq[gen], with_reset=False)
 
         self.comb += gtp.txusrclk.eq(self.cd_sata_tx.clk)
         self.comb += gtp.txusrclk2.eq(self.cd_sata_tx.clk)
@@ -70,7 +73,7 @@ class A7LiteSATAPHYCRG(Module):
 
         # Reset for SATA TX/RX clock domains -------------------------------------------------------
         self.specials += [
-            AsyncResetSynchronizer(self.cd_sata_tx, ~(gtp.qplllock & tx_mmcm.locked) | self.tx_reset),
+            AsyncResetSynchronizer(self.cd_sata_tx, ~gtp.qplllock | self.tx_reset),
             AsyncResetSynchronizer(self.cd_sata_rx, ~gtp.qplllock | self.rx_reset)
         ]
 
@@ -561,7 +564,7 @@ class A7LiteSATAPHY(Module):
 
             # TX Buffer Attributes
             p_TXSYNC_MULTILANE           = 0b0,
-            p_TXSYNC_OVRD                = 0b1,
+            p_TXSYNC_OVRD                = 0b0 if tx_buffer_enable else 0b1,
             p_TXSYNC_SKIP_DA             = 0b0
         )
         gtp_params.update(
@@ -844,7 +847,7 @@ class A7LiteSATAPHY(Module):
 
             # Transmit Ports - TX Buffer Bypass Ports
             i_TXDLYBYPASS          = 1 if tx_buffer_enable else 0,
-            i_TXDLYEN              = tx_init.txdlyen,
+            i_TXDLYEN              = 0 if tx_buffer_enable else tx_init.txdlyen,
             i_TXDLYHOLD            = 0,
             i_TXDLYOVRDEN          = 0,
             i_TXDLYSRESET          = tx_init.txdlysreset,

@@ -52,8 +52,8 @@ class LiteSATAPHY(Module, AutoCSR):
             self.submodules.crg = K7LiteSATAPHYCRG(refclk, pads, self.phy, gen)
         elif device[:4] == "xc7a": # Artix 7
             from litesata.phy.a7sataphy import A7LiteSATAPHYCRG, A7LiteSATAPHY
-            self.submodules.phy = A7LiteSATAPHY(pads, gen, clk_freq, data_width)
-            self.submodules.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen)
+            self.submodules.phy = A7LiteSATAPHY(pads, gen, clk_freq, data_width, tx_buffer_enable=True)
+            self.submodules.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen,  tx_buffer_enable=True)
         else:
             raise NotImplementedError
 
