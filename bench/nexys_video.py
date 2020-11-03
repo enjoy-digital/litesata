@@ -44,7 +44,7 @@ _sata_io = [
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, gen="gen2", with_analyzer=False):
+    def __init__(self, platform, gen="gen2", with_pll_refclk=True, with_analyzer=False):
         assert gen in ["gen1", "gen2"]
         sys_clk_freq  = int(100e6)
         sata_clk_freq = {"gen1": 75e6, "gen2": 150e6}[gen]
@@ -60,8 +60,15 @@ class SATATestSoC(SoCMini):
             uart_name     = "bridge")
 
         # SATA -------------------------------------------------------------------------------------
+        if with_pll_refclk:
+            # RefClk, Generate 150MHz from PLL.
+            self.clock_domains.cd_sata_refclk = ClockDomain()
+            self.crg.pll.create_clkout(self.cd_sata_refclk, 150e6)
+            platform.add_platform_command("set_property SEVERITY {{Warning}} [get_drc_checks REQP-49]")
+
         # PHY
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
+            refclk     = None if not with_pll_refclk else self.cd_sata_refclk.clk,
             pads       = platform.request("fmc2sata"),
             gen        = gen,
             clk_freq   = sys_clk_freq,
@@ -133,12 +140,13 @@ def main():
     parser.add_argument("--build",         action="store_true", help="Build bitstream")
     parser.add_argument("--load",          action="store_true", help="Load bitstream (to SRAM)")
     parser.add_argument("--gen",           default="2",         help="SATA Gen: 1 or 2 (default)")
+    parser.add_argument("--pll-refclk",    action="store_true", help="Generate RefClk from PLL")
     parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer")
     args = parser.parse_args()
 
     platform = nexys_video.Platform()
     platform.add_extension(_sata_io)
-    soc = SATATestSoC(platform, "gen" + args.gen, with_analyzer=args.with_analyzer)
+    soc = SATATestSoC(platform, "gen" + args.gen, with_pll_refclk=args.pll_refclk, with_analyzer=args.with_analyzer)
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)
 
