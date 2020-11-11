@@ -608,8 +608,8 @@ class A7LiteSATAPHY(Module):
             i_PMARSVDIN4           = 0b0,
 
             # Power-Down Ports
-            i_RXPD                 = Cat(rx_init.gtrxpd, rx_init.gtrxpd),
-            i_TXPD                 = 0b00,
+            i_RXPD                 = Replicate(self.rxpd, 2),
+            i_TXPD                 = Replicate(txpd, 2),
 
             # RX 8B/10B Decoder Ports
             i_SETERRSTATUS         = 0,
