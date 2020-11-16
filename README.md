@@ -27,6 +27,8 @@ Using Migen to describe the HDL allows the core to be highly and easily configur
 LiteSATA can be used as LiteX library or can be integrated with your standard
 design flow by generating the verilog rtl that you will use as a standard core.
 
+<p align="center"><img src="https://github.com/enjoy-digital/litesata/raw/master/doc/architecture.png" width="800"></p>
+
 [> Features
 -----------
 PHY:
