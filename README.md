@@ -33,6 +33,7 @@ design flow by generating the verilog rtl that you will use as a standard core.
 -----------
 PHY:
   - Xilinx 7-Series (Kintex7, Artix7)
+  - Xilinx Ultrascale
   - OOB, COMWAKE, COMINIT
   - ALIGN inserter/remover and bytes alignment on K28.5
   - 8B/10B encoding/decoding in transceiver
