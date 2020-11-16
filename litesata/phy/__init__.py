@@ -29,18 +29,20 @@ class LiteSATAPHY(Module, AutoCSR):
         self.ready  = Signal()
 
         # Transceiver / Clocks
-        if device[:4] == "xc7k": # Kintex 7
+        if device[:4] in ["xc7k"]: # Kintex 7
             from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHY
             self.submodules.phy = K7LiteSATAPHY(pads, gen, clk_freq, data_width)
             self.submodules.crg = K7LiteSATAPHYCRG(refclk, pads, self.phy, gen)
-        elif device[:4] == "xc7a": # Artix 7
+        elif device[:4] in ["xc7a"]: # Artix 7
             from litesata.phy.a7sataphy import A7LiteSATAPHYCRG, A7LiteSATAPHY
             self.submodules.phy = A7LiteSATAPHY(pads, gen, clk_freq, data_width, tx_buffer_enable=True)
             self.submodules.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen,  tx_buffer_enable=True)
+        elif device[:4] in ["xcku", "xcvu"]: # Kintex/Virtex Ultrascale
+            from litesata.phy.ussataphy import USLiteSATAPHYCRG, USLiteSATAPHY
+            self.submodules.phy = USLiteSATAPHY(pads, gen, clk_freq, data_width)
+            self.submodules.crg = USLiteSATAPHYCRG(refclk, pads, self.phy, gen)
         else:
-            from litesata.phy.gthsataphy import GTHLiteSATAPHYCRG, GTHLiteSATAPHY
-            self.submodules.phy = GTHLiteSATAPHY(pads, gen, clk_freq, data_width)
-            self.submodules.crg = GTHLiteSATAPHYCRG(refclk, pads, self.phy, gen)
+            raise NotImplementedError(f"Unsupported {device} Device.")
 
         # Control
         self.submodules.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq)
