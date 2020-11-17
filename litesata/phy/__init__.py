@@ -1,3 +1,5 @@
+import re
+
 from litesata.common import *
 from litesata.phy.ctrl import *
 from litesata.phy.datapath import *
@@ -29,18 +31,32 @@ class LiteSATAPHY(Module, AutoCSR):
         self.ready  = Signal()
 
         # Transceiver / Clocks
-        if device[:4] in ["xc7k"]: # Kintex 7
+
+        # Kintex7
+        if re.match("^xc7k", device):
             from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHY
             self.submodules.phy = K7LiteSATAPHY(pads, gen, clk_freq, data_width)
             self.submodules.crg = K7LiteSATAPHYCRG(refclk, pads, self.phy, gen)
-        elif device[:4] in ["xc7a"]: # Artix 7
+
+        # Artix7
+        elif re.match("^xc7a", device):
             from litesata.phy.a7sataphy import A7LiteSATAPHYCRG, A7LiteSATAPHY
             self.submodules.phy = A7LiteSATAPHY(pads, gen, clk_freq, data_width, tx_buffer_enable=True)
             self.submodules.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen,  tx_buffer_enable=True)
-        elif device[:4] in ["xcku", "xcvu"]: # Kintex/Virtex Ultrascale
+
+        # Kintex/Virtex Ultrascale
+        elif re.match("^xc[kv]u[0-9]+-", device):
             from litesata.phy.ussataphy import USLiteSATAPHYCRG, USLiteSATAPHY
             self.submodules.phy = USLiteSATAPHY(pads, gen, clk_freq, data_width)
             self.submodules.crg = USLiteSATAPHYCRG(refclk, pads, self.phy, gen)
+
+        # Kintex/Virtex Ultrascale+
+        elif re.match("^xc[kv]u[0-9]+p-", device):
+            from litesata.phy.uspsataphy import USPLiteSATAPHYCRG, USPLiteSATAPHY
+            self.submodules.phy = USPLiteSATAPHY(pads, gen, clk_freq, data_width)
+            self.submodules.crg = USPLiteSATAPHYCRG(refclk, pads, self.phy, gen)
+
+        # Unknown
         else:
             raise NotImplementedError(f"Unsupported {device} Device.")
 
