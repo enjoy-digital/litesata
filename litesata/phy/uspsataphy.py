@@ -13,7 +13,7 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from liteiclink.serdes.common import *
 from liteiclink.serdes.gty_ultrascale_init import GTYTXInit, GTYRXInit
-from liteiclink.serdes.gty_ultrascale import GTYQuadPLL
+
 
 class USPLiteSATAPHYCRG(Module):
     def __init__(self, refclk, pads, gty, gen):
@@ -149,17 +149,17 @@ class USPLiteSATAPHY(Module):
 
         # Config at startup
         div_config = {
-            "gen1": 8,
-            "gen2": 4,
-            "gen3": 2,
+            "gen1": 4,
+            "gen2": 2,
+            "gen3": 1,
         }
         rxout_div = div_config[gen]
         txout_div = div_config[gen]
 
         progdiv = {
-            "gen1": 80.0,
-            "gen2": 40.0,
-            "gen3": 20.0,
+            "gen1": 40.0,
+            "gen2": 20.0,
+            "gen3": 10.0,
         }
         tx_progdiv_cfg = progdiv[gen]
         rx_progdiv_cfg = progdiv[gen]
@@ -553,7 +553,7 @@ class USPLiteSATAPHY(Module):
             p_RX_BIAS_CFG0                   = 0b0001001010110000,
             p_RX_BUFFER_CFG                  = 0b000000,
             p_RX_CAPFF_SARC_ENB              = 0b0,
-            p_RX_CLK25_DIV                   = 7,
+            p_RX_CLK25_DIV                   = 8,
             p_RX_CLKMUX_EN                   = 0b1,
             p_RX_CLK_SLIP_OVRD               = 0b00000,
             p_RX_CM_BUF_CFG                  = 0b1010,
@@ -668,7 +668,7 @@ class USPLiteSATAPHY(Module):
             p_TXSYNC_MULTILANE               = 0b0,
             p_TXSYNC_OVRD                    = 0b0,
             p_TXSYNC_SKIP_DA                 = 0b0,
-            p_TX_CLK25_DIV                   = 7,
+            p_TX_CLK25_DIV                   = 8,
             p_TX_CLKMUX_EN                   = 0b1,
             p_TX_DATA_WIDTH                  = 20 if data_width == 16 else 40,
             p_TX_DCC_LOOP_RST_CFG            = 0b0000000000000100,
