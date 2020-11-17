@@ -108,7 +108,7 @@ class USLiteSATAPHY(Module):
         rxdisperr           = Signal(data_width//8)
 
         self.comb += [
-            self.rxcharisk.eq(self.rxctrl0), # & (~self.rxctrl3)),
+            self.rxcharisk.eq(self.rxctrl0),
             rxdisperr.eq(self.rxctrl1)
         ]
 
