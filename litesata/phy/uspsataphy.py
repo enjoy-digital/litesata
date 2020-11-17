@@ -28,6 +28,7 @@ class USPLiteSATAPHYCRG(Module):
         #   (gen2 & gen1) VCO still @ 3 GHz, Linerate is decreased with output dividers.
         if isinstance(refclk, (Signal, ClockSignal)):
             self.refclk = refclk
+            self.comb += gty.refclk.eq(self.refclk)
         else:
             self.refclk = Signal()
             self.specials += Instance("IBUFDS_GTE4",
@@ -36,7 +37,16 @@ class USPLiteSATAPHYCRG(Module):
                 i_IB  = pads.clk_n,
                 o_O   = self.refclk
             )
-        self.comb += gty.refclk.eq(self.refclk)
+            qpll = GTYQuadPLL(self.refclk, 156.25e6, {"gen1":1.5e9, "gen2":3e9, "gen3":6e9}[gen])
+            self.submodules.qpll = qpll
+            print(qpll)
+
+            self.comb += [
+                qpll.reset.eq(gty.qpllreset),
+                gty.qplllock.eq(qpll.lock),
+                gty.qpllclk.eq(qpll.clk),
+                gty.refclk.eq(qpll.refclk),
+            ]
 
         # TX clocking ------------------------------------------------------------------------------
         #   (gen3) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 300MHz (16-bits) /  150MHz (32-bits)
@@ -58,8 +68,8 @@ class USPLiteSATAPHYCRG(Module):
 
         # Reset for SATA TX/RX clock domains -------------------------------------------------------
         self.specials += [
-            AsyncResetSynchronizer(self.cd_sata_tx, ~gty.cplllock | self.tx_reset),
-            AsyncResetSynchronizer(self.cd_sata_rx, ~gty.cplllock | self.rx_reset)
+            AsyncResetSynchronizer(self.cd_sata_tx, ~qpll.lock | self.tx_reset),
+            AsyncResetSynchronizer(self.cd_sata_rx, ~qpll.lock | self.rx_reset)
         ]
 
 # --------------------------------------------------------------------------------------------------
@@ -90,11 +100,12 @@ class USPLiteSATAPHY(Module):
         self.sink           = stream.Endpoint(phy_description(data_width))
         self.source         = stream.Endpoint(phy_description(data_width))
 
-        # PLL
+        # QPLL
         self.refclk         = Signal()
-        self.cplllock       = Signal()
-        self.cpllpd         = Signal()
-        self.cpllreset      = Signal()
+        self.qpllclk        = Signal()
+        self.qplllock       = Signal()
+        self.qpllpd         = Signal()
+        self.qpllreset      = Signal()
 
         # Receive Ports - 8b10b Decoder
         self.rxctrl0        = Signal(data_width//8)
@@ -166,12 +177,12 @@ class USPLiteSATAPHY(Module):
 
         # TX Init ----------------------------------------------------------------------------------
         self.submodules.tx_init = tx_init = GTYTXInit(clk_freq, buffer_enable=tx_buffer_enable)
-        self.comb += tx_init.plllock.eq(self.cplllock)
-        self.comb += self.cpllreset.eq(tx_init.pllreset)
+        self.comb += tx_init.plllock.eq(self.qplllock)
+        self.comb += self.qpllreset.eq(tx_init.pllreset)
 
         # RX Init ----------------------------------------------------------------------------------
         self.submodules.rx_init = rx_init = GTYRXInit(clk_freq, buffer_enable=rx_buffer_enable)
-        self.comb += rx_init.plllock.eq(self.cplllock)
+        self.comb += rx_init.plllock.eq(self.qplllock)
 
         # Ready ------------------------------------------------------------------------------------
         self.comb += self.ready.eq(tx_init.done & rx_init.done)
@@ -767,24 +778,24 @@ class USPLiteSATAPHY(Module):
 
             # CPLL
             i_CPLLRESET       = 0,
-            i_CPLLPD          = self.cpllreset,
-            o_CPLLLOCK        = self.cplllock,
-            i_CPLLLOCKEN      = 1,
-            i_CPLLREFCLKSEL   = 0b111,
-            i_GTGREFCLK       = self.refclk,
+            i_CPLLPD          = 1,
+            o_CPLLLOCK        = Open(),
+            i_CPLLLOCKEN      = 0,
+            i_CPLLREFCLKSEL   = 0b000,
+            i_GTREFCLK0       = 0,
 
             # QPLL
             i_QPLL0CLK        = 0,
             i_QPLL0REFCLK     = 0,
-            i_QPLL1CLK        = 0,
-            i_QPLL1REFCLK     = 0,
+            i_QPLL1CLK        = self.qpllclk,
+            i_QPLL1REFCLK     = self.refclk,
             i_QPLL0FREQLOCK   = 0,
             i_QPLL1FREQLOCK   = 0,
 
             # TX clock
             o_TXOUTCLK        = self.txoutclk,
-            i_TXSYSCLKSEL     = 0b00,
-            i_TXPLLCLKSEL     = 0b00,
+            i_TXSYSCLKSEL     = 0b11,
+            i_TXPLLCLKSEL     = 0b10,
             i_TXOUTCLKSEL     = 0b010 if tx_buffer_enable else 0b101,
 
             # TX Startup/Reset
@@ -848,9 +859,9 @@ class USPLiteSATAPHY(Module):
 
             # RX clock
             i_RXRATE          = 0,
-            i_RXSYSCLKSEL     = 0b00,
+            i_RXSYSCLKSEL     = 0b11,
             i_RXOUTCLKSEL     = 0b010,
-            i_RXPLLCLKSEL     = 0b00,
+            i_RXPLLCLKSEL     = 0b10,
             o_RXOUTCLK        = self.rxoutclk,
             i_RXUSRCLK        = self.rxusrclk,
             i_RXUSRCLK2       = self.rxusrclk2,

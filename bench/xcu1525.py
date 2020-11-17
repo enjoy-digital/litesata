@@ -33,6 +33,8 @@ from litescope import LiteScopeAnalyzer
 _sata_io = [
     # SFP 2 SATA Adapter / https://shop.trenz-electronic.de/en/TE0424-01-SFP-2-SATA-Adapter
     ("qsfp2sata", 0,
+        Subsignal("clk_n", Pins("M10")),
+        Subsignal("clk_p", Pins("M11")),
         Subsignal("rx_n",  Pins("N3")),
         Subsignal("rx_p",  Pins("N4")),
         Subsignal("tx_n",  Pins("N8")),
@@ -63,7 +65,7 @@ class _CRG(Module):
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, connector="qsfp", gen="gen2", with_analyzer=False):
+    def __init__(self, platform, connector="qsfp", gen="gen2", with_refclk=True, with_analyzer=False):
         assert connector in ["qsfp", "pcie"]
         assert gen in ["gen1", "gen2", "gen3"]
 
@@ -83,14 +85,15 @@ class SATATestSoC(SoCMini):
         )
 
         # SATA -------------------------------------------------------------------------------------
-        # RefClk / Generate 150MHz from PLL.
-        self.clock_domains.cd_sata_refclk = ClockDomain()
-        self.crg.pll.create_clkout(self.cd_sata_refclk, 150e6)
-        sata_refclk = ClockSignal("sata_refclk")
+        if not with_refclk:
+            # RefClk / Generate 150MHz from PLL.
+            self.clock_domains.cd_sata_refclk = ClockDomain()
+            self.crg.pll.create_clkout(self.cd_sata_refclk, 150e6)
+            sata_refclk = ClockSignal("sata_refclk")
 
         # PHY
         self.submodules.sata_phy = LiteSATAPHY(platform.device,
-            refclk     = sata_refclk,
+            refclk     = None if with_refclk else sata_refclk,
             pads       = platform.request(connector+"2sata"),
             gen        = gen,
             clk_freq   = sys_clk_freq,
