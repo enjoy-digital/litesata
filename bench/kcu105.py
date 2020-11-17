@@ -84,12 +84,10 @@ class SATATestSoC(SoCMini):
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, sys_clk_freq,
-            integrated_sram_size = 0x1000,
             ident         = "LiteSATA bench on KCU105",
             ident_version = True,
-            with_uart            = True,
-            uart_name            = "bridge",
-        )
+            with_uart     = True,
+            uart_name     = "bridge")
 
         # SATA -------------------------------------------------------------------------------------
         # RefClk

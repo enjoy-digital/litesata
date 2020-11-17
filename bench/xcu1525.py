@@ -15,7 +15,7 @@ from litex_boards.platforms import xcu1525
 
 from litex.build.generic_platform import *
 
-from litex.soc.cores.clock import USPMMCM
+from litex.soc.cores.clock import USPPLL
 from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
@@ -56,7 +56,7 @@ class _CRG(Module):
         # # #
 
         # PLL
-        self.submodules.pll = pll = USPMMCM(speedgrade=-2)
+        self.submodules.pll = pll = USPPLL(speedgrade=-2)
         pll.register_clkin(platform.request("clk300"), 300e6)
         pll.create_clkout(self.cd_sys, sys_clk_freq)
 
@@ -67,7 +67,7 @@ class SATATestSoC(SoCMini):
         assert connector in ["qsfp", "pcie"]
         assert gen in ["gen1", "gen2", "gen3"]
 
-        sys_clk_freq  = int(175e6)
+        sys_clk_freq  = int(187.5e6)
         sata_clk_freq = {"gen1": 75e6, "gen2": 150e6, "gen3": 300e6}[gen]
 
         # CRG --------------------------------------------------------------------------------------
@@ -75,12 +75,10 @@ class SATATestSoC(SoCMini):
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, sys_clk_freq,
-            integrated_sram_size = 0x1000,
-            ident                = "LiteSATA bench on XCU1525",
-            ident_version        = True,
-            with_uart            = True,
-            uart_name            = "bridge",
-        )
+            ident         = "LiteSATA bench on XCU1525",
+            ident_version = True,
+            with_uart     = True,
+            uart_name     = "bridge")
 
         # SATA -------------------------------------------------------------------------------------
         # RefClk / Generate 150MHz from PLL.
