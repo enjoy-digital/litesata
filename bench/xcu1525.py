@@ -83,7 +83,7 @@ class SATATestSoC(SoCMini):
         # SATA -------------------------------------------------------------------------------------
         # RefClk / Generate 150MHz from PLL.
         self.clock_domains.cd_sata_refclk = ClockDomain()
-        self.crg.pll.create_clkout(self.cd_sata_refclk, 150e6)
+        self.crg.pll.create_clkout(self.cd_sata_refclk, 150e6, buf=None)
         sata_refclk = ClockSignal("sata_refclk")
 
         # PHY
