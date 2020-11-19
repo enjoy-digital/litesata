@@ -61,6 +61,7 @@ class LiteSATAPHYCtrl(Module):
             trx.rx_cdrhold.eq(1),
             self.rx_reset.eq(1),
             self.tx_reset.eq(1),
+            NextValue(trx.rx_polarity, 0),
             NextState("AWAIT-CRG-RESET")
         )
         fsm.act("AWAIT-CRG-RESET",
@@ -130,8 +131,13 @@ class LiteSATAPHYCtrl(Module):
             align_timer.wait.eq(1),
             If(~trx.rx_idle,
                 If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN"]),
+                    NextValue(trx.rx_polarity, 0),
                     NextState("SEND-ALIGN")
-                )
+                ),
+                If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN_N"]),
+                    NextValue(trx.rx_polarity, 1),
+                    NextState("SEND-ALIGN")
+                ),
             )
         )
         fsm.act("SEND-ALIGN",

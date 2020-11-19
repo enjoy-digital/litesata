@@ -31,20 +31,21 @@ frequencies = {
 # PHY / Link Layers --------------------------------------------------------------------------------
 
 primitives = {
-    "ALIGN": 0x7b4a4abc,
-    "CONT":  0x9999aa7c,
-    "SYNC":  0xb5b5957c,
-    "R_RDY": 0x4a4a957c,
-    "R_OK":  0x3535b57c,
-    "R_ERR": 0x5656b57c,
-    "R_IP":  0x5555b57c,
-    "X_RDY": 0x5757b57c,
-    "CONT":  0x9999aa7c,
-    "WTRM":  0x5858b57c,
-    "SOF":   0x3737b57c,
-    "EOF":   0xd5d5b57c,
-    "HOLD":  0xd5d5aa7c,
-    "HOLDA": 0x9595aa7c
+    "ALIGN":   0x7b4a4abc,
+    "ALIGN_N": 0x7bb5b5bc,
+    "CONT":    0x9999aa7c,
+    "SYNC":    0xb5b5957c,
+    "R_RDY":   0x4a4a957c,
+    "R_OK":    0x3535b57c,
+    "R_ERR":   0x5656b57c,
+    "R_IP":    0x5555b57c,
+    "X_RDY":   0x5757b57c,
+    "CONT":    0x9999aa7c,
+    "WTRM":    0x5858b57c,
+    "SOF":     0x3737b57c,
+    "EOF":     0xd5d5b57c,
+    "HOLD":    0xd5d5aa7c,
+    "HOLDA":   0x9595aa7c
 }
 
 def is_primitive(dword):

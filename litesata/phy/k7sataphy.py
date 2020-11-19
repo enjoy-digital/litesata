@@ -98,6 +98,7 @@ class K7LiteSATAPHY(Module):
 
         self.rx_idle        = Signal()  # o
         self.rx_cdrhold     = Signal()  # i
+        self.rx_polarity    = Signal()  # i
 
         self.rx_cominit_stb = Signal()  # o
         self.rx_comwake_stb = Signal()  # o
@@ -744,7 +745,7 @@ class K7LiteSATAPHY(Module):
             i_RXELECIDLEMODE   = 0b00,
 
             # Receive Ports - RX Polarity Control Ports
-            i_RXPOLARITY       = 0,
+            i_RXPOLARITY       = self.rx_polarity,
 
             # Receive Ports - RX gearbox ports
             i_RXSLIDE          = 0,

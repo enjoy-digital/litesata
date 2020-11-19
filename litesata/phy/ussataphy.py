@@ -82,6 +82,7 @@ class USLiteSATAPHY(Module):
 
         self.rx_idle        = Signal()  # o
         self.rx_cdrhold     = Signal()  # i
+        self.rx_polarity    = Signal()  # i
 
         self.rx_cominit_stb = Signal()  # o
         self.rx_comwake_stb = Signal()  # o
@@ -142,10 +143,6 @@ class USLiteSATAPHY(Module):
         # Power-down signals
         self.rxpd           = Signal()
         self.txpd           = Signal()
-
-        # Polarity
-        tx_polarity         = Signal()
-        rx_polarity         = Signal()
 
         # Config at startup
         div_config = {
@@ -801,8 +798,8 @@ class USLiteSATAPHY(Module):
             o_RXDATA          = self.rxdata,
 
             # Polarity
-            i_TXPOLARITY      = tx_polarity,
-            i_RXPOLARITY      = rx_polarity,
+            i_TXPOLARITY      = 0,
+            i_RXPOLARITY      = self.rx_polarity,
 
             # Pads
             i_GTHRXP          = pads.rx_p,
