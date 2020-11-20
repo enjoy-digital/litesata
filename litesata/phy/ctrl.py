@@ -61,7 +61,6 @@ class LiteSATAPHYCtrl(Module):
             trx.rx_cdrhold.eq(1),
             self.rx_reset.eq(1),
             self.tx_reset.eq(1),
-            NextValue(trx.rx_polarity, 0),
             NextState("AWAIT-CRG-RESET")
         )
         fsm.act("AWAIT-CRG-RESET",
@@ -69,6 +68,10 @@ class LiteSATAPHYCtrl(Module):
             trx.rx_cdrhold.eq(1),
             NextValue(align_count, 4-1),
             If(trx.ready,
+                # Set RX polarity to 0 (we don't know it at this point).
+                NextValue(trx.rx_polarity, 0),
+                # Alternate TX polarity on each retry.
+                NextValue(trx.tx_polarity, ~trx.tx_polarity),
                 NextState("COMINIT")
             )
         )

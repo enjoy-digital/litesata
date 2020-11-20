@@ -73,19 +73,20 @@ class USPLiteSATAPHY(Module):
         # Control
         self.ready          = Signal() # o
 
-        self.tx_idle        = Signal()  # i
+        self.tx_idle        = Signal() # i
+        self.tx_polarity    = Signal() # i
 
-        self.tx_cominit_stb = Signal()  # i
-        self.tx_cominit_ack = Signal()  # o
-        self.tx_comwake_stb = Signal()  # i
-        self.tx_comwake_ack = Signal()  # o
+        self.tx_cominit_stb = Signal() # i
+        self.tx_cominit_ack = Signal() # o
+        self.tx_comwake_stb = Signal() # i
+        self.tx_comwake_ack = Signal() # o
 
-        self.rx_idle        = Signal()  # o
-        self.rx_cdrhold     = Signal()  # i
-        self.rx_polarity    = Signal()  # i
+        self.rx_idle        = Signal() # o
+        self.rx_cdrhold     = Signal() # i
+        self.rx_polarity    = Signal() # i
 
-        self.rx_cominit_stb = Signal()  # o
-        self.rx_comwake_stb = Signal()  # o
+        self.rx_cominit_stb = Signal() # o
+        self.rx_comwake_stb = Signal() # o
 
         # Datapath
         self.sink           = stream.Endpoint(phy_description(data_width))
@@ -905,7 +906,7 @@ class USPLiteSATAPHY(Module):
             o_RXDATA          = self.rxdata,
 
             # Polarity
-            i_TXPOLARITY      = 0,
+            i_TXPOLARITY      = self.tx_polarity,
             i_RXPOLARITY      = self.rx_polarity,
 
             # Pads

@@ -89,19 +89,20 @@ class K7LiteSATAPHY(Module):
         # Control
         self.ready          = Signal() # o
 
-        self.tx_idle        = Signal()  # i
+        self.tx_idle        = Signal() # i
+        self.tx_polarity    = Signal() # i
 
-        self.tx_cominit_stb = Signal()  # i
-        self.tx_cominit_ack = Signal()  # o
-        self.tx_comwake_stb = Signal()  # i
-        self.tx_comwake_ack = Signal()  # o
+        self.tx_cominit_stb = Signal() # i
+        self.tx_cominit_ack = Signal() # o
+        self.tx_comwake_stb = Signal() # i
+        self.tx_comwake_ack = Signal() # o
 
-        self.rx_idle        = Signal()  # o
-        self.rx_cdrhold     = Signal()  # i
-        self.rx_polarity    = Signal()  # i
+        self.rx_idle        = Signal() # o
+        self.rx_cdrhold     = Signal() # i
+        self.rx_polarity    = Signal() # i
 
-        self.rx_cominit_stb = Signal()  # o
-        self.rx_comwake_stb = Signal()  # o
+        self.rx_cominit_stb = Signal() # o
+        self.rx_comwake_stb = Signal() # o
 
         self.rxdisperr      = Signal(data_width//8) # o
         self.rxnotintable   = Signal(data_width//8) # o
@@ -867,7 +868,7 @@ class K7LiteSATAPHY(Module):
             i_TXPDELECIDLEMODE = 0,
 
             # Transmit Ports - TX Polarity Control Ports
-            i_TXPOLARITY       = 0,
+            i_TXPOLARITY       = self.tx_polarity,
 
             # Transmit Ports - TX Receiver Detection Ports
             i_TXDETECTRX       = 0,
