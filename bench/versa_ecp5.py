@@ -109,23 +109,22 @@ class SATATestSoC(SoCMini):
         # Analyzer ---------------------------------------------------------------------------------
         if with_analyzer:
             analyzer_signals = [
-                self.sata_phy.phy.tx_init.fsm,
-                self.sata_phy.phy.rx_init.fsm,
+                self.sata_phy.phy.serdes.init.fsm,
                 self.sata_phy.ctrl.fsm,
 
                 self.sata_phy.ctrl.ready,
                 self.sata_phy.source,
                 self.sata_phy.sink,
 
-                self.sata_core.command.sink,
-                self.sata_core.command.source,
-
-                self.sata_core.link.rx.fsm,
-                self.sata_core.link.tx.fsm,
-                self.sata_core.transport.rx.fsm,
-                self.sata_core.transport.tx.fsm,
-                self.sata_core.command.rx.fsm,
-                self.sata_core.command.tx.fsm,
+#                self.sata_core.command.sink,
+#                self.sata_core.command.source,
+#
+#                self.sata_core.link.rx.fsm,
+#                self.sata_core.link.tx.fsm,
+#                self.sata_core.transport.rx.fsm,
+#                self.sata_core.transport.tx.fsm,
+#                self.sata_core.command.rx.fsm,
+#                self.sata_core.command.tx.fsm,
             ]
             self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="analyzer.csv")
             self.add_csr("analyzer")

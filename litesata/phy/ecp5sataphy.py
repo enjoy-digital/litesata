@@ -82,6 +82,9 @@ class ECP5LiteSATAPHY(Module):
         # Receive Ports - RX Data Path interface
         self.rxdata         = Signal(data_width)
 
+        # Transmit Ports - RX Ports for PCI Express
+        self.rxelecidle     = Signal(reset=1)
+
         # Receive Ports - RX Ports for SATA
         self.rxcominitdet   = Signal()
         self.rxcomwakedet   = Signal()
@@ -129,6 +132,8 @@ class ECP5LiteSATAPHY(Module):
             tx_pads     = Pads(p=pads.tx_p, n=pads.tx_n),
             rx_pads     = Pads(p=pads.rx_p, n=pads.rx_n),
             channel     = channel,
+            tx_polarity = self.tx_polarity,
+            rx_polarity = self.rx_polarity,
         )
         serdes.add_stream_endpoints()
         self.comb += [
@@ -141,6 +146,10 @@ class ECP5LiteSATAPHY(Module):
             serdes.sink.valid.eq(1),
             serdes.sink.ctrl.eq(self.txdata),
             serdes.sink.data.eq(self.txcharisk),
+
+            # Electrical
+            serdes.tx_idle.eq(self.txelecidle),
+            self.rxelecidle.eq(serdes.rx_idle),
         ]
 
         # Ready ------------------------------------------------------------------------------------
@@ -195,6 +204,7 @@ class ECP5LiteSATAPHY(Module):
         rxdisperr    = Signal(data_width//8)
         rxnotintable = Signal(data_width//8)
         self.specials += [
+            MultiReg(self.rxelecidle, self.rx_idle,   "sys"),
             MultiReg(rxcominitdet, self.rxcominitdet, "sys"),
             MultiReg(rxcomwakedet, self.rxcomwakedet, "sys"),
             MultiReg(rxdisperr,    self.rxdisperr,    "sys"),
