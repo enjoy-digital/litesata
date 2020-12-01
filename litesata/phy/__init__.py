@@ -56,13 +56,18 @@ class LiteSATAPHY(Module, AutoCSR):
             self.submodules.phy = USPLiteSATAPHY(pads, gen, clk_freq, data_width)
             self.submodules.crg = USPLiteSATAPHYCRG(refclk, pads, self.phy, gen)
 
+        # ECP5
+        elif re.match("^LFE5UM5G-", device):
+            from litesata.phy.ecp5sataphy import ECP5LiteSATAPHYCRG, ECP5LiteSATAPHY
+            self.submodules.phy = ECP5LiteSATAPHY(refclk, pads, gen, clk_freq, data_width)
+            self.submodules.crg = ECP5LiteSATAPHYCRG(self.phy)
+
         # Unknown
         else:
             raise NotImplementedError(f"Unsupported {device} Device.")
 
         # Control
         self.submodules.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq)
-
 
         # Datapath
         self.submodules.datapath = LiteSATAPHYDatapath(self.phy, self.ctrl)
@@ -73,11 +78,10 @@ class LiteSATAPHY(Module, AutoCSR):
         self.sink, self.source = self.datapath.sink, self.datapath.source
 
         # Restart/Status
-        self.comb += [
-            self.phy.tx_init.restart.eq(~self.enable),
-            self.phy.rx_init.restart.eq(~self.enable | self.ctrl.rx_reset),
-            self.ready.eq(self.phy.ready & self.ctrl.ready),
-        ]
+        if hasattr(self.phy, "tx_init") and hasattr(self.phy, "rx_init"):
+            self.comb += self.phy.tx_init.restart.eq(~self.enable)
+            self.comb += self.phy.rx_init.restart.eq(~self.enable | self.ctrl.rx_reset)
+        self.comb += self.ready.eq(self.phy.ready & self.ctrl.ready)
 
         # CSRs
         if with_csr:
@@ -104,10 +108,12 @@ class LiteSATAPHY(Module, AutoCSR):
             ]),
         ])
 
-        self.comb += [
-            self.enable.eq(self._enable.storage),
-            self._status.fields.ready.eq(self.phy.ready & self.ctrl.ready),
-            self._status.fields.tx_ready.eq(self.phy.tx_init.done),
-            self._status.fields.rx_ready.eq(self.phy.rx_init.done),
-            self._status.fields.ctrl_ready.eq(self.ctrl.ready),
-        ]
+        self.comb += self.enable.eq(self._enable.storage)
+        self.comb += self._status.fields.ready.eq(self.phy.ready & self.ctrl.ready)
+        if hasattr(self.phy, "tx_init") and hasattr(self.phy, "rx_init"):
+            self.comb += self._status.fields.tx_ready.eq(self.phy.tx_init.done)
+            self.comb += self._status.fields.rx_ready.eq(self.phy.rx_init.done)
+        else:
+            self.comb += self._status.fields.tx_ready.eq(self.phy.ready)
+            self.comb += self._status.fields.rx_ready.eq(self.phy.ready)
+        self.comb += self._status.fields.ctrl_ready.eq(self.ctrl.ready)
