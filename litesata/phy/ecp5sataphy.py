@@ -10,7 +10,7 @@ from litesata.common import _PulseSynchronizer, _RisingEdge
 from migen.genlib.cdc import MultiReg
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
-from liteiclink.serdes.serdes_ecp5 import SerDesECP5PLL, SerDesECP5
+from litesata.phy.serdes_ecp5 import SerDesECP5PLL, SerDesECP5
 
 # --------------------------------------------------------------------------------------------------
 
@@ -42,6 +42,60 @@ class ECP5LiteSATAPHYCRG(Module):
         # Reset for SATA TX/RX clock domains -------------------------------------------------------
         self.specials += AsyncResetSynchronizer(self.cd_sata_tx, ~serdes.serdes.tx_ready | self.tx_reset)
         self.specials += AsyncResetSynchronizer(self.cd_sata_rx, ~serdes.serdes.rx_ready | self.rx_reset)
+
+# COMGenerator -------------------------------------------------------------------------------------
+
+class COMGenerator(Module):
+    def __init__(self, tx_clk_freq):
+        assert tx_clk_freq == 150e6
+        # Control
+        self.start  = Signal()
+        self.done   = Signal()
+
+        # Transceiver
+        self.sink    = sink   = stream.Endpoint([("data", 16), ("ctrl", 2)])
+        self.source  = source = stream.Endpoint([("data", 16), ("ctrl", 2)])
+        self.tx_idle = Signal()
+
+        # # #
+
+        count = Signal(16)
+
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+            self.sink.connect(self.source),
+            If(self.start,
+                NextValue(count, 0),
+                NextState("TX_BURST0")
+            )
+        )
+        fsm.act("TX_BURST0",
+            source.valid.eq(1),
+            source.data.eq(0x7b4a),
+            source.ctrl.eq(0b00),
+            NextState("TX_BURST1")
+        )
+        fsm.act("TX_BURST1",
+            source.valid.eq(1),
+            source.data.eq(0x4abc),
+            source.ctrl.eq(0b01),
+            If(count == 15,
+                NextValue(count, 0),
+                NextState("TX_IDLE")
+            ).Else(
+                NextValue(count, count + 1)
+            )
+        )
+        fsm.act("TX_IDLE",
+            self.tx_idle.eq(1),
+            source.valid.eq(1),
+            source.data.eq(0),
+            source.ctrl.eq(0),
+            NextValue(count, count + 1),
+            If(count == 47,
+                NextState("IDLE")
+            )
+        )
 
 # --------------------------------------------------------------------------------------------------
 
@@ -143,13 +197,20 @@ class ECP5LiteSATAPHY(Module):
             self.rxcharisk.eq(serdes.source.data),
 
             # TX
-            serdes.sink.valid.eq(1),
-            serdes.sink.ctrl.eq(self.txdata),
-            serdes.sink.data.eq(self.txcharisk),
+            #serdes.sink.valid.eq(1),
+            #serdes.sink.ctrl.eq(self.txdata),
+            #serdes.sink.data.eq(self.txcharisk),
 
             # Electrical
-            serdes.tx_idle.eq(self.txelecidle),
+            #serdes.tx_idle.eq(self.txelecidle),
             self.rxelecidle.eq(serdes.rx_idle),
+        ]
+
+        self.submodules.com_gen = com_gen = ClockDomainsRenamer("tx")(COMGenerator(tx_clk_freq=150e6))
+        self.comb += [
+            com_gen.start.eq(1),
+            com_gen.source.connect(serdes.sink),
+            serdes.tx_idle.eq(com_gen.tx_idle)
         ]
 
         # Ready ------------------------------------------------------------------------------------

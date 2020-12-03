@@ -37,6 +37,8 @@ _sata_io = [
         Subsignal("rx_p",  Pins("Y5")),
         Subsignal("rx_n",  Pins("Y6")),
     ),
+    ("debug", 0, Pins("X3:5"), IOStandard("LVCMOS33")),
+    ("debug", 1, Pins("X3:7"), IOStandard("LVCMOS33")),
 ]
 
 # SATATestSoC --------------------------------------------------------------------------------------
@@ -71,6 +73,9 @@ class SATATestSoC(SoCMini):
             clk_freq   = sys_clk_freq,
             data_width = 16)
         self.add_csr("sata_phy")
+
+        self.comb += platform.request("debug", 0).eq(self.sata_phy.phy.serdes.tx_idle)
+        self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.serdes.rx_idle)
 
 #        # Core
 #        self.submodules.sata_core = LiteSATACore(self.sata_phy)
@@ -112,9 +117,13 @@ class SATATestSoC(SoCMini):
                 self.sata_phy.phy.serdes.init.fsm,
                 self.sata_phy.ctrl.fsm,
 
-                self.sata_phy.ctrl.ready,
-                self.sata_phy.source,
-                self.sata_phy.sink,
+#                self.sata_phy.ctrl.ready,
+#                self.sata_phy.source,
+#                self.sata_phy.sink,
+
+                self.sata_phy.phy.rxdata,
+                self.sata_phy.phy.rxcharisk,
+                self.sata_phy.phy.rxelecidle,
 
 #                self.sata_core.command.sink,
 #                self.sata_core.command.source,
@@ -126,7 +135,7 @@ class SATATestSoC(SoCMini):
 #                self.sata_core.command.rx.fsm,
 #                self.sata_core.command.tx.fsm,
             ]
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="analyzer.csv")
+            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, csr_csv="analyzer.csv", clock_domain="rx")
             self.add_csr("analyzer")
 
 # Build --------------------------------------------------------------------------------------------
