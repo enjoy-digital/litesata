@@ -209,12 +209,13 @@ class ECP5LiteSATAPHY(Module):
         self.submodules.com_gen = com_gen = ClockDomainsRenamer("tx")(COMGenerator(tx_clk_freq=150e6))
         self.comb += [
             com_gen.start.eq(1),
-            com_gen.source.connect(serdes.sink),
-            serdes.tx_idle.eq(com_gen.tx_idle)
+            #com_gen.source.connect(serdes.sink),
+            #serdes.tx_idle.eq(com_gen.tx_idle)
+            serdes.tx_idle.eq(1)
         ]
 
         # Ready ------------------------------------------------------------------------------------
-        self.comb += self.ready.eq(serdes.init.ready)
+        self.comb += self.ready.eq(serdes.init.tx_ready & serdes.init.rx_ready)
 
         # Specific / Generic signals encoding/decoding ---------------------------------------------
         self.comb += [

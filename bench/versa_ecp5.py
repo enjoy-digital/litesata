@@ -124,6 +124,10 @@ class SATATestSoC(SoCMini):
                 self.sata_phy.phy.rxdata,
                 self.sata_phy.phy.rxcharisk,
                 self.sata_phy.phy.rxelecidle,
+                self.sata_phy.phy.serdes.init.rx_los,
+                self.sata_phy.phy.serdes.init.rx_lol,
+                self.sata_phy.phy.serdes.init.tx_lol,
+
 
 #                self.sata_core.command.sink,
 #                self.sata_core.command.source,

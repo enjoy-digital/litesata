@@ -230,10 +230,11 @@ class SerDesECP5SCIReconfig(Module):
 
 class SerdesInit(Module):
     def __init__(self, tx_lol, rx_lol, rx_los):
-        self.tx_rst  = Signal()
-        self.rx_rst  = Signal()
-        self.pcs_rst = Signal()
-        self.ready   = Signal()
+        self.tx_rst   = Signal()
+        self.rx_rst   = Signal()
+        self.pcs_rst  = Signal()
+        self.tx_ready = Signal()
+        self.rx_ready = Signal()
 
         # # #
 
@@ -256,7 +257,9 @@ class SerdesInit(Module):
             If(timer.done,
                 timer.wait.eq(0),
                 NextState("RESET-RX-PCS-WAIT-TX-PLL-LOCK")
-            )
+            ),
+            NextValue(self.tx_ready, 0),
+            NextValue(self.rx_ready, 0),
         )
         fsm.act("RESET-RX-PCS-WAIT-TX-PLL-LOCK",
             # Reset RX Serdes and PCS, wait for TX PLL lock.
@@ -264,26 +267,34 @@ class SerdesInit(Module):
             self.pcs_rst.eq(1),
             If(timer.done & ~_tx_lol,
                 timer.wait.eq(0),
+                NextValue(self.tx_ready, 1),
                 NextState("RESET-PCS-WAIT-RX-CDR-LOCK")
-            )
+            ),
+            NextValue(self.rx_ready, 0),
         )
         fsm.act("RESET-PCS-WAIT-RX-CDR-LOCK",
             # Reset PCS, wait for RX CDR lock.
             self.pcs_rst.eq(1),
             If(timer.done & ~_rx_lol,
                 timer.wait.eq(0),
+                NextValue(self.rx_ready, 1),
                 NextState("READY")
             )
         )
         fsm.act("READY",
-            # Ready
-            self.ready.eq(1),
-            If(_tx_lol | _rx_lol,
+            If(_tx_lol,
                 NextState("RESET-ALL")
             ),
-            #If(_rx_los,
+            #If(_rx_lol,
             #    NextState("RESET-RX-PCS-WAIT-TX-PLL-LOCK")
             #)
+
+            #If(_tx_lol | _rx_lol,
+            #    NextState("RESET-ALL")
+            #),
+            If(_rx_los,
+                NextState("RESET-RX-PCS-WAIT-TX-PLL-LOCK")
+            )
         )
 
 # SerDesECP5 ---------------------------------------------------------------------------------------
@@ -380,13 +391,13 @@ class SerDesECP5(Module, AutoCSR):
         # Clocking ---------------------------------------------------------------------------------
         self.clock_domains.cd_tx = ClockDomain()
         self.comb += self.cd_tx.clk.eq(self.txoutclk)
-        self.specials += AsyncResetSynchronizer(self.cd_tx, ~init.ready)
-        self.comb += self.tx_ready.eq(init.ready)
+        self.specials += AsyncResetSynchronizer(self.cd_tx, ~init.tx_ready)
+        self.comb += self.tx_ready.eq(init.tx_ready)
 
         self.clock_domains.cd_rx = ClockDomain()
         self.comb += self.cd_rx.clk.eq(self.rxoutclk)
-        self.specials += AsyncResetSynchronizer(self.cd_rx, ~init.ready)
-        self.comb += self.rx_ready.eq(init.ready)
+        self.specials += AsyncResetSynchronizer(self.cd_rx, ~init.rx_ready)
+        self.comb += self.rx_ready.eq(init.rx_ready)
 
         # DCU instance -----------------------------------------------------------------------------
         self.serdes_params = dict(
@@ -604,7 +615,7 @@ class SerDesECP5(Module, AutoCSR):
         # SCI Reconfiguration ----------------------------------------------------------------------
         sci_reconfig = SerDesECP5SCIReconfig(self)
         self.submodules.sci_reconfig = sci_reconfig
-        self.comb += sci_reconfig.reset.eq(~self.init.ready)
+        self.comb += sci_reconfig.reset.eq(~self.init.tx_ready)
         self.comb += sci_reconfig.sci.dual_sel.eq(dual)
         self.comb += sci_reconfig.loopback.eq(self.loopback)
         self.comb += sci_reconfig.tx_idle.eq(self.tx_idle)
