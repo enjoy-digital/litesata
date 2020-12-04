@@ -46,13 +46,13 @@ class ECP5LiteSATAPHYCRG(Module):
 # COMGenerator -------------------------------------------------------------------------------------
 
 class COMGenerator(Module):
-    def __init__(self, tx_clk_freq):
+    def __init__(self, tx_clk_freq, cominit_stb=None, cominit_ack=None, comwake_stb=None, comwake_ack=None):
         assert tx_clk_freq == 150e6
         # Control
-        self.cominit_stb = Signal()
-        self.cominit_ack = Signal()
-        self.comwake_stb = Signal()
-        self.comwake_ack = Signal()
+        self.cominit_stb = Signal() if cominit_stb is None else cominit_stb
+        self.cominit_ack = Signal() if cominit_ack is None else cominit_ack
+        self.comwake_stb = Signal() if comwake_stb is None else comwake_stb
+        self.comwake_ack = Signal() if comwake_ack is None else comwake_ack
 
         # Transceiver
         self.sink    = sink   = stream.Endpoint([("data", 16), ("ctrl", 2)])
@@ -69,10 +69,10 @@ class COMGenerator(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            self.sink.connect(self.source),
+            sink.connect(source),
             NextValue(cominit, self.cominit_stb),
             NextValue(comwake, self.comwake_stb),
-            NextValue(count,   15),
+            NextValue(count,   16-1),
             NextValue(loops,   0),
             If(self.cominit_stb | self.comwake_stb,
                 NextState("TX_BURST")
@@ -80,14 +80,20 @@ class COMGenerator(Module):
         )
         fsm.act("TX_BURST",
             source.valid.eq(1),
-            source.data.eq(0x4a4a), # D10.2
+            If(count[0],
+                source.data.eq(0x4abc),
+                source.ctrl.eq(0b01),
+            ).Else(
+                source.data.eq(0x7b4a),
+                source.ctrl.eq(0b00),
+            ),
             NextValue(count, count - 1),
             If(count == 0,
                 If(cominit,
-                    NextValue(count, 47),
+                    NextValue(count, 48-1),
                 ),
                 If(comwake,
-                    NextValue(count, 15),
+                    NextValue(count, 16-1),
                 ),
                 NextState("TX_IDLE")
             )
@@ -106,6 +112,90 @@ class COMGenerator(Module):
                     NextState("TX_BURST")
                 )
             )
+        )
+
+
+# COMChecker ---------------------------------------------------------------------------------------
+
+class COMChecker(Module):
+    def __init__(self, rx_clk_freq, cominit_stb=None, comwake_stb=None):
+        assert rx_clk_freq == 150e6
+        # Status
+        self.cominit_stb = Signal() if cominit_stb is None else cominit_stb
+        self.comwake_stb = Signal() if comwake_stb is None else comwake_stb
+
+        # Transceiver
+        self.rx_idle = Signal()
+
+        # # #
+
+        rx_idle = Signal()
+        self.specials += MultiReg(self.rx_idle, rx_idle)
+
+        self.count = count = Signal(8)
+        self.loops = loops = Signal(8)
+
+        self.cominit = cominit = Signal()
+        self.comwake = comwake = Signal()
+
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+            NextValue(count,   0),
+            NextValue(loops,   0),
+            NextValue(cominit, 0),
+            NextValue(comwake, 0),
+            If(rx_idle,
+                NextState("RX_IDLE")
+            ),
+        )
+        fsm.act("RX_IDLE",
+            NextValue(count, count + 1),
+            If(~rx_idle,
+                If((count > 10) & (count < 20), # FIXME: refine.
+                    If(cominit,
+                        NextState("IDLE")
+                    ).Else(
+                        NextValue(comwake, 1),
+                        NextValue(loops, loops + 1),
+                        If(loops == 3,
+                            NextValue(count, 32*4),
+                            NextState("WAIT")
+                        ).Else(
+                            NextState("RX_BURST")
+                        )
+                    )
+                ).Elif((count > 40) & (count < 60), # FIXME: refine.
+                    If(comwake,
+                        NextState("IDLE")
+                    ).Else(
+                        NextValue(cominit, 1),
+                        NextValue(loops, loops + 1),
+                        If(loops == 3,
+                            NextValue(count, 32*4),
+                            NextState("WAIT")
+                        ).Else(
+                            NextState("RX_BURST")
+                        )
+                    )
+                )
+            )
+        )
+        fsm.act("RX_BURST",
+            NextValue(count, 0),
+            If(rx_idle,
+                NextState("RX_IDLE")
+            )
+        )
+        fsm.act("WAIT",
+            NextValue(count, count - 1),
+            If(count == 0,
+                NextState("END")
+            )
+        )
+        fsm.act("END",
+            self.cominit_stb.eq(cominit),
+            self.comwake_stb.eq(comwake),
+            NextState("IDLE")
         )
 
 # --------------------------------------------------------------------------------------------------
@@ -191,6 +281,24 @@ class ECP5LiteSATAPHY(Module):
         serdes_pll = SerDesECP5PLL(refclk, refclk_freq=150e6, linerate={"gen2": 3e9, "gen1": 1.5e9}[gen])
         self.submodules += serdes_pll
 
+
+        # OOB --------------------------------------------------------------------------------------
+        com_gen = COMGenerator(tx_clk_freq=150e6,
+            cominit_stb = self.tx_cominit_stb,
+            cominit_ack = self.tx_cominit_ack,
+            comwake_stb = self.tx_comwake_stb,
+            comwake_ack = self.tx_comwake_ack
+        )
+        com_gen = ClockDomainsRenamer("tx")(com_gen)
+        self.submodules.com_gen = com_gen
+
+        com_check = COMChecker(rx_clk_freq=150e6,
+            cominit_stb = self.rx_cominit_stb,
+            comwake_stb = self.rx_comwake_stb
+        )
+        com_check = ClockDomainsRenamer("rx")(com_check)
+        self.submodules.com_check = com_check
+
         # SerDes -----------------------------------------------------------------------------------
         self.submodules.serdes = serdes = SerDesECP5(
             pll         = serdes_pll,
@@ -206,25 +314,17 @@ class ECP5LiteSATAPHY(Module):
             serdes.source.ready.eq(1),
             self.rxdata.eq(serdes.source.ctrl),
             self.rxcharisk.eq(serdes.source.data),
+            serdes.rx_cdr_hold.eq(self.rx_cdrhold),
 
             # TX
-            #serdes.sink.valid.eq(1),
-            #serdes.sink.ctrl.eq(self.txdata),
-            #serdes.sink.data.eq(self.txcharisk),
+            com_gen.sink.valid.eq(1),
+            com_gen.sink.ctrl.eq(self.txcharisk),
+            com_gen.sink.data.eq(self.txdata),
+            com_gen.source.connect(serdes.sink),
 
             # Electrical
-            #serdes.tx_idle.eq(self.txelecidle),
+            serdes.tx_idle.eq(self.txelecidle),
             self.rxelecidle.eq(serdes.rx_idle),
-        ]
-
-        self.submodules.com_gen = com_gen = ClockDomainsRenamer("tx")(COMGenerator(tx_clk_freq=150e6))
-
-
-        self.comb += [
-            #com_gen.cominit_stb.eq(1),
-            com_gen.comwake_stb.eq(1),
-            com_gen.source.connect(serdes.sink),
-            serdes.tx_idle.eq(com_gen.tx_idle)
         ]
 
         # Ready ------------------------------------------------------------------------------------
@@ -232,14 +332,9 @@ class ECP5LiteSATAPHY(Module):
 
         # Specific / Generic signals encoding/decoding ---------------------------------------------
         self.comb += [
-            self.txelecidle.eq(self.tx_idle | self.txpd),
-            self.tx_cominit_ack.eq(self.tx_cominit_stb & self.txcomfinish),
-            self.tx_comwake_ack.eq(self.tx_comwake_stb & self.txcomfinish),
-            self.rx_cominit_stb.eq(self.rxcominitdet),
-            self.rx_comwake_stb.eq(self.rxcomwakedet),
+            self.txelecidle.eq(self.tx_idle | self.txpd | self.com_gen.tx_idle),
+            com_check.rx_idle.eq(self.rxelecidle),
         ]
-        self.submodules += _RisingEdge(self.tx_cominit_stb, self.txcominit)
-        self.submodules += _RisingEdge(self.tx_comwake_stb, self.txcomwake)
 
         self.sync.sata_rx += [
             self.source.valid.eq(1),

@@ -46,7 +46,7 @@ _sata_io = [
 class SATATestSoC(SoCMini):
     def __init__(self, platform, gen="gen2", with_analyzer=False):
         assert gen in ["gen1", "gen2"]
-        sys_clk_freq  = int(100e6)
+        sys_clk_freq  = int(150e6)
         sata_clk_freq = {"gen1": 75e6, "gen2": 150e6}[gen]
 
         # CRG --------------------------------------------------------------------------------------
@@ -75,8 +75,12 @@ class SATATestSoC(SoCMini):
         self.add_csr("sata_phy")
 
         self.comb += platform.request("debug", 0).eq(self.sata_phy.phy.com_gen.tx_idle)
-        self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.com_gen.cominit_ack)
+        self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.com_check.rx_idle)
+        #self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.com_gen.cominit_ack)
         #self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.com_gen.comwake_ack)
+
+        #self.comb += platform.request("debug", 0).eq(self.sata_phy.phy.com_check.rx_idle)
+        #self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.com_check.cominit_stb)
 
 #        # Core
 #        self.submodules.sata_core = LiteSATACore(self.sata_phy)
@@ -129,14 +133,31 @@ class SATATestSoC(SoCMini):
 #                self.sata_phy.phy.serdes.init.rx_lol,
 #                self.sata_phy.phy.serdes.init.tx_lol,
 
-                self.sata_phy.phy.serdes.sci_reconfig.sci.dual_sel,
-                self.sata_phy.phy.serdes.sci_reconfig.sci.chan_sel,
-                self.sata_phy.phy.serdes.sci_reconfig.sci.re,
-                self.sata_phy.phy.serdes.sci_reconfig.sci.we,
-                self.sata_phy.phy.serdes.sci_reconfig.sci.done,
-                self.sata_phy.phy.serdes.sci_reconfig.sci.adr,
-                self.sata_phy.phy.serdes.sci_reconfig.sci.dat_w,
-                self.sata_phy.phy.serdes.sci_reconfig.sci.dat_r,
+#                self.sata_phy.phy.serdes.sci_reconfig.sci.dual_sel,
+#                self.sata_phy.phy.serdes.sci_reconfig.sci.chan_sel,
+#                self.sata_phy.phy.serdes.sci_reconfig.sci.re,
+#                self.sata_phy.phy.serdes.sci_reconfig.sci.we,
+#                self.sata_phy.phy.serdes.sci_reconfig.sci.done,
+#                self.sata_phy.phy.serdes.sci_reconfig.sci.adr,
+#                self.sata_phy.phy.serdes.sci_reconfig.sci.dat_w,
+#                self.sata_phy.phy.serdes.sci_reconfig.sci.dat_r,
+
+                 self.sata_phy.phy.com_gen.cominit_stb,
+                 self.sata_phy.phy.com_gen.cominit_ack,
+                 self.sata_phy.phy.com_gen.comwake_stb,
+                 self.sata_phy.phy.com_gen.comwake_ack,
+                 self.sata_phy.phy.com_gen.tx_idle,
+
+                 self.sata_phy.phy.com_check.rx_idle,
+                 self.sata_phy.phy.com_check.count,
+                 self.sata_phy.phy.com_check.loops,
+                 self.sata_phy.phy.com_check.cominit,
+                 self.sata_phy.phy.com_check.comwake,
+                 self.sata_phy.phy.com_check.fsm,
+                 self.sata_phy.phy.com_check.cominit_stb,
+                 self.sata_phy.phy.com_check.comwake_stb,
+
+                 self.sata_phy.phy.serdes.sink,
 
 #                self.sata_core.command.sink,
 #                self.sata_core.command.source,
@@ -148,7 +169,7 @@ class SATATestSoC(SoCMini):
 #                self.sata_core.command.rx.fsm,
 #                self.sata_core.command.tx.fsm,
             ]
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, csr_csv="analyzer.csv", clock_domain="sys")
+            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, csr_csv="analyzer.csv", clock_domain="tx")
             self.add_csr("analyzer")
 
 # Build --------------------------------------------------------------------------------------------

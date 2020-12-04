@@ -345,6 +345,7 @@ class SerDesECP5(Module, AutoCSR):
         self.rx_prbs_pause          = Signal()
         self.rx_prbs_errors         = Signal(32)
         self.rx_idle                = Signal()
+        self.rx_cdr_hold            = Signal()
 
         # Loopback
         self.loopback               = Signal() # FIXME: reconfigure lb_ctl to 0b0001 but does not seem enough
@@ -636,6 +637,7 @@ class SerDesECP5(Module, AutoCSR):
         self.comb += sci_reconfig.tx_idle.eq(self.tx_idle)
         self.comb += sci_reconfig.rx_polarity.eq(rx_polarity)
         self.comb += sci_reconfig.tx_polarity.eq(tx_polarity)
+        self.comb += sci_reconfig.rx_cdr_hold.eq(self.rx_cdr_hold)
 
         # TX Datapath and PRBS ---------------------------------------------------------------------
         self.submodules.tx_prbs = ClockDomainsRenamer("tx")(PRBSTX(data_width, True))

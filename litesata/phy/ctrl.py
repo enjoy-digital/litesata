@@ -57,12 +57,11 @@ class LiteSATAPHYCtrl(Module):
         self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
         fsm.act("RESET",
-            NextState("READY"), # FIXME
-            #self.tx_idle.eq(1),
-            #trx.rx_cdrhold.eq(1),
+            self.tx_idle.eq(1),
+            trx.rx_cdrhold.eq(1),
             #self.rx_reset.eq(1),
             #self.tx_reset.eq(1),
-            #NextState("AWAIT-CRG-RESET")
+            NextState("AWAIT-CRG-RESET")
         )
         fsm.act("AWAIT-CRG-RESET",
             self.tx_idle.eq(1),
@@ -77,10 +76,9 @@ class LiteSATAPHYCtrl(Module):
             )
         )
         fsm.act("COMINIT",
-            self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             trx.tx_cominit_stb.eq(1),
-            If(trx.tx_cominit_ack & ~trx.rx_cominit_stb,
+            If(trx.tx_cominit_ack,
                 NextState("AWAIT-COMINIT")
             )
         )
@@ -106,7 +104,6 @@ class LiteSATAPHYCtrl(Module):
             NextState("COMWAKE"),
         )
         fsm.act("COMWAKE",
-            self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             trx.tx_comwake_stb.eq(1),
             If(trx.tx_comwake_ack,
@@ -166,16 +163,16 @@ class LiteSATAPHYCtrl(Module):
         self.submodules += stability_timer
 
         fsm.act("READY",
-            #source.data.eq(primitives["SYNC"]),
-            #source.charisk.eq(0b0001),
-            #stability_timer.wait.eq(1),
-            #self.ready.eq(stability_timer.done),
-            #If(self.rx_idle,
-            #    NextState("RESET"),
-            #).Elif(self.misalign,
-            #    self.rx_reset.eq(1),
-            #    NextState("RESET_RX")
-            #)
+            source.data.eq(primitives["SYNC"]),
+            source.charisk.eq(0b0001),
+            stability_timer.wait.eq(1),
+            self.ready.eq(stability_timer.done),
+            If(self.rx_idle,
+                NextState("RESET"),
+            ).Elif(self.misalign,
+                #self.rx_reset.eq(1),
+                NextState("RESET_RX")
+            )
         )
         fsm.act("RESET_RX",
             If(trx.ready,
