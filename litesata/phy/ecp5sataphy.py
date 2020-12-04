@@ -49,8 +49,10 @@ class COMGenerator(Module):
     def __init__(self, tx_clk_freq):
         assert tx_clk_freq == 150e6
         # Control
-        self.start  = Signal()
-        self.done   = Signal()
+        self.cominit_stb = Signal()
+        self.cominit_ack = Signal()
+        self.comwake_stb = Signal()
+        self.comwake_ack = Signal()
 
         # Transceiver
         self.sink    = sink   = stream.Endpoint([("data", 16), ("ctrl", 2)])
@@ -59,41 +61,50 @@ class COMGenerator(Module):
 
         # # #
 
-        count = Signal(16)
+        count = Signal(8)
+        loops = Signal(8)
+
+        cominit = Signal()
+        comwake = Signal()
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             self.sink.connect(self.source),
-            If(self.start,
-                NextValue(count, 0),
-                NextState("TX_BURST0")
-            )
+            NextValue(cominit, self.cominit_stb),
+            NextValue(comwake, self.comwake_stb),
+            NextValue(count,   15),
+            NextValue(loops,   0),
+            If(self.cominit_stb | self.comwake_stb,
+                NextState("TX_BURST")
+            ),
         )
-        fsm.act("TX_BURST0",
+        fsm.act("TX_BURST",
             source.valid.eq(1),
-            source.data.eq(0x7b4a),
-            source.ctrl.eq(0b00),
-            NextState("TX_BURST1")
-        )
-        fsm.act("TX_BURST1",
-            source.valid.eq(1),
-            source.data.eq(0x4abc),
-            source.ctrl.eq(0b01),
-            If(count == 15,
-                NextValue(count, 0),
+            source.data.eq(0x4a4a), # D10.2
+            NextValue(count, count - 1),
+            If(count == 0,
+                If(cominit,
+                    NextValue(count, 47),
+                ),
+                If(comwake,
+                    NextValue(count, 15),
+                ),
                 NextState("TX_IDLE")
-            ).Else(
-                NextValue(count, count + 1)
             )
         )
         fsm.act("TX_IDLE",
             self.tx_idle.eq(1),
-            source.valid.eq(1),
-            source.data.eq(0),
-            source.ctrl.eq(0),
-            NextValue(count, count + 1),
-            If(count == 47,
-                NextState("IDLE")
+            NextValue(count, count - 1),
+            If(count == 0,
+                NextValue(loops, loops + 1),
+                If(loops == 5,
+                    self.cominit_ack.eq(cominit),
+                    self.comwake_ack.eq(comwake),
+                    NextState("IDLE")
+                ).Else(
+                    NextValue(count, 15),
+                    NextState("TX_BURST")
+                )
             )
         )
 
@@ -207,11 +218,13 @@ class ECP5LiteSATAPHY(Module):
         ]
 
         self.submodules.com_gen = com_gen = ClockDomainsRenamer("tx")(COMGenerator(tx_clk_freq=150e6))
+
+
         self.comb += [
-            com_gen.start.eq(1),
-            #com_gen.source.connect(serdes.sink),
-            #serdes.tx_idle.eq(com_gen.tx_idle)
-            serdes.tx_idle.eq(1)
+            #com_gen.cominit_stb.eq(1),
+            com_gen.comwake_stb.eq(1),
+            com_gen.source.connect(serdes.sink),
+            serdes.tx_idle.eq(com_gen.tx_idle)
         ]
 
         # Ready ------------------------------------------------------------------------------------

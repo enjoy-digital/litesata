@@ -74,8 +74,9 @@ class SATATestSoC(SoCMini):
             data_width = 16)
         self.add_csr("sata_phy")
 
-        self.comb += platform.request("debug", 0).eq(self.sata_phy.phy.serdes.tx_idle)
-        self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.serdes.rx_idle)
+        self.comb += platform.request("debug", 0).eq(self.sata_phy.phy.com_gen.tx_idle)
+        self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.com_gen.cominit_ack)
+        #self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.com_gen.comwake_ack)
 
 #        # Core
 #        self.submodules.sata_core = LiteSATACore(self.sata_phy)
