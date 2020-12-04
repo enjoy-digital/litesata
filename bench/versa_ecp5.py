@@ -121,13 +121,21 @@ class SATATestSoC(SoCMini):
 #                self.sata_phy.source,
 #                self.sata_phy.sink,
 
-                self.sata_phy.phy.rxdata,
-                self.sata_phy.phy.rxcharisk,
-                self.sata_phy.phy.rxelecidle,
-                self.sata_phy.phy.serdes.init.rx_los,
-                self.sata_phy.phy.serdes.init.rx_lol,
-                self.sata_phy.phy.serdes.init.tx_lol,
+#                self.sata_phy.phy.rxdata,
+#                self.sata_phy.phy.rxcharisk,
+#                self.sata_phy.phy.rxelecidle,
+#                self.sata_phy.phy.serdes.init.rx_los,
+#                self.sata_phy.phy.serdes.init.rx_lol,
+#                self.sata_phy.phy.serdes.init.tx_lol,
 
+                self.sata_phy.phy.serdes.sci_reconfig.sci.dual_sel,
+                self.sata_phy.phy.serdes.sci_reconfig.sci.chan_sel,
+                self.sata_phy.phy.serdes.sci_reconfig.sci.re,
+                self.sata_phy.phy.serdes.sci_reconfig.sci.we,
+                self.sata_phy.phy.serdes.sci_reconfig.sci.done,
+                self.sata_phy.phy.serdes.sci_reconfig.sci.adr,
+                self.sata_phy.phy.serdes.sci_reconfig.sci.dat_w,
+                self.sata_phy.phy.serdes.sci_reconfig.sci.dat_r,
 
 #                self.sata_core.command.sink,
 #                self.sata_core.command.source,
@@ -139,7 +147,7 @@ class SATATestSoC(SoCMini):
 #                self.sata_core.command.rx.fsm,
 #                self.sata_core.command.tx.fsm,
             ]
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, csr_csv="analyzer.csv", clock_domain="rx")
+            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, csr_csv="analyzer.csv", clock_domain="sys")
             self.add_csr("analyzer")
 
 # Build --------------------------------------------------------------------------------------------
