@@ -42,10 +42,10 @@ _sata_io = [
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, gen="gen2", with_analyzer=False):
-        assert gen in ["gen1", "gen2"]
-        sys_clk_freq  = int(100e6)
-        sata_clk_freq = {"gen1": 75e6, "gen2": 150e6}[gen]
+    def __init__(self, platform, gen="gen3", with_analyzer=False):
+        assert gen in ["gen1", "gen2", "gen3"]
+        sys_clk_freq  = int(150e6)
+        sata_clk_freq = {"gen1": 75e6, "gen2": 150e6, "gen3": 300e6}[gen]
 
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = _CRG(platform, sys_clk_freq)
@@ -136,7 +136,7 @@ def main():
     parser = argparse.ArgumentParser(description="LiteSATA bench on Acorn CLE 215+")
     parser.add_argument("--build",         action="store_true", help="Build bitstream")
     parser.add_argument("--load",          action="store_true", help="Load bitstream (to SRAM)")
-    parser.add_argument("--gen",           default="2",         help="SATA Gen: 1 or 2 (default)")
+    parser.add_argument("--gen",           default="3",         help="SATA Gen: 1, 2 or 3 (default)")
     parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer")
     args = parser.parse_args()
 
