@@ -11,8 +11,8 @@ import argparse
 
 from migen import *
 
-from litex_boards.platforms import acorn_cle_215
-from litex_boards.targets.acorn_cle_215 import CRG as _CRG
+from litex_boards.platforms import acorn
+from litex_boards.targets.acorn import CRG as _CRG
 
 from litex.build.generic_platform import *
 
@@ -142,7 +142,7 @@ def main():
     parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer")
     args = parser.parse_args()
 
-    platform = acorn_cle_215.Platform()
+    platform = acorn.Platform()
     platform.add_extension(_sata_io)
     soc = SATATestSoC(platform, "gen" + args.gen, with_analyzer=args.with_analyzer)
     builder = Builder(soc, csr_csv="csr.csv")
