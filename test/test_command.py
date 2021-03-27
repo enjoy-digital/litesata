@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import unittest
+from copy import deepcopy
 
 from litesata.common import *
 from litesata.core import LiteSATACore
