@@ -4,7 +4,7 @@
                                   / /__/ / __/ -_)\ \/ __ |/ / / __ |
                                  /____/_/\__/\__/___/_/ |_/_/ /_/ |_|
 
-                                  Copyright 2014-2020 / EnjoyDigital
+                                  Copyright 2014-2021 / EnjoyDigital
                                      Copyright 2014-2015 / HKU
 
                               A small footprint and configurable SATA core
@@ -33,8 +33,7 @@ design flow by generating the verilog rtl that you will use as a standard core.
 -----------
 PHY:
   - Xilinx 7-Series (Kintex7, Artix7)
-  - Xilinx Ultrascale
-  - Xilinx Ultrascale+
+  - Xilinx Ultrascale(+)
   - OOB, COMWAKE, COMINIT
   - ALIGN inserter/remover and bytes alignment on K28.5
   - 8B/10B encoding/decoding in transceiver
