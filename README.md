@@ -4,7 +4,7 @@
                                   / /__/ / __/ -_)\ \/ __ |/ / / __ |
                                  /____/_/\__/\__/___/_/ |_/_/ /_/ |_|
 
-                                  Copyright 2014-2021 / EnjoyDigital
+                                  Copyright 2014-2022 / EnjoyDigital
                                      Copyright 2014-2015 / HKU
 
                               A small footprint and configurable SATA core
