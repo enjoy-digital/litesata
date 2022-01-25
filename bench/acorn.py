@@ -51,10 +51,7 @@ class SATATestSoC(SoCMini):
         self.submodules.crg = _CRG(platform, sys_clk_freq)
 
         # SoCMini ----------------------------------------------------------------------------------
-        SoCMini.__init__(self, platform, sys_clk_freq,
-            ident         = "LiteSATA bench on Acorn CLE 215+",
-            ident_version = True,
-            with_uart     = True)
+        SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on Acorn CLE 215+")
 
         # JTAGBone ---------------------------------------------------------------------------------
         self.add_jtagbone()
@@ -72,7 +69,6 @@ class SATATestSoC(SoCMini):
             gen        = gen,
             clk_freq   = sys_clk_freq,
             data_width = 16)
-        self.add_csr("sata_phy")
 
         # Core
         self.submodules.sata_core = LiteSATACore(self.sata_phy)
@@ -82,7 +78,6 @@ class SATATestSoC(SoCMini):
 
         # BIST
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
-        self.add_csr("sata_bist")
 
         # Timing constraints
         platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
@@ -130,7 +125,6 @@ class SATATestSoC(SoCMini):
                 self.sata_core.command.tx.fsm,
             ]
             self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="analyzer.csv")
-            self.add_csr("analyzer")
 
 # Build --------------------------------------------------------------------------------------------
 

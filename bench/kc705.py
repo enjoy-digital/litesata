@@ -88,11 +88,10 @@ class SATATestSoC(SoCMini):
         self.submodules.crg = _CRG(platform, sys_clk_freq)
 
         # SoCMini ----------------------------------------------------------------------------------
-        SoCMini.__init__(self, platform, sys_clk_freq,
-            ident         = "LiteSATA bench on KC705",
-            ident_version = True,
-            with_uart     = True,
-            uart_name     = "bridge")
+        SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on KC705")
+
+        # UARTBone ---------------------------------------------------------------------------------
+        self.add_uartbone()
 
         # SATA -------------------------------------------------------------------------------------
         # RefClk
@@ -111,7 +110,6 @@ class SATATestSoC(SoCMini):
             gen        = gen,
             clk_freq   = sys_clk_freq,
             data_width = 16)
-        self.add_csr("sata_phy")
 
         # Core
         self.submodules.sata_core = LiteSATACore(self.sata_phy)
@@ -121,19 +119,16 @@ class SATATestSoC(SoCMini):
 
         # BIST
         self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
-        self.add_csr("sata_bist")
 
         # Sector2Mem DMA
         bus =  wishbone.Interface(data_width=32, adr_width=32)
         self.submodules.sata_sector2mem = LiteSATASector2MemDMA(self.sata_crossbar.get_port(), bus)
         self.bus.add_master("sata_sector2mem", master=bus)
-        self.add_csr("sata_sector2mem")
 
         # Mem2Sector DMA
         bus =  wishbone.Interface(data_width=32, adr_width=32)
         self.submodules.sata_mem2sector = LiteSATAMem2SectorDMA(bus, self.sata_crossbar.get_port())
         self.bus.add_master("sata_mem2sector", master=bus)
-        self.add_csr("sata_mem2sector")
 
         # Timing constraints
         platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
@@ -181,7 +176,6 @@ class SATATestSoC(SoCMini):
                 self.sata_core.command.tx.fsm,
             ]
             self.submodules.global_analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="global_analyzer.csv")
-            self.add_csr("global_analyzer")
 
         if with_sector2mem_analyzer:
             analyzer_signals = [
@@ -192,7 +186,6 @@ class SATATestSoC(SoCMini):
                 self.sata_sector2mem.bus,
             ]
             self.submodules.sector2mem_analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="sector2mem_analyzer.csv")
-            self.add_csr("sector2mem_analyzer")
 
         if with_mem2sector_analyzer:
             analyzer_signals = [
@@ -203,7 +196,6 @@ class SATATestSoC(SoCMini):
                 self.sata_mem2sector.bus,
             ]
             self.submodules.mem2sector_analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="mem2sector_analyzer.csv")
-            self.add_csr("mem2sector_analyzer")
 
 # Build --------------------------------------------------------------------------------------------
 

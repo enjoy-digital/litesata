@@ -53,11 +53,10 @@ class SATATestSoC(SoCMini):
         self.submodules.crg = _CRG(platform, sys_clk_freq)
 
         # SoCMini ----------------------------------------------------------------------------------
-        SoCMini.__init__(self, platform, sys_clk_freq,
-            ident         = "LiteSATA bench on Nexys Video",
-            ident_version = True,
-            with_uart     = True,
-            uart_name     = "bridge")
+        SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on Nexys Video")
+
+        # UARTBone ---------------------------------------------------------------------------------
+        self.add_uartbone()
 
         # SATA -------------------------------------------------------------------------------------
         if with_pll_refclk:
