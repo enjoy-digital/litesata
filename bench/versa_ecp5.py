@@ -53,11 +53,10 @@ class SATATestSoC(SoCMini):
         self.submodules.crg = _CRG(platform, sys_clk_freq)
 
         # SoCMini ----------------------------------------------------------------------------------
-        SoCMini.__init__(self, platform, sys_clk_freq,
-            ident         = "LiteSATA bench on Versa ECP5",
-            ident_version = True,
-            with_uart     = True,
-            uart_name     = "bridge")
+        SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on Versa ECP5")
+
+        # UARTBone ---------------------------------------------------------------------------------
+        self.add_uartbone()
 
         # SATA -------------------------------------------------------------------------------------
         # RefClk, Generate 150MHz from PLL.
@@ -72,7 +71,6 @@ class SATATestSoC(SoCMini):
             gen        = gen,
             clk_freq   = sys_clk_freq,
             data_width = 16)
-        self.add_csr("sata_phy")
 
         self.comb += platform.request("debug", 0).eq(self.sata_phy.phy.com_gen.tx_idle)
         self.comb += platform.request("debug", 1).eq(self.sata_phy.phy.com_check.rx_idle)
@@ -90,7 +88,6 @@ class SATATestSoC(SoCMini):
 #
 #        # BIST
 #        self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
-#        self.add_csr("sata_bist")
 
         # Timing constraints
         platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
@@ -157,7 +154,10 @@ class SATATestSoC(SoCMini):
                  self.sata_phy.phy.com_check.cominit_stb,
                  self.sata_phy.phy.com_check.comwake_stb,
 
+                 self.sata_phy.phy.serdes.init.tx_ready,
                  self.sata_phy.phy.serdes.sink,
+
+                 self.sata_phy.phy.serdes.sci_reconfig.fsm,
 
 #                self.sata_core.command.sink,
 #                self.sata_core.command.source,
@@ -170,7 +170,6 @@ class SATATestSoC(SoCMini):
 #                self.sata_core.command.tx.fsm,
             ]
             self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, csr_csv="analyzer.csv", clock_domain="tx")
-            self.add_csr("analyzer")
 
 # Build --------------------------------------------------------------------------------------------
 

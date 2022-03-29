@@ -69,6 +69,7 @@ class COMGenerator(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
+            self.tx_idle.eq(1),
             sink.connect(source),
             NextValue(cominit, self.cominit_stb),
             NextValue(comwake, self.comwake_stb),
@@ -332,7 +333,8 @@ class ECP5LiteSATAPHY(Module):
 
         # Specific / Generic signals encoding/decoding ---------------------------------------------
         self.comb += [
-            self.txelecidle.eq(self.tx_idle | self.txpd | self.com_gen.tx_idle),
+            #self.txelecidle.eq(self.tx_idle | self.txpd | self.com_gen.tx_idle),
+            self.txelecidle.eq(self.com_gen.tx_idle),
             com_check.rx_idle.eq(self.rxelecidle),
         ]
 
