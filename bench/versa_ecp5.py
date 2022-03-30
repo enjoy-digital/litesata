@@ -158,6 +158,7 @@ class SATATestSoC(SoCMini):
                  self.sata_phy.phy.serdes.sink,
 
                  self.sata_phy.phy.serdes.sci_reconfig.fsm,
+                 self.sata_phy.phy.serdes.tx_idle,
 
 #                self.sata_core.command.sink,
 #                self.sata_core.command.source,
@@ -169,7 +170,12 @@ class SATATestSoC(SoCMini):
 #                self.sata_core.command.rx.fsm,
 #                self.sata_core.command.tx.fsm,
             ]
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 256, csr_csv="analyzer.csv", clock_domain="tx")
+            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals,
+                depth        = 256,
+                samplerate   = sys_clk_freq,
+                csr_csv      = "analyzer.csv",
+                clock_domain = "tx"
+            )
 
 # Build --------------------------------------------------------------------------------------------
 

@@ -61,11 +61,20 @@ class COMGenerator(Module):
 
         # # #
 
-        count = Signal(8)
-        loops = Signal(8)
+        count = Signal(16)
+        loops = Signal(16)
 
         cominit = Signal()
         comwake = Signal()
+
+        self.comb += [
+            source.valid.eq(1),
+            source.data.eq(0x4a4a),
+            source.ctrl.eq(0b00),
+        ]
+
+        delay_burst = 64
+        delay_idle  = 1
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -73,28 +82,20 @@ class COMGenerator(Module):
             sink.connect(source),
             NextValue(cominit, self.cominit_stb),
             NextValue(comwake, self.comwake_stb),
-            NextValue(count,   16-1),
+            NextValue(count,   delay_burst-1),
             NextValue(loops,   0),
             If(self.cominit_stb | self.comwake_stb,
                 NextState("TX_BURST")
             ),
         )
         fsm.act("TX_BURST",
-            source.valid.eq(1),
-            If(count[0],
-                source.data.eq(0x4abc),
-                source.ctrl.eq(0b01),
-            ).Else(
-                source.data.eq(0x7b4a),
-                source.ctrl.eq(0b00),
-            ),
             NextValue(count, count - 1),
             If(count == 0,
                 If(cominit,
-                    NextValue(count, 48-1),
+                    NextValue(count, delay_idle-1),
                 ),
                 If(comwake,
-                    NextValue(count, 16-1),
+                    NextValue(count, delay_idle-1),
                 ),
                 NextState("TX_IDLE")
             )
@@ -109,7 +110,7 @@ class COMGenerator(Module):
                     self.comwake_ack.eq(comwake),
                     NextState("IDLE")
                 ).Else(
-                    NextValue(count, 15),
+                    NextValue(count, delay_burst-1),
                     NextState("TX_BURST")
                 )
             )
@@ -285,10 +286,14 @@ class ECP5LiteSATAPHY(Module):
 
         # OOB --------------------------------------------------------------------------------------
         com_gen = COMGenerator(tx_clk_freq=150e6,
-            cominit_stb = self.tx_cominit_stb,
-            cominit_ack = self.tx_cominit_ack,
-            comwake_stb = self.tx_comwake_stb,
-            comwake_ack = self.tx_comwake_ack
+            #cominit_stb = self.tx_cominit_stb,
+            #cominit_ack = self.tx_cominit_ack,
+            #comwake_stb = self.tx_comwake_stb,
+            #comwake_ack = self.tx_comwake_ack,
+            cominit_stb = Signal(reset=1),
+            cominit_ack = Signal(),
+            comwake_stb = Signal(),
+            comwake_ack = Signal()
         )
         com_gen = ClockDomainsRenamer("tx")(com_gen)
         self.submodules.com_gen = com_gen

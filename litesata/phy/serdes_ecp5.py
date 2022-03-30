@@ -139,7 +139,6 @@ class SerDesECP5SCIReconfig(Module):
     def __init__(self, serdes):
         self.loopback    = Signal()
         self.rx_polarity = Signal()
-        self.tx_idle     = Signal()
         self.tx_polarity = Signal()
         self.rx_cdr_hold = Signal()
 
@@ -172,27 +171,6 @@ class SerDesECP5SCIReconfig(Module):
             sci.dat_w.eq(data),
             sci.dat_w[0].eq(self.rx_polarity),
             sci.dat_w[1].eq(self.tx_polarity),
-            If(~first & sci.done,
-                sci.we.eq(0),
-                NextState("READ-CH-02")
-            )
-        )
-        fsm.act("READ-CH-02",
-            sci.chan_sel.eq(1),
-            sci.re.eq(1),
-            sci.adr.eq(0x02),
-            If(~first & sci.done,
-                sci.re.eq(0),
-                NextValue(data, sci.dat_r),
-                NextState("WRITE-CH-02"),
-            )
-        )
-        fsm.act("WRITE-CH-02",
-            sci.chan_sel.eq(1),
-            sci.we.eq(1),
-            sci.adr.eq(0x02),
-            sci.dat_w.eq(data),
-            sci.dat_w[6].eq(self.tx_idle),  # pcie_ei_en
             If(~first & sci.done,
                 sci.we.eq(0),
                 NextState("READ-CH-15")
@@ -593,7 +571,7 @@ class SerDesECP5(Module, AutoCSR):
             o_CHX_HDOUTP            = tx_pads.p,
             o_CHX_HDOUTN            = tx_pads.n,
 
-            p_CHX_TXAMPLITUDE       = "0d1000",  # 1000 mV
+            p_CHX_TXAMPLITUDE       = "0d1100",  # 1000 mV
             p_CHX_RTERM_TX          = {
                 "5k-ohms": "0d00",
                 "80-ohms": "0d01",
@@ -625,7 +603,9 @@ class SerDesECP5(Module, AutoCSR):
             p_CHX_FF_TX_F_CLK_DIS   = "0b1",    # disable DIV/1 output clock
 
             # CHX TX — data
-            **{"i_CHX_FF_TX_D_%d" % n: tx_bus[n] for n in range(tx_bus.nbits)}
+            **{"i_CHX_FF_TX_D_%d" % n: tx_bus[n] for n in range(tx_bus.nbits)},
+
+            i_CHX_FFC_EI_EN = self.tx_idle
         )
 
         # SCI Reconfiguration ----------------------------------------------------------------------
@@ -634,7 +614,6 @@ class SerDesECP5(Module, AutoCSR):
         self.comb += sci_reconfig.reset.eq(~self.init.tx_ready)
         self.comb += sci_reconfig.sci.dual_sel.eq(dual)
         self.comb += sci_reconfig.loopback.eq(self.loopback)
-        self.comb += sci_reconfig.tx_idle.eq(self.tx_idle)
         self.comb += sci_reconfig.rx_polarity.eq(rx_polarity)
         self.comb += sci_reconfig.tx_polarity.eq(tx_polarity)
         self.comb += sci_reconfig.rx_cdr_hold.eq(self.rx_cdr_hold)
@@ -644,7 +623,8 @@ class SerDesECP5(Module, AutoCSR):
         self.comb += self.tx_prbs.config.eq(tx_prbs_config)
         self.comb += [
             self.tx_prbs.i.eq(Cat(*[self.encoder.output[i] for i in range(nwords)])),
-            If(tx_produce_square_wave,
+            If(True,
+            #If(tx_produce_square_wave,
                 # square wave @ linerate/data_width for scope observation
                 tx_data.eq(Signal(data_width, reset=(1<<(data_width//2))-1))
             ).Elif(tx_produce_pattern,
