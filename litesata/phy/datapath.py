@@ -51,9 +51,11 @@ class LiteSATAPHYDatapathRX(Module):
         ]
 
 
-        converter = StrideConverter(phy_description(data_width),
-                                    phy_description(32),
-                                    reverse=False)
+        converter = StrideConverter(
+            description_from = phy_description(data_width),
+            description_to   = phy_description(32),
+            reverse          = False,
+        )
         if data_width == 16: # when data_width=32, converter is just direct connection
             converter = ResetInserter()(ClockDomainsRenamer("sata_rx")(converter))
         self.submodules += converter
@@ -78,8 +80,13 @@ class LiteSATAPHYDatapathRX(Module):
         #   requirements:
         #     due to the convertion ratio of 2, sys_clk need to be > sata_rx/2
         #     source destination is always able to accept data (ready always 1)
-        fifo = stream.AsyncFIFO(phy_description(32), 8)
-        fifo = ClockDomainsRenamer({"write": "sata_rx", "read": "sys"})(fifo)
+        fifo = stream.ClockDomainCrossing(
+            layout  = phy_description(32),
+            cd_from = "sata_rx",
+            cd_to   = "sys",
+            depth   = 8,
+            with_common_rst = True,
+        )
         self.submodules += fifo
         self.comb += [
             converter.source.connect(fifo.sink),
@@ -110,15 +117,22 @@ class LiteSATAPHYDatapathTX(Module):
         #   (gen1) sys_clk to 75MHz (16 bits) / 37.5MHz (32 bits) sata_tx clk
         #   requirements:
         #     source destination is always able to accept data (ready always 1)
-        fifo = stream.AsyncFIFO(phy_description(32), 8)
-        fifo = ClockDomainsRenamer({"write": "sys", "read": "sata_tx"})(fifo)
+        fifo = stream.ClockDomainCrossing(
+            layout  = phy_description(32),
+            cd_from = "sys",
+            cd_to   = "sata_tx",
+            depth   = 8,
+            with_common_rst = True,
+        )
         self.submodules += fifo
         self.comb += sink.connect(fifo.sink)
 
         # width convertion
-        converter = StrideConverter(phy_description(32),
-                                    phy_description(data_width),
-                                    reverse=False)
+        converter = StrideConverter(
+            description_from = phy_description(32),
+            description_to   = phy_description(data_width),
+            reverse          = False,
+        )
         converter = ClockDomainsRenamer("sata_tx")(converter)
         self.submodules += converter
         self.comb += [
