@@ -11,7 +11,7 @@ import argparse
 
 from migen import *
 
-from litex_boards.platforms import kc705
+from litex_boards.platforms import xilinx_kc705
 
 from litex.build.generic_platform import *
 
@@ -210,7 +210,7 @@ def main():
     parser.add_argument("--with-mem2sector-analyzer", action="store_true", help="Add Mem2Sector LiteScope Analyzer")
     args = parser.parse_args()
 
-    platform = kc705.Platform()
+    platform = xilinx_kc705.Platform()
     platform.add_extension(_sata_io)
     soc = SATATestSoC(platform, args.connector, "gen" + args.gen,
         with_global_analyzer     = args.with_global_analyzer,

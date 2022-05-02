@@ -11,8 +11,8 @@ import argparse
 
 from migen import *
 
-from litex_boards.platforms import genesys2
-from litex_boards.targets.genesys2 import _CRG
+from litex_boards.platforms import digilent_genesys2
+from litex_boards.targets.digilent_genesys2 import _CRG
 
 from litex.build.generic_platform import *
 
@@ -132,7 +132,7 @@ def main():
     parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer")
     args = parser.parse_args()
 
-    platform = genesys2.Platform()
+    platform = digilent_genesys2.Platform()
     platform.add_extension(_sata_io)
     soc = SATATestSoC(platform, "gen" + args.gen, with_analyzer=args.with_analyzer)
     builder = Builder(soc, csr_csv="csr.csv")

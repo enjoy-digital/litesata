@@ -11,8 +11,8 @@ import argparse
 
 from migen import *
 
-from litex_boards.platforms import nexys_video
-from litex_boards.targets.nexys_video import _CRG
+from litex_boards.platforms import digilent_nexys_video
+from litex_boards.targets.digilent_nexys_video import _CRG
 
 from litex.build.generic_platform import *
 
@@ -140,7 +140,7 @@ def main():
     parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer")
     args = parser.parse_args()
 
-    platform = nexys_video.Platform()
+    platform = digilent_nexys_video.Platform()
     platform.add_extension(_sata_io)
     soc = SATATestSoC(platform, "gen" + args.gen, with_pll_refclk=args.pll_refclk, with_analyzer=args.with_analyzer)
     builder = Builder(soc, csr_csv="csr.csv")
