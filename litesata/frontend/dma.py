@@ -31,6 +31,7 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
         self.start  = CSR()
         self.done   = CSRStatus()
         self.error  = CSRStatus()
+        self.irq    = Signal()
 
         # # #
 
@@ -89,6 +90,7 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
             If(dma.sink.valid & dma.sink.ready,
                 NextValue(count, count + 1),
                 If(dma.sink.last,
+                    self.irq.eq(1),
                     NextState("IDLE")
                 )
             ),
@@ -96,12 +98,12 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
             # Monitor errors
             If(port.source.valid & port.source.ready,
                 If(port.source.failed,
+                    self.irq.eq(1),
                     NextValue(self.error.status, 1),
                     NextState("IDLE"),
                 )
             )
         )
-
 
 # SATA Mem2Sector DMA ------------------------------------------------------------------------------
 
@@ -118,6 +120,7 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
         self.start  = CSR()
         self.done   = CSRStatus()
         self.error  = CSRStatus()
+        self.irq    = Signal()
 
         # # #
 
@@ -187,6 +190,7 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
             port.source.ready.eq(1),
             If(port.source.valid & port.source.ready,
                 If(port.source.failed,
+                    self.irq.eq(1),
                     NextValue(self.error.status, 1),
                     NextState("IDLE"),
                 )
@@ -198,6 +202,7 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
                 If(port.source.failed,
                     NextValue(self.error.status, 1),
                 ),
+                self.irq.eq(1),
                 NextState("IDLE")
             )
         )
