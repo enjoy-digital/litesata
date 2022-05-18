@@ -7,6 +7,7 @@
 
 from litesata.common import *
 from litesata.core.link import Scrambler
+from litesata.frontend.identify import LiteSATAIdentify, LiteSATAIdentifyCSR
 
 from litex.soc.interconnect.csr import *
 
@@ -239,91 +240,17 @@ class LiteSATABISTUnitCSR(Module, AutoCSR):
             NextValue(cycles, cycles + 1),
         )
 
-
-# LiteSATABISTIdentify -----------------------------------------------------------------------------
-
-class LiteSATABISTIdentify(Module):
-    def __init__(self, user_port):
-        self.start      = Signal()
-        self.done       = Signal()
-        self.data_width = user_port.dw
-
-        fifo = ResetInserter()(stream.SyncFIFO([("data", 32)], 512, buffered=True))
-        self.submodules += fifo
-        self.source = fifo.source
-
-        # # #
-
-        source, sink = user_port.sink, user_port.source
-
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
-            self.done.eq(1),
-            If(self.start,
-                NextState("SEND-CMD")
-            )
-        )
-        self.comb += [
-            source.last.eq(1),
-            source.identify.eq(1),
-        ]
-        fsm.act("SEND-CMD",
-            fifo.reset.eq(1),
-            source.valid.eq(1),
-            If(source.valid & source.ready,
-                NextState("WAIT-ACK")
-            )
-        )
-        fsm.act("WAIT-ACK",
-            If(sink.valid & sink.identify,
-                NextState("RECEIVE-DATA")
-            )
-        )
-        self.comb += fifo.sink.data.eq(sink.data)
-        fsm.act("RECEIVE-DATA",
-            sink.ready.eq(fifo.sink.ready),
-            If(sink.valid,
-                fifo.sink.valid.eq(1),
-                If(sink.last,
-                    NextState("IDLE")
-                )
-            )
-        )
-
-# LiteSATABISTIdentifyCSR --------------------------------------------------------------------------
-
-class LiteSATABISTIdentifyCSR(Module, AutoCSR):
-    def __init__(self, bist_identify):
-        self._start        = CSR()
-        self._done         = CSRStatus()
-        self._data_width   = CSRStatus(16, reset=bist_identify.data_width)
-        self._source_valid = CSRStatus()
-        self._source_ready = CSR()
-        self._source_data  = CSRStatus(32)
-
-        # # #
-
-        self.submodules += bist_identify
-        self.comb += [
-            bist_identify.start.eq(self._start.r & self._start.re),
-            self._done.status.eq(bist_identify.done),
-
-            self._source_valid.status.eq(bist_identify.source.valid),
-            self._source_data.status.eq(bist_identify.source.data),
-            bist_identify.source.ready.eq(self._source_ready.r & self._source_ready.re)
-        ]
-
 # LiteSATABIST --------------------------------------------------------------------------
 
 class LiteSATABIST(Module, AutoCSR):
     def __init__(self, crossbar, with_csr=False, count_width=32):
         generator = LiteSATABISTGenerator(crossbar.get_port(), count_width)
         checker   = LiteSATABISTChecker(crossbar.get_port(), count_width)
-        identify  = LiteSATABISTIdentify(crossbar.get_port())
+        identify  = LiteSATAIdentify(crossbar.get_port())
         if with_csr:
             generator = LiteSATABISTUnitCSR(generator)
             checker   = LiteSATABISTUnitCSR(checker)
-            identify  = LiteSATABISTIdentifyCSR(identify)
+            identify  = LiteSATAIdentifyCSR(identify)
         self.submodules.generator = generator
         self.submodules.checker   = checker
         self.submodules.identify  = identify
