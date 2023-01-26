@@ -80,7 +80,7 @@ class A7LiteSATAPHYCRG(Module):
 # --------------------------------------------------------------------------------------------------
 
 class A7LiteSATAPHY(Module):
-    def __init__(self, pads, gen, clk_freq, data_width=16, tx_buffer_enable=False, rx_buffer_enable=False):
+    def __init__(self, pads, gen, clk_freq, data_width=16, tx_buffer_enable=False, rx_buffer_enable=False, qpll=None):
         assert data_width in [16, 32]
         # Common signals
         self.data_width     = data_width
@@ -240,9 +240,11 @@ class A7LiteSATAPHY(Module):
             "gen2": 3.0e9,
             "gen3": 6.0e9
         }
-        self.submodules.qpll = GTPQuadPLL(self.gtrefclk0, 150e6, linerate_config[gen])
-        self.comb += self.qplllock.eq(self.qpll.lock)
-        self.comb += self.qpll.reset.eq(tx_init.pllreset)
+        if qpll is None:
+            self.submodules.qpll = qpll = GTPQuadPLL(self.gtrefclk0, 150e6, linerate_config[gen])
+            qpll.index = 0
+        self.comb += self.qplllock.eq(qpll.lock)
+        self.comb += qpll.reset.eq(tx_init.pllreset)
 
         # OOB clock (75MHz) ------------------------------------------------------------------------
         oobclk = Signal()
@@ -592,10 +594,10 @@ class A7LiteSATAPHY(Module):
             i_TX8B10BEN            = 1,
 
             # GTPE2_CHANNEL Clocking Ports
-            i_PLL0CLK              = self.qpll.clk,
-            i_PLL0REFCLK           = self.qpll.refclk,
-            i_PLL1CLK              = 0,
-            i_PLL1REFCLK           = 0,
+            i_PLL0CLK              = {0: qpll.clk,    1: 0}[qpll.index],
+            i_PLL0REFCLK           = {0: qpll.refclk, 1: 0}[qpll.index],
+            i_PLL1CLK              = {0: 0, 1: qpll.clk,  }[qpll.index],
+            i_PLL1REFCLK           = {0: 0, 1: qpll.refclk}[qpll.index],
 
             # Loopback Ports
             i_LOOPBACK             = 0b000,
