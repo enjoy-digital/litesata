@@ -587,8 +587,8 @@ class A7LiteSATAPHY(Module):
             i_DRPWE                = rx_init.drp.we,
 
             # Clocking Ports
-            i_RXSYSCLKSEL          = 0b00,
-            i_TXSYSCLKSEL          = 0b00,
+            i_RXSYSCLKSEL          = {0: 0b00, 1: 0b11}[qpll.index],
+            i_TXSYSCLKSEL          = {0: 0b00, 1: 0b11}[qpll.index],
 
             # FPGA TX Interface Datapath Configuration
             i_TX8B10BEN            = 1,
