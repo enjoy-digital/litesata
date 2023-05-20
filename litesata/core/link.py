@@ -703,7 +703,7 @@ class LiteSATALinkRX(Module):
         fsm.act("COPY",
             pipeline.sink.valid.eq(data_valid),
             insert.eq(primitives["R_IP"]),
-            If(primitive_valid,
+            If(primitive_valid & (primitive != primitives["HOLDA"]),
                 If(primitive == primitives["HOLD"],
                     insert.eq(primitives["HOLDA"])
                 ).Elif(primitive == primitives["EOF"],
@@ -769,7 +769,7 @@ class LiteSATALink(Module):
         self.submodules.rx_align = LiteSATAALIGNRemover(phy_description(32))
         self.submodules.rx_cont = LiteSATACONTRemover(phy_description(32))
         self.submodules.rx = BufferizeEndpoints({"sink": DIR_SINK})(LiteSATALinkRX())
-        self.submodules.rx_buffer = stream.SyncFIFO(link_description(32), 128)
+        self.submodules.rx_buffer = stream.SyncFIFO(link_description(32), 256)
         self.submodules.rx_pipeline = Pipeline(phy, self.rx_align, self.rx_cont, self.rx, self.rx_buffer)
 
         # RX --> TX --------------------------------------------------------------------------------
@@ -778,4 +778,4 @@ class LiteSATALink(Module):
         self.sink, self.source = self.tx_pipeline.sink, self.rx_pipeline.source
 
         # Hold -------------------------------------------------------------------------------------
-        self.comb += self.rx.hold.eq(self.rx_buffer.level > 64)
+        self.comb += self.rx.hold.eq(self.rx_buffer.level > 128)
