@@ -40,7 +40,6 @@ primitives = {
     "R_ERR":   0x5656b57c,
     "R_IP":    0x5555b57c,
     "X_RDY":   0x5757b57c,
-    "CONT":    0x9999aa7c,
     "WTRM":    0x5858b57c,
     "SOF":     0x3737b57c,
     "EOF":     0xd5d5b57c,
