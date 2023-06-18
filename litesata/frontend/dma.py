@@ -96,12 +96,10 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
             ),
 
             # Monitor errors
-            If(port.source.valid & port.source.ready,
-                If(port.source.failed,
-                    self.irq.eq(1),
-                    NextValue(self.error.status, 1),
-                    NextState("IDLE"),
-                )
+            If(port.source.valid & port.source.ready & port.source.failed,
+                self.irq.eq(1),
+                NextValue(self.error.status, 1),
+                NextState("IDLE"),
             )
         )
 
@@ -188,12 +186,10 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
 
             # Monitor errors
             port.source.ready.eq(1),
-            If(port.source.valid & port.source.ready,
-                If(port.source.failed,
-                    self.irq.eq(1),
-                    NextValue(self.error.status, 1),
-                    NextState("IDLE"),
-                )
+            If(port.source.valid & port.source.ready & port.source.failed,
+                self.irq.eq(1),
+                NextValue(self.error.status, 1),
+                NextState("IDLE"),
             )
         )
         fsm.act("WAIT-ACK",
