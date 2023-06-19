@@ -27,6 +27,7 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
         self.port   = port
         self.bus    = bus
         self.sector = CSRStorage(48)
+        self.nsectors = CSRStorage(16)
         self.base   = CSRStorage(64)
         self.start  = CSR()
         self.done   = CSRStatus()
@@ -38,6 +39,8 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
         port_bytes = port.dw//8
         dma_bytes  = bus.data_width//8
         count      = Signal(max=logical_sector_size//dma_bytes)
+        crt_sec    = Signal(48)
+        crt_base   = Signal(64)
 
         # Sector buffer
         buf = stream.SyncFIFO([("data", port.dw)], logical_sector_size//port_bytes)
@@ -62,6 +65,8 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
         fsm.act("IDLE",
             If(self.start.re,
                 NextValue(count,             0),
+                NextValue(crt_sec,           self.sector.storage),
+                NextValue(crt_base,          self.base.storage),
                 NextValue(self.error.status, 0),
                 NextState("SEND-CMD")
             ).Else(
@@ -74,7 +79,7 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
             port.sink.valid.eq(1),
             port.sink.last.eq(1),
             port.sink.read.eq(1),
-            port.sink.sector.eq(self.sector.storage),
+            port.sink.sector.eq(crt_sec),
             port.sink.count.eq(1),
             If(port.sink.ready,
                 NextState("RECEIVE-DATA-DMA")
@@ -84,14 +89,14 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
             # Connect Converter to DMA.
             dma.sink.valid.eq(conv.source.valid),
             dma.sink.last.eq(conv.source.last),
-            dma.sink.address.eq(self.base.storage[int(log2(dma_bytes)):] + count),
+            dma.sink.address.eq(crt_base[int(log2(dma_bytes)):] + count),
             dma.sink.data.eq(reverse_bytes(conv.source.data)),
             conv.source.ready.eq(dma.sink.ready),
             If(dma.sink.valid & dma.sink.ready,
                 NextValue(count, count + 1),
                 If(dma.sink.last,
                     self.irq.eq(1),
-                    NextState("IDLE")
+                    NextState("SECTOR-LOOP")
                 )
             ),
 
@@ -100,6 +105,19 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
                 self.irq.eq(1),
                 NextValue(self.error.status, 1),
                 NextState("IDLE"),
+            )
+        )
+        fsm.act("SECTOR-LOOP",
+            If(crt_sec == self.sector.storage + self.nsectors.storage - 1,
+                self.irq.eq(1),
+                NextState("IDLE")
+            ).Else(
+                NextValue(count,    0),
+                NextValue(crt_sec,  crt_sec + 1),
+                NextValue(crt_base, crt_base + 512),
+                NextValue(self.error.status, 0),
+                conv.source.ready.eq(1),
+                NextState("SEND-CMD")
             )
         )
 
@@ -114,6 +132,7 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
         self.bus    = bus
         self.port   = port
         self.sector = CSRStorage(48)
+        self.nsectors = CSRStorage(16)
         self.base   = CSRStorage(64)
         self.start  = CSR()
         self.done   = CSRStatus()
@@ -125,6 +144,8 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
         dma_bytes  = bus.data_width//8
         port_bytes = port.dw//8
         count      = Signal(max=logical_sector_size//min(dma_bytes, port_bytes))
+        crt_sec    = Signal(48)
+        crt_base   = Signal(64)
 
         # DMA
         dma = WishboneDMAReader(bus, with_csr=False, endianness=endianness)
@@ -149,6 +170,8 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
         fsm.act("IDLE",
             If(self.start.re,
                 NextValue(count,             0),
+                NextValue(crt_sec,           self.sector.storage),
+                NextValue(crt_base,          self.base.storage),
                 NextValue(self.error.status, 0),
                 NextState("READ-DATA-DMA")
             ).Else(
@@ -159,7 +182,7 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
         fsm.act("READ-DATA-DMA",
             # Read Sector data over DMA.
             dma.sink.valid.eq(1),
-            dma.sink.address.eq(self.base.storage[int(log2(dma_bytes)):] + count),
+            dma.sink.address.eq(crt_base[int(log2(dma_bytes)):] + count),
             If(dma.sink.valid & dma.sink.ready,
                 NextValue(count, count + 1),
                 If(count == (logical_sector_size//dma_bytes - 1),
@@ -173,7 +196,7 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
             port.sink.valid.eq(1),
             port.sink.last.eq(count == (logical_sector_size//port_bytes - 1)),
             port.sink.write.eq(1),
-            port.sink.sector.eq(self.sector.storage),
+            port.sink.sector.eq(crt_sec),
             port.sink.count.eq(1),
             port.sink.data.eq(reverse_bytes(conv.source.data)),
             If(port.sink.ready,
@@ -197,8 +220,16 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
             If(port.source.valid,
                 If(port.source.failed,
                     NextValue(self.error.status, 1),
-                ),
-                self.irq.eq(1),
-                NextState("IDLE")
+                    self.irq.eq(1),
+                    NextState("IDLE")
+                ).Elif(crt_sec == self.sector.storage + self.nsectors.storage - 1,
+                    self.irq.eq(1),
+                    NextState("IDLE")
+                ).Else(
+                    NextValue(count,    0),
+                    NextValue(crt_sec,  crt_sec + 1),
+                    NextValue(crt_base, crt_base + 512),
+                    NextState("READ-DATA-DMA")
+                )
             )
         )
