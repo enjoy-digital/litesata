@@ -2,6 +2,7 @@
 # This file is part of LiteSATA.
 #
 # Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2023 Gabriel L. Somlo <gsomlo@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from math import log2
@@ -24,15 +25,15 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
     Read a sector from the SATA core and write it to memory through DMA.
     """
     def __init__(self, port, bus, endianness="little"):
-        self.port   = port
-        self.bus    = bus
-        self.sector = CSRStorage(48)
+        self.port     = port
+        self.bus      = bus
+        self.sector   = CSRStorage(48)
         self.nsectors = CSRStorage(16)
-        self.base   = CSRStorage(64)
-        self.start  = CSR()
-        self.done   = CSRStatus()
-        self.error  = CSRStatus()
-        self.irq    = Signal()
+        self.base     = CSRStorage(64)
+        self.start    = CSR()
+        self.done     = CSRStatus()
+        self.error    = CSRStatus()
+        self.irq      = Signal()
 
         # # #
 
@@ -108,7 +109,7 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
             )
         )
         fsm.act("SECTOR-LOOP",
-            If(crt_sec == self.sector.storage + self.nsectors.storage - 1,
+            If(crt_sec == (self.sector.storage + self.nsectors.storage - 1),
                 self.irq.eq(1),
                 NextState("IDLE")
             ).Else(
@@ -129,15 +130,15 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
     Read memory through DMA and write it to a sector of the SATA core.
     """
     def __init__(self, bus, port, endianness="little"):
-        self.bus    = bus
-        self.port   = port
-        self.sector = CSRStorage(48)
+        self.bus      = bus
+        self.port     = port
+        self.sector   = CSRStorage(48)
         self.nsectors = CSRStorage(16)
-        self.base   = CSRStorage(64)
-        self.start  = CSR()
-        self.done   = CSRStatus()
-        self.error  = CSRStatus()
-        self.irq    = Signal()
+        self.base     = CSRStorage(64)
+        self.start    = CSR()
+        self.done     = CSRStatus()
+        self.error    = CSRStatus()
+        self.irq      = Signal()
 
         # # #
 
@@ -222,7 +223,7 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
                     NextValue(self.error.status, 1),
                     self.irq.eq(1),
                     NextState("IDLE")
-                ).Elif(crt_sec == self.sector.storage + self.nsectors.storage - 1,
+                ).Elif(crt_sec == (self.sector.storage + self.nsectors.storage - 1),
                     self.irq.eq(1),
                     NextState("IDLE")
                 ).Else(
