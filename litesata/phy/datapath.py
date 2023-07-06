@@ -6,7 +6,7 @@
 
 from litesata.common import *
 
-from migen.genlib.misc import WaitTimer
+from litex.gen.genlib.misc import WaitTimer
 
 # LiteSATAPHYDatapathRX ----------------------------------------------------------------------------
 
