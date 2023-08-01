@@ -161,7 +161,7 @@ class LiteSATAPHYCtrl(Module):
 
         # Wait alignment stability for 5ms before declaring ctrl is ready, reset the RX part of
         # the transceiver when misalignment is detected.
-        stability_timer = WaitTimer(int(5e-3*clk_freq))
+        stability_timer = WaitTimer(5e-3*clk_freq)
         self.submodules += stability_timer
 
         fsm.act("READY",
