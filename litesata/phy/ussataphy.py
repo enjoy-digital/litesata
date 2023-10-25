@@ -159,8 +159,8 @@ class USLiteSATAPHY(Module):
             "gen2": 20.0,
             "gen3": 10.0,
         }
-        tx_progdiv_cfg = progdiv[gen]
-        rx_progdiv_cfg = progdiv[gen]
+        tx_progdiv_cfg = {16: progdiv[gen], 32: 2. * progdiv[gen]}[data_width]
+        rx_progdiv_cfg = {16: progdiv[gen], 32: 2. * progdiv[gen]}[data_width]
 
         # TX Init ----------------------------------------------------------------------------------
         self.submodules.tx_init = tx_init = GTHTXInit(clk_freq, buffer_enable=tx_buffer_enable)
