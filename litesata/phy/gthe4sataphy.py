@@ -68,7 +68,7 @@ class GTHE4LiteSATAPHYCRG(Module):
 
 class GTHE4LiteSATAPHY(Module):
     def __init__(self, pads, gen, clk_freq, data_width=16,
-                 tx_buffer_enable=False, rx_buffer_enable=False):
+                 tx_buffer_enable=False, rx_buffer_enable=False, use_gtgrefclk=True):
         assert data_width in [16, 32]
         # Common signals
         self.data_width     = data_width
@@ -785,8 +785,9 @@ class GTHE4LiteSATAPHY(Module):
             i_CPLLPD               = self.cpllreset,
             o_CPLLLOCK             = self.cplllock,
             i_CPLLLOCKEN           = 1,
-            i_CPLLREFCLKSEL        = 0b111,
-            i_GTGREFCLK            = self.refclk,
+            i_CPLLREFCLKSEL        = 0b111 if use_gtgrefclk else 0b001,
+            i_GTGREFCLK            = self.refclk if use_gtgrefclk else 0,
+            i_GTREFCLK0            = 0 if use_gtgrefclk else self.refclk,
 
             # QPLL
             i_QPLL0CLK             = 0,
