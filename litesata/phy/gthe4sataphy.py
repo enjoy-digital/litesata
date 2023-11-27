@@ -623,7 +623,7 @@ class GTHE4LiteSATAPHY(Module):
             p_SATA_BURST_VAL                 = 0b100,
             p_SATA_CPLL_CFG                  = "VCO_3000MHZ",
             p_SATA_EIDLE_VAL                 = 0b100,
-            p_SHOW_REALIGN_COMMA             = "TRUE",
+            p_SHOW_REALIGN_COMMA             = "FALSE",
             p_SIM_DEVICE                     = "ULTRASCALE_PLUS",
             p_SIM_MODE                       = "FAST",
             p_SIM_RECEIVER_DETECT_PASS       = "TRUE",
