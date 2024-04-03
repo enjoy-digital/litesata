@@ -1,29 +1,31 @@
 #
 # This file is part of LiteSATA.
 #
-# Copyright (c) 2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2019-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
+
+from litex.gen import *
 
 from litesata.common import *
 from litesata.common import _PulseSynchronizer, _RisingEdge
 
-from migen.genlib.cdc import MultiReg
+from migen.genlib.cdc       import MultiReg
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.soc.cores.clock import S7MMCM
 
 from liteiclink.serdes.gtp_7series_init import GTPTXInit, GTPRXInit
-from liteiclink.serdes.gtp_7series import GTPQuadPLL
+from liteiclink.serdes.gtp_7series      import GTPQuadPLL
 
-# --------------------------------------------------------------------------------------------------
+# A7LiteSATAPHYCRG ---------------------------------------------------------------------------------
 
-class A7LiteSATAPHYCRG(Module):
+class A7LiteSATAPHYCRG(LiteXModule):
     def __init__(self, refclk, pads, gtp, gen, tx_buffer_enable=False):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
 
-        self.clock_domains.cd_sata_tx = ClockDomain()
-        self.clock_domains.cd_sata_rx = ClockDomain()
+        self.cd_sata_tx = ClockDomain()
+        self.cd_sata_rx = ClockDomain()
 
         # CPLL -------------------------------------------------------------------------------------
         #   (gen3) 150MHz / VCO @ 3GHz / Linerate @ 6Gbps
@@ -77,9 +79,9 @@ class A7LiteSATAPHYCRG(Module):
             AsyncResetSynchronizer(self.cd_sata_rx, ~gtp.qplllock | self.rx_reset)
         ]
 
-# --------------------------------------------------------------------------------------------------
+# A7LiteSATAPHY ------------------------------------------------------------------------------------
 
-class A7LiteSATAPHY(Module):
+class A7LiteSATAPHY(LiteXModule):
     def __init__(self, pads, gen, clk_freq, data_width=16, tx_buffer_enable=False, rx_buffer_enable=False, qpll=None):
         assert data_width in [16, 32]
         # Common signals
@@ -130,7 +132,7 @@ class A7LiteSATAPHY(Module):
         self.rxcominitdet   = Signal()
         self.rxcomwakedet   = Signal()
 
-        # Transmit Ports - 8b10b Encoder Control Ports
+        # Transmit Ports - 8b10b Encoder Control Portsf
         self.txcharisk      = Signal(data_width//8)
 
         # Transmit Ports - TX Data Path interface
@@ -169,11 +171,11 @@ class A7LiteSATAPHY(Module):
         rxcdr_cfg = cdr_config[gen]
 
         # TX Init ----------------------------------------------------------------------------------
-        self.submodules.tx_init = tx_init = GTPTXInit(clk_freq, buffer_enable=tx_buffer_enable)
+        self.tx_init = tx_init = GTPTXInit(clk_freq, buffer_enable=tx_buffer_enable)
         self.comb += tx_init.plllock.eq(self.qplllock)
 
         # RX Init ----------------------------------------------------------------------------------
-        self.submodules.rx_init = rx_init = GTPRXInit(clk_freq, buffer_enable=rx_buffer_enable)
+        self.rx_init = rx_init = GTPRXInit(clk_freq, buffer_enable=rx_buffer_enable)
         self.comb += rx_init.plllock.eq(self.qplllock)
 
         # Ready ------------------------------------------------------------------------------------
@@ -241,7 +243,7 @@ class A7LiteSATAPHY(Module):
             "gen3": 6.0e9
         }
         if qpll is None:
-            self.submodules.qpll = qpll = GTPQuadPLL(self.gtrefclk0, 150e6, linerate_config[gen])
+            self.qpll = qpll = GTPQuadPLL(self.gtrefclk0, 150e6, linerate_config[gen])
             qpll.index = 0
         self.comb += self.qplllock.eq(qpll.lock)
         self.comb += qpll.reset.eq(tx_init.pllreset)
