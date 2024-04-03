@@ -243,8 +243,13 @@ class A7LiteSATAPHY(LiteXModule):
             "gen3": 6.0e9
         }
         if qpll is None:
-            self.qpll = qpll = GTPQuadPLL(self.gtrefclk0, 150e6, linerate_config[gen])
-            qpll.index = 0
+            self.qpll = qpll = GTPQuadPLL(
+                refclk      = self.gtrefclk0,
+                refclk_freq = 150e6,
+                linerate    = linerate_config[gen],
+                channel     = 0,
+            )
+            qpll.index = qpll.channel
         self.comb += self.qplllock.eq(qpll.lock)
         self.comb += qpll.reset.eq(tx_init.pllreset)
 
