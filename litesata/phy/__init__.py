@@ -1,11 +1,20 @@
+#
+# This file is part of LiteSATA.
+#
+# Copyright (c) 2019-2024 Florent Kermarrec <florent@enjoy-digital.fr>
+# SPDX-License-Identifier: BSD-2-Clause
+
 import re
+
+from litex.gen import *
 
 from litesata.common import *
 from litesata.phy.ctrl import *
 from litesata.phy.datapath import *
 
+# LiteSATAPHY --------------------------------------------------------------------------------------
 
-class LiteSATAPHY(Module, AutoCSR):
+class LiteSATAPHY(LiteXModule):
     """SATA PHY
 
     Manages the low level interface between the SATA core and the device.
@@ -27,73 +36,78 @@ class LiteSATAPHY(Module, AutoCSR):
         self.gen    = gen
         self.refclk = refclk
 
-        # Control/Status
+        # Control/Status.
         self.enable = Signal()
         self.ready  = Signal()
 
-        # Transceiver / Clocks
+        # Transceiver / Clocks.
+        # ---------------------
 
-        # Kintex7
+        # Kintex7.
         if re.match("^xc7k", device):
             from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHY
-            self.submodules.phy = K7LiteSATAPHY(pads, gen, clk_freq, data_width)
-            self.submodules.crg = K7LiteSATAPHYCRG(refclk, pads, self.phy, gen)
+            self.phy = K7LiteSATAPHY(pads, gen, clk_freq, data_width)
+            self.crg = K7LiteSATAPHYCRG(refclk, pads, self.phy, gen)
 
-        # Artix7
+        # Artix7.
         elif re.match("^xc7a", device):
             from litesata.phy.a7sataphy import A7LiteSATAPHYCRG, A7LiteSATAPHY
-            self.submodules.phy = A7LiteSATAPHY(pads, gen, clk_freq, data_width, tx_buffer_enable=True, qpll=qpll)
-            self.submodules.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen,  tx_buffer_enable=True)
+            self.phy = A7LiteSATAPHY(pads, gen, clk_freq, data_width, tx_buffer_enable=True, qpll=qpll)
+            self.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen,  tx_buffer_enable=True)
 
-        # Kintex/Virtex Ultrascale
+        # Kintex/Virtex Ultrascale.
         elif re.match("^xc[kv]u[0-9]+-", device):
             from litesata.phy.ussataphy import USLiteSATAPHYCRG, USLiteSATAPHY
-            self.submodules.phy = USLiteSATAPHY(pads, gen, clk_freq, data_width)
-            self.submodules.crg = USLiteSATAPHYCRG(refclk, pads, self.phy, gen)
+            self.phy = USLiteSATAPHY(pads, gen, clk_freq, data_width)
+            self.crg = USLiteSATAPHYCRG(refclk, pads, self.phy, gen)
 
-        # Kintex/Virtex/Zynq Ultrascale+
+        # Kintex/Virtex/Zynq Ultrascale+.
         elif re.match("^xc([kv]u[0-9]+p-|zu[0-9])", device):
             if gt_type == "GTY":
                 # GTY transceiver for Virtex/Kintex Ultrascale+
                 from litesata.phy.uspsataphy import USPLiteSATAPHYCRG, USPLiteSATAPHY
-                self.submodules.phy = USPLiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
-                self.submodules.crg = USPLiteSATAPHYCRG(refclk, pads, self.phy, gen)
+                self.phy = USPLiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
+                self.crg = USPLiteSATAPHYCRG(refclk, pads, self.phy, gen)
             elif gt_type == "GTH":
                 # GTH transceiver for Kintex/Zynq Ultrascale+
                 from litesata.phy.gthe4sataphy import GTHE4LiteSATAPHYCRG, GTHE4LiteSATAPHY
-                self.submodules.phy = GTHE4LiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
-                self.submodules.crg = GTHE4LiteSATAPHYCRG(refclk, pads, self.phy, gen)
+                self.phy = GTHE4LiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
+                self.crg = GTHE4LiteSATAPHYCRG(refclk, pads, self.phy, gen)
             else:
                 raise NotImplementedError(f"Unsupported GT type. : {gt_type}")
 
-        # ECP5
+        # ECP5.
         elif re.match("^LFE5UM5G-", device):
             from litesata.phy.ecp5sataphy import ECP5LiteSATAPHYCRG, ECP5LiteSATAPHY
-            self.submodules.phy = ECP5LiteSATAPHY(refclk, pads, gen, clk_freq, data_width)
-            self.submodules.crg = ECP5LiteSATAPHYCRG(self.phy)
+            self.phy = ECP5LiteSATAPHY(refclk, pads, gen, clk_freq, data_width)
+            self.crg = ECP5LiteSATAPHYCRG(self.phy)
 
-        # Unknown
+        # Unknown.
         else:
             raise NotImplementedError(f"Unsupported {device} Device.")
 
-        # Control
-        self.submodules.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq)
+        # Control.
+        # --------
+        self.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq)
 
-        # Datapath
-        self.submodules.datapath = LiteSATAPHYDatapath(self.phy, self.ctrl)
+        # Datapath.
+        # ---------
+        self.datapath = LiteSATAPHYDatapath(self.phy, self.ctrl)
         self.comb += [
             self.ctrl.rx_idle.eq(self.datapath.rx_idle),
             self.ctrl.misalign.eq(self.datapath.misalign)
         ]
         self.sink, self.source = self.datapath.sink, self.datapath.source
 
-        # Restart/Status
+        # Restart/Status.
+        # ---------------
         if hasattr(self.phy, "tx_init") and hasattr(self.phy, "rx_init"):
             self.comb += self.phy.tx_init.restart.eq(~self.enable)
             self.comb += self.phy.rx_init.restart.eq(~self.enable | self.ctrl.rx_reset)
         self.comb += self.ready.eq(self.phy.ready & self.ctrl.ready)
 
-        # CSRs
+        # CSRs.
+        # -----
         if with_csr:
             self.add_csr()
 
