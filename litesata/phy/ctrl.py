@@ -1,10 +1,12 @@
 #
 # This file is part of LiteSATA.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2017 Johan Klockars <Johan.Klockars@hasselblad.com>
 # Copyright (c) 2016 Olof Kindgren <olof.kindgren@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
+
+from litex.gen import *
 
 from litesata.common import *
 
@@ -12,7 +14,7 @@ from litex.gen.genlib.misc import WaitTimer
 
 # LiteSATAPHYCtrl ----------------------------------------------------------------------------------
 
-class LiteSATAPHYCtrl(Module):
+class LiteSATAPHYCtrl(LiteXModule):
     """SATA PHY Controller
 
     Manages link reset/initialization and OOB sequence.
@@ -39,7 +41,7 @@ class LiteSATAPHYCtrl(Module):
 
         # # #
 
-        # Always transmitting / receiving
+        # Always transmitting / receiving.
         self.comb += source.valid.eq(1)
         self.comb += sink.ready.eq(1)
 
@@ -54,7 +56,8 @@ class LiteSATAPHYCtrl(Module):
         self.sync += crg.rx_reset.eq(self.rx_reset)
         self.sync += crg.tx_reset.eq(self.tx_reset)
 
-        self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
+        # FSM.
+        self.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
         fsm.act("RESET",
             self.tx_idle.eq(1),
