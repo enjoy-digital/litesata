@@ -6,6 +6,8 @@
 # Copyright (c) 2023 Ryohei Niwase <niwase@lila.cs.tsukuba.ac.jp>
 # SPDX-License-Identifier: BSD-2-Clause
 
+from litex.gen import *
+
 from migen.fhdl.structure import ClockDomain, ClockSignal, Signal
 from migen.fhdl.specials import Instance
 from litex.gen.fhdl.module import LiteXModule

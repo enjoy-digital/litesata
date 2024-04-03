@@ -3,29 +3,30 @@
 #
 # This file is part of LiteSATA.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-import sys
 import argparse
 
 from migen import *
+
+from litex.gen import *
 
 from litex_boards.platforms import xilinx_kc705
 
 from litex.build.generic_platform import *
 
-from litex.soc.cores.clock import S7MMCM
+from litex.soc.cores.clock          import S7MMCM
 from litex.soc.integration.soc_core import *
-from litex.soc.integration.builder import *
-from litex.soc.interconnect import wishbone
+from litex.soc.integration.builder  import *
+from litex.soc.interconnect         import wishbone
 
-from litesata.common import *
-from litesata.phy import LiteSATAPHY
-from litesata.core import LiteSATACore
+from litesata.common               import *
+from litesata.phy                  import LiteSATAPHY
+from litesata.core                 import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
-from litesata.frontend.bist import LiteSATABIST
-from litesata.frontend.dma import LiteSATASector2MemDMA, LiteSATAMem2SectorDMA
+from litesata.frontend.bist        import LiteSATABIST
+from litesata.frontend.dma         import LiteSATASector2MemDMA, LiteSATAMem2SectorDMA
 
 from litescope import LiteScopeAnalyzer
 
@@ -59,15 +60,15 @@ _sata_io = [
 
 # CRG ----------------------------------------------------------------------------------------------
 
-class _CRG(Module):
+class _CRG(LiteXModule):
     def __init__(self, platform, sys_clk_freq):
-        self.clock_domains.cd_sys    = ClockDomain()
-        self.clock_domains.cd_sys4x  = ClockDomain(reset_less=True)
-        self.clock_domains.cd_idelay = ClockDomain()
+        self.cd_sys    = ClockDomain()
+        self.cd_sys4x  = ClockDomain(reset_less=True)
+        self.cd_idelay = ClockDomain()
 
         # # #
 
-        self.submodules.pll = pll = S7MMCM(speedgrade=-2)
+        self.pll = pll = S7MMCM(speedgrade=-2)
         self.comb += pll.reset.eq(platform.request("cpu_reset"))
         pll.register_clkin(platform.request("clk200"), 200e6)
         pll.create_clkout(self.cd_sys,    sys_clk_freq)
@@ -85,7 +86,7 @@ class SATATestSoC(SoCMini):
         sata_clk_freq = {"gen1": 75e6, "gen2": 150e6, "gen3": 300e6}[gen]
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on KC705")
@@ -98,13 +99,13 @@ class SATATestSoC(SoCMini):
         sata_refclk = None
         if connector != "fmc":
             # Generate 150MHz from PLL.
-            self.clock_domains.cd_sata_refclk = ClockDomain()
+            self.cd_sata_refclk = ClockDomain()
             self.crg.pll.create_clkout(self.cd_sata_refclk, 150e6)
             sata_refclk = ClockSignal("sata_refclk")
             platform.add_platform_command("set_property SEVERITY {{Warning}} [get_drc_checks REQP-52]")
 
         # PHY
-        self.submodules.sata_phy = LiteSATAPHY(platform.device,
+        self.sata_phy = LiteSATAPHY(platform.device,
             refclk     = sata_refclk,
             pads       = platform.request(connector+"2sata"),
             gen        = gen,
@@ -112,22 +113,22 @@ class SATATestSoC(SoCMini):
             data_width = 16)
 
         # Core
-        self.submodules.sata_core = LiteSATACore(self.sata_phy)
+        self.sata_core = LiteSATACore(self.sata_phy)
 
         # Crossbar
-        self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
+        self.sata_crossbar = LiteSATACrossbar(self.sata_core)
 
         # BIST
-        self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
+        self.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
 
         # Sector2Mem DMA
         bus =  wishbone.Interface(data_width=32, adr_width=32)
-        self.submodules.sata_sector2mem = LiteSATASector2MemDMA(self.sata_crossbar.get_port(), bus)
+        self.sata_sector2mem = LiteSATASector2MemDMA(self.sata_crossbar.get_port(), bus)
         self.bus.add_master("sata_sector2mem", master=bus)
 
         # Mem2Sector DMA
         bus =  wishbone.Interface(data_width=32, adr_width=32)
-        self.submodules.sata_mem2sector = LiteSATAMem2SectorDMA(bus, self.sata_crossbar.get_port())
+        self.sata_mem2sector = LiteSATAMem2SectorDMA(bus, self.sata_crossbar.get_port())
         self.bus.add_master("sata_mem2sector", master=bus)
 
         # Timing constraints
@@ -175,7 +176,7 @@ class SATATestSoC(SoCMini):
                 self.sata_core.command.rx.fsm,
                 self.sata_core.command.tx.fsm,
             ]
-            self.submodules.global_analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="global_analyzer.csv")
+            self.global_analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="global_analyzer.csv")
 
         if with_sector2mem_analyzer:
             analyzer_signals = [
@@ -185,7 +186,7 @@ class SATATestSoC(SoCMini):
                 self.sata_sector2mem.port.source,
                 self.sata_sector2mem.bus,
             ]
-            self.submodules.sector2mem_analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="sector2mem_analyzer.csv")
+            self.sector2mem_analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="sector2mem_analyzer.csv")
 
         if with_mem2sector_analyzer:
             analyzer_signals = [
@@ -195,7 +196,7 @@ class SATATestSoC(SoCMini):
                 self.sata_mem2sector.port.source,
                 self.sata_mem2sector.bus,
             ]
-            self.submodules.mem2sector_analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="mem2sector_analyzer.csv")
+            self.mem2sector_analyzer = LiteScopeAnalyzer(analyzer_signals, 2048, csr_csv="mem2sector_analyzer.csv")
 
 # Build --------------------------------------------------------------------------------------------
 

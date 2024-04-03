@@ -3,28 +3,29 @@
 #
 # This file is part of LiteSATA.
 #
-# Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2020-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-import sys
 import argparse
 
 from migen import *
+
+from litex.gen import *
 
 from litex_boards.platforms import sqrl_xcu1525
 
 from litex.build.generic_platform import *
 
-from litex.soc.cores.clock import USPPLL
-from litex.soc.interconnect.csr import *
+from litex.soc.cores.clock          import USPPLL
+from litex.soc.interconnect.csr     import *
 from litex.soc.integration.soc_core import *
-from litex.soc.integration.builder import *
+from litex.soc.integration.builder  import *
 
-from litesata.common import *
-from litesata.phy import LiteSATAPHY
-from litesata.core import LiteSATACore
+from litesata.common               import *
+from litesata.phy                  import LiteSATAPHY
+from litesata.core                 import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
-from litesata.frontend.bist import LiteSATABIST
+from litesata.frontend.bist        import LiteSATABIST
 
 from litescope import LiteScopeAnalyzer
 
@@ -49,14 +50,14 @@ _sata_io = [
 
 # CRG ----------------------------------------------------------------------------------------------
 
-class _CRG(Module):
+class _CRG(LiteXModule):
     def __init__(self, platform, sys_clk_freq):
         self.clock_domains.cd_sys = ClockDomain()
 
         # # #
 
         # PLL
-        self.submodules.pll = pll = USPPLL(speedgrade=-2)
+        self.pll = pll = USPPLL(speedgrade=-2)
         pll.register_clkin(platform.request("clk300"), 300e6)
         pll.create_clkout(self.cd_sys, sys_clk_freq)
 
@@ -71,7 +72,7 @@ class SATATestSoC(SoCMini):
         sata_clk_freq = {"gen1": 75e6, "gen2": 150e6, "gen3": 300e6}[gen]
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on XCU1525")
@@ -86,7 +87,7 @@ class SATATestSoC(SoCMini):
         sata_refclk = ClockSignal("sata_refclk")
 
         # PHY
-        self.submodules.sata_phy = LiteSATAPHY(platform.device,
+        self.sata_phy = LiteSATAPHY(platform.device,
             refclk     = sata_refclk,
             pads       = platform.request(connector+"2sata"),
             gen        = gen,
@@ -94,13 +95,13 @@ class SATATestSoC(SoCMini):
             data_width = 16)
 
         # Core
-        self.submodules.sata_core = LiteSATACore(self.sata_phy)
+        self.sata_core = LiteSATACore(self.sata_phy)
 
         # Crossbar
-        self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
+        self.sata_crossbar = LiteSATACrossbar(self.sata_core)
 
         # BIST
-        self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
+        self.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
 
         # Timing constraints
         platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
@@ -143,7 +144,7 @@ class SATATestSoC(SoCMini):
                 self.sata_core.command.rx.fsm,
                 self.sata_core.command.tx.fsm,
             ]
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="analyzer.csv")
+            self.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="analyzer.csv")
 
 # Build --------------------------------------------------------------------------------------------
 

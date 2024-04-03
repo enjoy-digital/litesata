@@ -3,27 +3,29 @@
 #
 # This file is part of LiteSATA.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-import sys
 import argparse
 
 from migen import *
 
+from litex.gen import *
+
 from litex_boards.platforms import digilent_nexys_video
+
 from litex_boards.targets.digilent_nexys_video import _CRG
 
 from litex.build.generic_platform import *
 
 from litex.soc.integration.soc_core import *
-from litex.soc.integration.builder import *
+from litex.soc.integration.builder  import *
 
-from litesata.common import *
-from litesata.phy import LiteSATAPHY
-from litesata.core import LiteSATACore
+from litesata.common               import *
+from litesata.phy                  import LiteSATAPHY
+from litesata.core                 import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
-from litesata.frontend.bist import LiteSATABIST
+from litesata.frontend.bist        import LiteSATABIST
 
 from litescope import LiteScopeAnalyzer
 
@@ -44,13 +46,12 @@ _sata_io = [
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, gen="gen2", with_pll_refclk=True, with_analyzer=False):
+    def __init__(self, platform, sys_clk_freq=int(100e6), gen="gen2", with_pll_refclk=True, with_analyzer=False):
         assert gen in ["gen1", "gen2"]
-        sys_clk_freq  = int(100e6)
         sata_clk_freq = {"gen1": 75e6, "gen2": 150e6}[gen]
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on Nexys Video")
@@ -66,7 +67,7 @@ class SATATestSoC(SoCMini):
             platform.add_platform_command("set_property SEVERITY {{Warning}} [get_drc_checks REQP-49]")
 
         # PHY
-        self.submodules.sata_phy = LiteSATAPHY(platform.device,
+        self.sata_phy = LiteSATAPHY(platform.device,
             refclk     = None if not with_pll_refclk else self.cd_sata_refclk.clk,
             pads       = platform.request("fmc2sata"),
             gen        = gen,
@@ -74,13 +75,13 @@ class SATATestSoC(SoCMini):
             data_width = 16)
 
         # Core
-        self.submodules.sata_core = LiteSATACore(self.sata_phy)
+        self.sata_core = LiteSATACore(self.sata_phy)
 
         # Crossbar
-        self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
+        self.sata_crossbar = LiteSATACrossbar(self.sata_core)
 
         # BIST
-        self.submodules.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
+        self.sata_bist = LiteSATABIST(self.sata_crossbar, with_csr=True)
 
         # Timing constraints
         platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
@@ -127,7 +128,7 @@ class SATATestSoC(SoCMini):
                 self.sata_core.command.rx.fsm,
                 self.sata_core.command.tx.fsm,
             ]
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="analyzer.csv")
+            self.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, csr_csv="analyzer.csv")
 
 # Build --------------------------------------------------------------------------------------------
 
@@ -142,7 +143,7 @@ def main():
 
     platform = digilent_nexys_video.Platform()
     platform.add_extension(_sata_io)
-    soc = SATATestSoC(platform, "gen" + args.gen, with_pll_refclk=args.pll_refclk, with_analyzer=args.with_analyzer)
+    soc = SATATestSoC(platform, gen="gen" + args.gen, with_pll_refclk=args.pll_refclk, with_analyzer=args.with_analyzer)
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)
 
