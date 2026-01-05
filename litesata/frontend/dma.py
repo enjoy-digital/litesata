@@ -19,7 +19,7 @@ from litesata.common import logical_sector_size
 
 # SATA Sector2Mem DMA ------------------------------------------------------------------------------
 
-class LiteSATASector2MemDMA(Module, AutoCSR):
+class LiteSATASector2MemDMA(LiteXModule):
     """Sector to Memory DMA
 
     Read a sector from the SATA core and write it to memory through DMA.
@@ -44,12 +44,10 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
         crt_base   = Signal(64)
 
         # Sector buffer
-        buf = stream.SyncFIFO([("data", port.dw)], logical_sector_size//port_bytes)
-        self.submodules.buf = buf
+        self.buf = buf = stream.SyncFIFO([("data", port.dw)], logical_sector_size//port_bytes)
 
         # Converter
-        conv = stream.Converter(nbits_from=port.dw, nbits_to=bus.data_width)
-        self.submodules.conv = conv
+        self.conv = conv = stream.Converter(nbits_from=port.dw, nbits_to=bus.data_width)
 
         # Connect Port to Sector Buffer
         self.comb += port.source.connect(buf.sink, keep={"valid", "ready", "last", "data"})
@@ -58,11 +56,10 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
         self.comb += buf.source.connect(conv.sink)
 
         # DMA
-        dma = WishboneDMAWriter(bus, with_csr=False, endianness=endianness)
-        self.submodules.dma = dma
+        self.dma = dma = WishboneDMAWriter(bus, with_csr=False, endianness=endianness)
 
         # Control FSM
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(self.start.re,
                 NextValue(count,             0),
@@ -124,7 +121,7 @@ class LiteSATASector2MemDMA(Module, AutoCSR):
 
 # SATA Mem2Sector DMA ------------------------------------------------------------------------------
 
-class LiteSATAMem2SectorDMA(Module, AutoCSR):
+class LiteSATAMem2SectorDMA(LiteXModule):
     """Memory 2 Sector DMA
 
     Read memory through DMA and write it to a sector of the SATA core.
@@ -149,16 +146,13 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
         crt_base   = Signal(64)
 
         # DMA
-        dma = WishboneDMAReader(bus, with_csr=False, endianness=endianness)
-        self.submodules.dma = dma
+        self.dma = dma = WishboneDMAReader(bus, with_csr=False, endianness=endianness)
 
         # Sector buffer
-        buf = stream.SyncFIFO([("data", port.dw)], logical_sector_size//dma_bytes)
-        self.submodules.buf = buf
+        self.buf = buf = stream.SyncFIFO([("data", port.dw)], logical_sector_size//dma_bytes)
 
         # Converter
-        conv = stream.Converter(nbits_from=bus.data_width, nbits_to=port.dw)
-        self.submodules.conv = conv
+        self.conv = conv = stream.Converter(nbits_from=bus.data_width, nbits_to=port.dw)
 
         # Connect DMA to Sector Buffer
         self.comb += dma.source.connect(buf.sink)
@@ -167,7 +161,7 @@ class LiteSATAMem2SectorDMA(Module, AutoCSR):
         self.comb += buf.source.connect(conv.sink)
 
         # Control FSM
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(self.start.re,
                 NextValue(count,             0),
