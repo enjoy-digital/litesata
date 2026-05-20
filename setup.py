@@ -10,7 +10,7 @@ with open("README.md", "r", encoding="utf-8") as fp:
 
 setup(
     name                          = "litesata",
-    version = "2025.12",
+    version                       = "2025.12",
     description                   = "Small footprint and configurable SATA core",
     long_description              = long_description,
     long_description_content_type = "text/markdown",
@@ -18,16 +18,15 @@ setup(
     author_email                  = "florent@enjoy-digital.fr",
     url                           = "http://enjoy-digital.fr",
     download_url                  = "https://github.com/enjoy-digital/litesata",
-    test_suite                    = "test",
-    license                       = "BSD",
+    license                       = "BSD-2-Clause",
     python_requires               = "~=3.7",
     install_requires              = ["pyyaml", "litex"],
     extras_require                = {
         "develop": [
-          "meson"
-          "pexpect"
-          "setuptools"
-          "requests"
+            "meson",
+            "pexpect",
+            "setuptools",
+            "requests",
         ]
     },
     packages                      = find_packages(exclude=("test*", "sim*", "doc*", "examples*")),
@@ -38,11 +37,10 @@ setup(
         "Environment :: Console",
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
-        "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
         "Programming Language :: Python",
     ],
-    entry_points         = {
+    entry_points                  = {
         "console_scripts": [
             "litesata_gen=litesata.gen:main",
         ],

@@ -5,12 +5,12 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import unittest
-import subprocess
 
 from litesata.common import *
 from litesata.core.link import Scrambler
 
 from litex.soc.interconnect.stream_sim import *
+from test.model.common import scrambler_values
 
 
 class TestLinkScrambler(unittest.TestCase):
@@ -34,11 +34,11 @@ class TestLinkScrambler(unittest.TestCase):
             for i in range(32):
                 yield
 
-            # Get C code reference
-            c_values = dut.get_c_values(dut.length)
+            # Get reference values
+            ref_values = dut.get_ref_values(dut.length)
 
             # Check results
-            s, l, e = check(c_values, sim_values)
+            s, l, e = check(ref_values, sim_values)
             print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
             self.assertEqual(s, 0)
             self.assertEqual(e, 0)
@@ -48,14 +48,8 @@ class TestLinkScrambler(unittest.TestCase):
                 self.submodules.scrambler = ResetInserter()(Scrambler())
                 self.length = length
 
-            def get_c_values(self, length):
-                stdin = "0x{:08x}".format(length)
-                with subprocess.Popen("./test/model/scrambler",
-                    stdin  = subprocess.PIPE,
-                    stdout = subprocess.PIPE) as process:
-                    process.stdin.write(stdin.encode("ASCII"))
-                    out, err = process.communicate()
-                return [int(e, 16) for e in out.decode("ASCII").split("\n")[:-1]]
+            def get_ref_values(self, length):
+                return list(scrambler_values(length))
 
         dut = DUT(1024)
         generators = {

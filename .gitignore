@@ -45,6 +45,10 @@ coverage.xml
 *,cover
 .hypothesis/
 
+# Test helper binaries
+/test/model/crc
+/test/model/scrambler
+
 # Translations
 *.mo
 *.pot

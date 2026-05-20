@@ -44,11 +44,11 @@ primitives = {
     "SOF":     0x3737b57c,
     "EOF":     0xd5d5b57c,
     "HOLD":    0xd5d5aa7c,
-    "HOLDA":   0x9595aa7c
+    "HOLDA":   0x9595aa7c,
 }
 
 def is_primitive(dword):
-    for k, v in primitives.items():
+    for v in primitives.values():
         if dword == v:
             return True
     return False
@@ -99,7 +99,7 @@ fis_types = {
     "REG_D2H":          0x34,
     "DMA_ACTIVATE_D2H": 0x39,
     "PIO_SETUP_D2H":    0x5f,
-    "DATA":             0x46
+    "DATA":             0x46,
 }
 
 fis_reg_h2d_header_length = 5

@@ -1,12 +1,12 @@
 # Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-import subprocess
 import math
 
 from litesata.common import *
 
 from litex.soc.interconnect.stream_sim import randn
+from test.model.common import sata_crc, scrambler_values
 
 # Helpers ------------------------------------------------------------------------------------------
 
@@ -15,12 +15,7 @@ def print_link(s, n=None):
 
 
 def import_scrambler_datas():
-    with subprocess.Popen(["./test/model/scrambler"],
-                          stdin=subprocess.PIPE,
-                          stdout=subprocess.PIPE) as process:
-        process.stdin.write("0x10000".encode("ASCII"))
-        out, err = process.communicate()
-    return [int(e, 16) for e in out.decode("utf-8").split("\n")[:-1]]
+    return scrambler_values(0x10000)
 
 # LinkPacket ---------------------------------------------------------------------------------------
 
@@ -40,16 +35,7 @@ class LinkRXPacket(LinkPacket):
             self[i] = self[i] ^ self.scrambled_datas[i]
 
     def check_crc(self):
-        stdin = ""
-        for v in self[:-1]:
-            stdin += "0x{:08x} ".format(v)
-        stdin += "exit"
-        with subprocess.Popen("./test/model/crc",
-            stdin  = subprocess.PIPE,
-            stdout = subprocess.PIPE) as process:
-            process.stdin.write(stdin.encode("ASCII"))
-            out, err = process.communicate()
-        crc = int(out.decode("ASCII"), 16)
+        crc = sata_crc(self[:-1])
         r = (self[-1] == crc)
         self.pop()
         return r
@@ -62,17 +48,7 @@ class LinkRXPacket(LinkPacket):
 
 class LinkTXPacket(LinkPacket):
     def insert_crc(self):
-        stdin = ""
-        for v in self:
-            stdin += "0x{:08x} ".format(v)
-        stdin += "exit"
-        with subprocess.Popen("./test/model/crc",
-            stdin  = subprocess.PIPE,
-            stdout = subprocess.PIPE) as process:
-            process.stdin.write(stdin.encode("ASCII"))
-            out, err = process.communicate()
-        crc = int(out.decode("ASCII"), 16)
-        self.append(crc)
+        self.append(sata_crc(self))
 
     def scramble(self):
         for i in range(len(self)):

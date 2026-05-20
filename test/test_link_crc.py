@@ -6,12 +6,11 @@
 
 import unittest
 
-import subprocess
-
 from litesata.common import *
 from litesata.core.link import LiteSATACRC
 
 from litex.soc.interconnect.stream_sim import *
+from test.model.common import sata_crc
 
 class TestLinkCRC(unittest.TestCase):
     def test_link_crc(self):
@@ -41,11 +40,11 @@ class TestLinkCRC(unittest.TestCase):
             for i in range(32):
                 yield
 
-            # Get C code reference
-            c_crc = dut.get_c_crc(datas)
+            # Get reference value
+            ref_crc = dut.get_ref_crc(datas)
 
             # Check results
-            s, l, e = check(c_crc, sim_crc)
+            s, l, e = check(ref_crc, sim_crc)
             print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
             self.assertEqual(s, 0)
             self.assertEqual(e, 0)
@@ -56,15 +55,8 @@ class TestLinkCRC(unittest.TestCase):
                 self.length = length
                 self.random = random
 
-            def get_c_crc(self, datas):
-                stdin = ""
-                for data in datas:
-                    stdin += "0x{:08x} ".format(data)
-                stdin += "exit"
-                with subprocess.Popen("./test/model/crc", stdin=subprocess.PIPE, stdout=subprocess.PIPE) as process:
-                    process.stdin.write(stdin.encode("ASCII"))
-                    out, err = process.communicate()
-                return int(out.decode("ASCII"), 16)
+            def get_ref_crc(self, datas):
+                return sata_crc(datas)
 
         dut = DUT(1024, False)
         run_simulation(dut, generator(dut))

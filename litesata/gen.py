@@ -9,8 +9,8 @@
 """
 LiteSATA standalone core generator
 
-LiteSATA aims to be directly used as a python package when the SoC is created using LiteX. However,
-for some use cases it could be interesting to generate a standalone verilog file of the core:
+LiteSATA aims to be directly used as a Python package when the SoC is created using LiteX. However,
+for some use cases it could be interesting to generate a standalone Verilog file of the core:
 - integration of the core in a SoC using a more traditional flow.
 - need to version/package the core.
 - avoid Migen/LiteX dependencies.
@@ -23,9 +23,9 @@ Current version of the generator is limited to:
 - Xilinx 7-Series.
 """
 
-import yaml
 import argparse
-import subprocess
+
+import yaml
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
@@ -192,7 +192,8 @@ def main():
     parser = argparse.ArgumentParser(description="LiteSATA standalone core generator")
     parser.add_argument("config", help="YAML config file")
     args = parser.parse_args()
-    core_config = yaml.load(open(args.config).read(), Loader=yaml.Loader)
+    with open(args.config, "r", encoding="utf-8") as f:
+        core_config = yaml.load(f, Loader=yaml.SafeLoader)
 
     # Convert YAML elements to Python/LiteX --------------------------------------------------------
     for k, v in core_config.items():

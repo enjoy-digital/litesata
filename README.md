@@ -18,14 +18,14 @@
 --------
 LiteSATA provides a small footprint and configurable SATA core.
 
-LiteSATA is part of LiteX libraries whose aims are to lower entry level of
+LiteSATA is part of LiteX libraries whose aims are to lower the entry level of
 complex FPGA cores by providing simple, elegant and efficient implementations
 of components used in today's SoC such as Ethernet, SATA, PCIe, SDRAM Controller...
 
 Using Migen to describe the HDL allows the core to be highly and easily configurable.
 
 LiteSATA can be used as LiteX library or can be integrated with your standard
-design flow by generating the verilog rtl that you will use as a standard core.
+design flow by generating the Verilog RTL that you will use as a standard core.
 
 <p align="center"><img src="https://github.com/enjoy-digital/litesata/raw/master/doc/architecture.png" width="800"></p>
 
@@ -38,9 +38,9 @@ PHY:
   - ALIGN inserter/remover and bytes alignment on K28.5
   - 8B/10B encoding/decoding in transceiver
   - Automatic TX/RX P/N polarity detection and swap.
-  - Errors detection and reporting
+  - Error detection and reporting
   - 32 bits interface
-  - 1.5/3.0/6.0GBps supported speeds (respectively 37.5/75/150MHz system clk)
+  - 1.5/3.0/6.0Gbps supported speeds (respectively 37.5/75/150MHz system clock)
 
 Core:
 
@@ -49,19 +49,19 @@ Core:
     - Scrambling/Descrambling of data
     - CRC inserter/checker
     - HOLD insertion/detection
-    - Errors detection and reporting
+    - Error detection and reporting
   - Transport/Command:
     - Easy to use user interfaces (Can be used with or without CPU)
     - 48 bits sector addressing
     - 3 supported commands: READ_DMA(_EXT), WRITE_DMA(_EXT), IDENTIFY_DEVICE
-    - Errors detection and reporting
+    - Error detection and reporting
 
 Frontend:
   - Configurable crossbar (simply declare your crossbar and use crossbar.get_port() to add a new port!)
   - Ports arbitration transparent to the user
-  - Synthetizable BIST
+  - Synthesizable BIST
   - Striping module to segment data on multiple HDDs and increase write/read speed and capacity. (RAID0 equivalent)
-  - Mirroring module for data redundancy and increase read speeds. (RAID1 equivalent)
+  - Mirroring module for data redundancy and increased read speed. (RAID1 equivalent)
 
 [> FPGA Proven
 --------------
@@ -74,7 +74,7 @@ LiteSATA is already used in commercial and open-source designs:
 - add standardized interfaces (AXI, Avalon-ST)
 - add NCQ support
 - add AES hardware encryption
-- add on-the-flow compression/decompression
+- add on-the-fly compression/decompression
 - add support for Altera PHYs.
 - add support for Lattice PHYs.
 - add Zynq Linux drivers.
@@ -85,7 +85,7 @@ enjoy-digital.fr.
 
 [> Getting started
 ------------------
-1. Install Python 3.6+ and FPGA vendor's development tools.
+1. Install Python 3.7+ and FPGA vendor's development tools.
 2. Install LiteX and the cores by following the LiteX's wiki [installation guide](https://github.com/enjoy-digital/litex/wiki/Installation).
 3. You can find examples of integration of the core with LiteX in LiteX-Boards and in the examples directory.
 
@@ -94,12 +94,12 @@ enjoy-digital.fr.
 Unit tests are available in ./test/.
 To run all the unit tests:
 ```sh
-$ ./setup.py test
+$ python3 -m pytest -v
 ```
 
 Tests can also be run individually:
 ```sh
-$ python3 -m unittest test.test_name
+$ python3 -m pytest -v test/test_name.py
 ```
 
 [> License

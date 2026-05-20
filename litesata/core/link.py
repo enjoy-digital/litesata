@@ -51,11 +51,11 @@ class CRCEngine(Module):
             for e in l:
                 try:
                     d[e] += 1
-                except:
+                except KeyError:
                     d[e] = 1
             r = []
             for k, v in d.items():
-                if v%2:
+                if v % 2:
                     r.append(k)
             return r
 
