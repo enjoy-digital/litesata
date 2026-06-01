@@ -30,7 +30,7 @@ import yaml
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
-from litex.soc.integration.soc_core import *
+from litex.soc.integration.soc import *
 from litex.soc.integration.builder import *
 
 from litesata.phy import LiteSATAPHY

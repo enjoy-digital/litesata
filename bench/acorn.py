@@ -18,7 +18,7 @@ from litex_boards.targets.sqrl_acorn import CRG as _CRG
 
 from litex.build.generic_platform import *
 
-from litex.soc.integration.soc_core import *
+from litex.soc.integration.soc import *
 from litex.soc.integration.builder  import *
 
 from litesata.common               import *

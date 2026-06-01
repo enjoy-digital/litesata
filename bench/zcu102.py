@@ -13,7 +13,7 @@ from migen.fhdl.specials import Instance
 from litex.gen.fhdl.module import LiteXModule
 from litex.build.generic_platform import Subsignal, Pins
 from litex.soc.cores.clock import USPMMCM
-from litex.soc.integration.soc_core import SoCCore
+from litex.soc.integration.soc import SoCCore
 from litex.soc.integration.builder import Builder
 
 from litesata.phy import LiteSATAPHY
