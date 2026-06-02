@@ -61,7 +61,7 @@ class LiteSATASector2MemDMA(LiteXModule):
         # Control FSM
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(self.start.re,
+            If(self.start.wr_stb,
                 NextValue(count,             0),
                 NextValue(crt_sec,           self.sector.storage),
                 NextValue(crt_base,          self.base.storage),
@@ -163,7 +163,7 @@ class LiteSATAMem2SectorDMA(LiteXModule):
         # Control FSM
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(self.start.re,
+            If(self.start.wr_stb,
                 NextValue(count,             0),
                 NextValue(crt_sec,           self.sector.storage),
                 NextValue(crt_base,          self.base.storage),

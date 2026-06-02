@@ -180,7 +180,7 @@ class SATATestSoC(SoCMini):
 
         if with_sector2mem_analyzer:
             analyzer_signals = [
-                self.sata_sector2mem.start.re,
+                self.sata_sector2mem.start.wr_stb,
                 self.sata_sector2mem.fsm,
                 self.sata_sector2mem.port.sink,
                 self.sata_sector2mem.port.source,
@@ -190,7 +190,7 @@ class SATATestSoC(SoCMini):
 
         if with_mem2sector_analyzer:
             analyzer_signals = [
-                self.sata_mem2sector.start.re,
+                self.sata_mem2sector.start.wr_stb,
                 self.sata_mem2sector.fsm,
                 self.sata_mem2sector.port.sink,
                 self.sata_mem2sector.port.source,

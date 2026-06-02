@@ -73,10 +73,10 @@ class LiteSATAIdentifyCSR(Module, AutoCSR):
 
         self.submodules += bist_identify
         self.comb += [
-            bist_identify.start.eq(self._start.r & self._start.re),
+            bist_identify.start.eq(self._start.wr_data & self._start.wr_stb),
             self._done.status.eq(bist_identify.done),
 
             self._source_valid.status.eq(bist_identify.source.valid),
             self._source_data.status.eq(bist_identify.source.data),
-            bist_identify.source.ready.eq(self._source_ready.r & self._source_ready.re)
+            bist_identify.source.ready.eq(self._source_ready.wr_data & self._source_ready.wr_stb)
         ]

@@ -57,7 +57,7 @@ class LiteSATASectors2Stream(LiteXModule):
         # Control FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(self.start.re,
+            If(self.start.wr_stb,
                 NextValue(crt_sec,           self.sector.storage),
                 NextValue(last_sec,          self.sector.storage + self.nsectors.storage - 1),
                 NextValue(self.error.status, 0),
@@ -157,7 +157,7 @@ class LiteSATAStream2Sectors(LiteXModule):
         # Control FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(self.start.re,
+            If(self.start.wr_stb,
                 NextValue(fill_count,        0),
                 NextValue(send_count,        0),
                 NextValue(crt_sec,           self.sector.storage),

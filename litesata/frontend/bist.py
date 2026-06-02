@@ -193,7 +193,7 @@ class LiteSATABISTUnitCSR(Module, AutoCSR):
 
         self.submodules += bist_unit
 
-        start = self._start.r & self._start.re
+        start = self._start.wr_data & self._start.wr_stb
         done  = self._done.status
         loops = self._loops.storage
 
