@@ -213,7 +213,7 @@ def main():
         raise ValueError("Unsupported SATA PHY: {}".format(core_config["phy"]))
     soc      = _LiteSATACore(platform, core_config)
     builder  = Builder(soc, output_dir="build", compile_gateware=False)
-    builder.build(build_name="litesata_core", regular_comb=True)
+    builder.build(build_name="litesata_core")
 
 if __name__ == "__main__":
     main()
