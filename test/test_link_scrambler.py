@@ -9,7 +9,7 @@ import unittest
 from litesata.common import *
 from litesata.core.link import Scrambler
 
-from litex.soc.interconnect.stream_sim import *
+from test.stream_helpers import *
 from test.model.common import scrambler_values
 
 

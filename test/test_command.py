@@ -10,7 +10,7 @@ from copy import deepcopy
 from litesata.common import *
 from litesata.core import LiteSATACore
 
-from litex.soc.interconnect.stream_sim import *
+from test.stream_helpers import *
 
 from test.model.hdd import *
 

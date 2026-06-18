@@ -9,7 +9,7 @@ import unittest
 from litesata.common import *
 from litesata.core.link import LiteSATACONTInserter, LiteSATACONTRemover
 
-from litex.soc.interconnect.stream_sim import *
+from test.stream_helpers import *
 
 
 class ContPacket(list):

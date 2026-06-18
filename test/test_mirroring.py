@@ -12,7 +12,7 @@ from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABISTGenerator, LiteSATABISTChecker
 from litesata.frontend.raid import LiteSATAMirroring
 
-from litex.soc.interconnect.stream_sim import *
+from test.stream_helpers import *
 
 from test.model.hdd import *
 

@@ -5,7 +5,7 @@ import math
 
 from litesata.common import *
 
-from litex.soc.interconnect.stream_sim import randn
+from test.stream_helpers import randn
 from test.model.common import sata_crc, scrambler_values
 
 # Helpers ------------------------------------------------------------------------------------------
