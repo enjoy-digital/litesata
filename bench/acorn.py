@@ -44,15 +44,22 @@ _sata_io = [
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, sys_clk_freq=int(150e6), gen="gen3", with_analyzer=False):
+    def __init__(self, platform, sys_clk_freq=int(100e6), gen="gen1", with_analyzer=False):
         assert gen in ["gen1", "gen2", "gen3"]
         sata_clk_freq = {"gen1": 75e6, "gen2": 150e6, "gen3": 300e6}[gen]
+        min_sys_clk_freq = sata_clk_freq*16/32
+        if sys_clk_freq < min_sys_clk_freq:
+            raise ValueError(
+                f"SATA {gen} requires a system clock of at least {min_sys_clk_freq/1e6:.1f}MHz "
+                f"with the 16-to-32-bit datapath."
+            )
 
         # CRG --------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCMini ----------------------------------------------------------------------------------
-        SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on Acorn CLE 215+.")
+        SoCMini.__init__(self, platform, sys_clk_freq,
+            ident = f"LiteSATA bench on Acorn {platform.variant.upper()}.")
 
         # JTAGBone ---------------------------------------------------------------------------------
         self.add_jtagbone()
@@ -111,6 +118,16 @@ class SATATestSoC(SoCMini):
                 self.sata_phy.phy.rx_init.fsm,
                 self.sata_phy.ctrl.fsm,
 
+                self.sata_phy.phy.tx_cominit_stb,
+                self.sata_phy.phy.tx_cominit_ack,
+                self.sata_phy.phy.rx_cominit_stb,
+                self.sata_phy.phy.tx_comwake_stb,
+                self.sata_phy.phy.tx_comwake_ack,
+                self.sata_phy.phy.rx_comwake_stb,
+                self.sata_phy.phy.tx_polarity,
+                self.sata_phy.phy.rx_polarity,
+                self.sata_phy.phy.rx_idle,
+
                 self.sata_phy.ctrl.ready,
                 self.sata_phy.source,
                 self.sata_phy.sink,
@@ -130,16 +147,25 @@ class SATATestSoC(SoCMini):
 # Build --------------------------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="LiteSATA bench on Acorn CLE 215+.")
+    parser = argparse.ArgumentParser(description="LiteSATA bench on Acorn CLE-101/215(+).")
     parser.add_argument("--build",         action="store_true", help="Build bitstream.")
     parser.add_argument("--load",          action="store_true", help="Load bitstream (to SRAM).")
-    parser.add_argument("--gen",           default="3",         help="SATA Gen: 1, 2 or 3 (default).")
+    parser.add_argument("--variant",       default="cle-215+", choices=["cle-101", "cle-215", "cle-215+"],
+        help="Board variant (default: cle-215+).")
+    parser.add_argument("--sys-clk-freq", default=100e6, type=float,
+        help="System clock frequency (default: 100MHz).")
+    parser.add_argument("--gen",           default="1", choices=["1", "2", "3"],
+        help="SATA generation (default: 1).")
     parser.add_argument("--with-analyzer", action="store_true", help="Add LiteScope Analyzer.")
     args = parser.parse_args()
 
-    platform = sqrl_acorn.Platform()
+    platform = sqrl_acorn.Platform(variant=args.variant)
     platform.add_extension(_sata_io)
-    soc = SATATestSoC(platform, gen="gen" + args.gen, with_analyzer=args.with_analyzer)
+    soc = SATATestSoC(platform,
+        sys_clk_freq  = args.sys_clk_freq,
+        gen           = "gen" + args.gen,
+        with_analyzer = args.with_analyzer,
+    )
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)
 

@@ -14,21 +14,22 @@ from litex import RemoteClient
 
 # Init Test ----------------------------------------------------------------------------------------
 
-def init_test(port, retries):
+def init_test(port, retries, interval):
     bus = RemoteClient(port=port)
     bus.open()
 
+    # Reset once and let the PHY controller perform its internal OOB retries.
+    bus.regs.sata_phy_enable.write(0)
+    time.sleep(1e-3)
+    bus.regs.sata_phy_enable.write(1)
+
     init_done = False
-    for i in range(retries):
-        # Reset PHY
-        bus.regs.sata_phy_enable.write(0)
-        bus.regs.sata_phy_enable.write(1)
+    status    = 0
+    for poll in range(1, retries + 1):
+        time.sleep(interval)
 
-        # Wait
-        time.sleep(10e-3)
-
-        # Check Status
-        if (bus.regs.sata_phy_status.read() & 0x1) != 0:
+        status = bus.regs.sata_phy_status.read()
+        if status & 0x1:
             init_done = True
             break
 
@@ -36,7 +37,15 @@ def init_test(port, retries):
         sys.stdout.flush()
     print("")
 
-    print("Success (retries: {:d})".format(i) if init_done else "Failed")
+    if init_done:
+        print(f"Success (polls: {poll:d}, status: 0x{status:08x})")
+    else:
+        print("Failed (status: 0x{:08x}, tx_ready: {:d}, rx_ready: {:d}, ctrl_ready: {:d})".format(
+            status,
+            (status >> 1) & 0x1,
+            (status >> 2) & 0x1,
+            (status >> 3) & 0x1,
+        ))
 
     bus.close()
 
@@ -44,14 +53,16 @@ def init_test(port, retries):
 
 def main():
     parser = argparse.ArgumentParser(description="LiteSATA Init test utility")
-    parser.add_argument("--port",    default="1234", help="Host bind port")
-    parser.add_argument("--retries", default="80",   help="Init retries")
+    parser.add_argument("--port",     default="1234", help="Host bind port")
+    parser.add_argument("--retries",  default="80",   help="Number of status polls")
+    parser.add_argument("--interval", default=0.1, type=float,
+        help="Status poll interval in seconds (default: 0.1)")
     args = parser.parse_args()
 
     port    = int(args.port,    0)
     retries = int(args.retries, 0)
 
-    init_test(port, retries)
+    init_test(port, retries, args.interval)
 
 if __name__ == "__main__":
     main()
