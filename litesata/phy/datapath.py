@@ -71,7 +71,9 @@ class LiteSATAPHYDatapathRX(Module):
             sink.ready.eq(converter.sink.ready)
         ]
         if data_width == 16:
-            self.comb += converter.reset.eq(converter.source.charisk[2:] != 0)
+            self.comb += converter.reset.eq(
+                converter.source.valid & (converter.source.charisk[2:] != 0)
+            )
 
         # clock domain crossing
         #   (gen3) 300MHz (16 bits) / 150MHz (32 bits) sata_rx clk to sys_clk

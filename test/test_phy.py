@@ -6,9 +6,13 @@
 
 import unittest
 
-from migen import Instance, Signal
+from migen import ClockDomain, Instance, Module, Signal
+from migen.sim import run_simulation
+
+from litex.soc.interconnect import stream
 
 from litesata.phy import LiteSATAPHY
+from litesata.phy.datapath import LiteSATAPHYDatapathRX
 from litesata.phy.gth3sataphy import GTH3LiteSATAPHYCRG, GTH3LiteSATAPHY
 from litesata.phy.gth4sataphy import GTH4LiteSATAPHYCRG, GTH4LiteSATAPHY
 from litesata.phy.gty4sataphy import GTY4LiteSATAPHYCRG, GTY4LiteSATAPHY
@@ -72,6 +76,53 @@ class TestPHY(unittest.TestCase):
         self.assertIs(GTHE4LiteSATAPHY,    GTH4LiteSATAPHY)
         self.assertIs(USPLiteSATAPHYCRG, GTY4LiteSATAPHYCRG)
         self.assertIs(USPLiteSATAPHY,    GTY4LiteSATAPHY)
+
+    def test_rx_realigns_with_resetless_payload(self):
+        class DUT(Module):
+            def __init__(self):
+                self.clock_domains.cd_sys     = ClockDomain()
+                self.clock_domains.cd_sata_rx = ClockDomain()
+                self.submodules.rx = LiteSATAPHYDatapathRX(data_width=16)
+
+        def find_submodule(module, cls):
+            for _, submodule in module._submodules:
+                if isinstance(submodule, cls):
+                    return submodule
+                match = find_submodule(submodule, cls)
+                if match is not None:
+                    return match
+
+        dut       = DUT()
+        realigner = dut.rx._submodules[0][1]
+        converter = find_submodule(realigner, stream._UpConverter)
+        self.assertIsNotNone(converter)
+        stream.set_reset_less(converter.source.payload)
+
+        realign_seen = []
+        aligned_data = []
+
+        def generator():
+            yield dut.rx.sink.valid.eq(1)
+
+            # Force a control character into the upper half of an assembled word.
+            yield dut.rx.sink.charisk.eq(0b01)
+            for _ in range(4):
+                if (yield realigner.reset):
+                    realign_seen.append(True)
+                yield
+
+            # The converter must leave reset and resume with ordinary data.
+            yield dut.rx.sink.charisk.eq(0)
+            yield dut.rx.sink.data.eq(0x1234)
+            for _ in range(12):
+                if (yield realigner.source.valid):
+                    aligned_data.append((yield realigner.source.data))
+                yield
+
+        run_simulation(dut, {"sata_rx": generator()}, clocks={"sys": 10, "sata_rx": 10})
+
+        self.assertTrue(realign_seen)
+        self.assertIn(0x12341234, aligned_data)
 
 
 if __name__ == "__main__":
