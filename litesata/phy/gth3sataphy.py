@@ -15,7 +15,7 @@ from liteiclink.serdes.common import *
 from liteiclink.serdes.gth_ultrascale_init import GTHTXInit, GTHRXInit
 
 
-class USLiteSATAPHYCRG(Module):
+class GTH3LiteSATAPHYCRG(Module):
     def __init__(self, refclk, pads, gth, gen):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
@@ -64,7 +64,7 @@ class USLiteSATAPHYCRG(Module):
 
 # --------------------------------------------------------------------------------------------------
 
-class USLiteSATAPHY(Module):
+class GTH3LiteSATAPHY(Module):
     def __init__(self, pads, gen, clk_freq, data_width=16, tx_buffer_enable=False, rx_buffer_enable=False):
         assert data_width in [16, 32]
         # Common signals

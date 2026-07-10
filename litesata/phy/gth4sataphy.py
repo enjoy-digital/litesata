@@ -17,7 +17,7 @@ from litesata.phy.ctrl import *
 from litesata.phy.datapath import *
 
 
-class GTHE4LiteSATAPHYCRG(Module):
+class GTH4LiteSATAPHYCRG(Module):
     def __init__(self, refclk, pads, gth, gen):
         self.tx_reset = Signal()
         self.rx_reset = Signal()
@@ -66,7 +66,7 @@ class GTHE4LiteSATAPHYCRG(Module):
 
 # --------------------------------------------------------------------------------------------------
 
-class GTHE4LiteSATAPHY(Module):
+class GTH4LiteSATAPHY(Module):
     def __init__(self, pads, gen, clk_freq, data_width=16,
                  tx_buffer_enable=False, rx_buffer_enable=False, use_gtgrefclk=True):
         assert data_width in [16, 32]
