@@ -19,16 +19,15 @@ class LiteSATAPHY(LiteXModule):
 
     Manages the low level interface between the SATA core and the device.
 
-    This modules use FPGA transceivers (high speed serializers/deserializer) to
-    communicates with the SATA devices. Since transceivers are primitives inside
-    the FPGA, device passed as parameter is used to select the right PHY. PHY is
-    composed of 3 main modules:
+    This module uses FPGA transceivers (high speed serializers/deserializers) to
+    communicate with SATA devices. Since transceivers are primitives inside the
+    FPGA, the device and transceiver type are used to select the right PHY. The
+    PHY is composed of three main modules:
     - Transceiver and clocking (vendor specific)
     - Control (vendor agnostic)
     - Datapath (vendor agnostic)
 
-    For now, the Kintex7/Zynq(with PL based on K7) PHY is the only one available,
-    but the achitecture is modular enough to accept others PHYs.
+    The architecture is modular enough to support additional PHYs.
     """
     def __init__(self, device, pads, gen, clk_freq, refclk=None, data_width=16,
                  qpll=None, gt_type="GTY", use_gtgrefclk=True, with_csr=True):
@@ -55,24 +54,24 @@ class LiteSATAPHY(LiteXModule):
             self.phy = A7LiteSATAPHY(pads, gen, clk_freq, data_width, tx_buffer_enable=True, qpll=qpll)
             self.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen,  tx_buffer_enable=True)
 
-        # Kintex/Virtex Ultrascale.
+        # Kintex/Virtex UltraScale GTH (GTHE3).
         elif re.match("^xc[kv]u[0-9]+-", device):
-            from litesata.phy.ussataphy import USLiteSATAPHYCRG, USLiteSATAPHY
-            self.phy = USLiteSATAPHY(pads, gen, clk_freq, data_width)
-            self.crg = USLiteSATAPHYCRG(refclk, pads, self.phy, gen)
+            from litesata.phy.gth3sataphy import GTH3LiteSATAPHYCRG, GTH3LiteSATAPHY
+            self.phy = GTH3LiteSATAPHY(pads, gen, clk_freq, data_width)
+            self.crg = GTH3LiteSATAPHYCRG(refclk, pads, self.phy, gen)
 
         # Kintex/Virtex/Zynq Ultrascale+.
         elif re.match("^xc([kv]u[0-9]+p-|zu[0-9])", device):
             if gt_type == "GTY":
-                # GTY transceiver for Virtex/Kintex Ultrascale+
-                from litesata.phy.uspsataphy import USPLiteSATAPHYCRG, USPLiteSATAPHY
-                self.phy = USPLiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
-                self.crg = USPLiteSATAPHYCRG(refclk, pads, self.phy, gen)
+                # GTY transceiver for Virtex/Kintex UltraScale+ (GTYE4).
+                from litesata.phy.gty4sataphy import GTY4LiteSATAPHYCRG, GTY4LiteSATAPHY
+                self.phy = GTY4LiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
+                self.crg = GTY4LiteSATAPHYCRG(refclk, pads, self.phy, gen)
             elif gt_type == "GTH":
-                # GTH transceiver for Kintex/Zynq Ultrascale+
-                from litesata.phy.gthe4sataphy import GTHE4LiteSATAPHYCRG, GTHE4LiteSATAPHY
-                self.phy = GTHE4LiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
-                self.crg = GTHE4LiteSATAPHYCRG(refclk, pads, self.phy, gen)
+                # GTH transceiver for Kintex/Zynq UltraScale+ (GTHE4).
+                from litesata.phy.gth4sataphy import GTH4LiteSATAPHYCRG, GTH4LiteSATAPHY
+                self.phy = GTH4LiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
+                self.crg = GTH4LiteSATAPHYCRG(refclk, pads, self.phy, gen)
             else:
                 raise NotImplementedError(f"Unsupported GT type. : {gt_type}")
 
