@@ -4,7 +4,7 @@
                                   / /__/ / __/ -_)\ \/ __ |/ / / __ |
                                  /____/_/\__/\__/___/_/ |_/_/ /_/ |_|
 
-                                  Copyright 2014-2024 / EnjoyDigital
+                                  Copyright 2014-2026 / EnjoyDigital
                                      Copyright 2014-2015 / HKU
 
                               A small footprint and configurable SATA core
@@ -32,14 +32,16 @@ design flow by generating the Verilog RTL that you will use as a standard core.
 [> Features
 -----------
 PHY:
-  - Xilinx 7-Series (Kintex7, Artix7)
-  - Xilinx Ultrascale(+)
+  - Xilinx Artix-7 GTP (`GTPE2_CHANNEL`)
+  - Xilinx Kintex-7 GTX (`GTXE2_CHANNEL`)
+  - Xilinx UltraScale GTH (`GTHE3_CHANNEL`)
+  - Xilinx UltraScale+ GTH/GTY (`GTHE4_CHANNEL`/`GTYE4_CHANNEL`, selected with `gt_type`)
   - OOB, COMWAKE, COMINIT
   - ALIGN inserter/remover and bytes alignment on K28.5
   - 8B/10B encoding/decoding in transceiver
   - Automatic TX/RX P/N polarity detection and swap.
   - Error detection and reporting
-  - 32 bits interface
+  - 16/32-bit PHY datapath
   - 1.5/3.0/6.0Gbps supported speeds (respectively 37.5/75/150MHz system clock)
 
 Core:
