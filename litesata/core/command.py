@@ -147,6 +147,9 @@ class LiteSATACommandRX(Module):
         self.sync += \
             If(from_tx.read,
                 read_ndwords.eq(from_tx.count*sectors2dwords(1) - 1)
+            ).Elif(from_tx.identify,
+                # IDENTIFY returns exactly one 512-byte data block.
+                read_ndwords.eq(sectors2dwords(1) - 1)
             )
         self.comb += read_done.eq(dwords_counter == read_ndwords)
 
@@ -224,6 +227,10 @@ class LiteSATACommandRX(Module):
                 transport.source.ready.eq(0),
                 If(test_type("DATA"),
                     NextState("PRESENT_READ_DATA")
+                ).Elif(test_type("PIO_SETUP_D2H") & is_identify,
+                    # A drive can split a PIO data-in transfer into several
+                    # DRQ blocks, each preceded by its own PIO Setup FIS.
+                    NextState("PRESENT_PIO_SETUP_D2H")
                 ).Elif(test_type("REG_D2H"),
                     update_d2h.eq(1),
                     set_d2h_error.eq(transport.source.status[reg_d2h_status["err"]]),
@@ -262,7 +269,11 @@ class LiteSATACommandRX(Module):
             If(source.valid & source.ready,
                 If(~read_done, NextValue(dwords_counter, dwords_counter + 1)),
                 If(source.last,
-                    If(is_identify,
+                    If(is_identify & ~read_done,
+                        # Partial identify data block: more DATA (and possibly
+                        # PIO Setup) FISes follow for the remaining dwords.
+                        NextState("WAIT_READ_DATA_OR_REG_D2H")
+                    ).Elif(is_identify,
                         NextState("IDLE")
                     ).Else(
                         NextState("WAIT_READ_DATA_OR_REG_D2H")

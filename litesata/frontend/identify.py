@@ -24,6 +24,12 @@ class LiteSATAIdentify(Module):
 
         source, sink = user_port.sink, user_port.source
 
+        # IDENTIFY returns exactly one 512-byte data block, but a drive can
+        # deliver it as several DATA FISes, so a per-FIS last cannot be used
+        # as the end of the transfer.
+        ndwords = logical_sector_size*8//user_port.dw
+        count   = Signal(max=ndwords)
+
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             self.done.eq(1),
@@ -38,6 +44,7 @@ class LiteSATAIdentify(Module):
         fsm.act("SEND-CMD",
             fifo.reset.eq(1),
             source.valid.eq(1),
+            NextValue(count, 0),
             If(source.valid & source.ready,
                 NextState("WAIT-ACK")
             )
@@ -52,8 +59,11 @@ class LiteSATAIdentify(Module):
             sink.ready.eq(fifo.sink.ready),
             If(sink.valid,
                 fifo.sink.valid.eq(1),
-                If(sink.last,
-                    NextState("IDLE")
+                If(sink.ready,
+                    NextValue(count, count + 1),
+                    If(count == (ndwords - 1),
+                        NextState("IDLE")
+                    )
                 )
             )
         )
