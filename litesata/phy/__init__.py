@@ -30,7 +30,7 @@ class LiteSATAPHY(LiteXModule):
     The architecture is modular enough to support additional PHYs.
     """
     def __init__(self, device, pads, gen, clk_freq, refclk=None, data_width=16,
-                 qpll=None, gt_type="GTY", use_gtgrefclk=True, with_csr=True):
+                 qpll=None, gt_type="GTY", use_gtgrefclk=True, dual=0, channel=0, with_csr=True):
         self.pads   = pads
         self.gen    = gen
         self.refclk = refclk
@@ -78,7 +78,7 @@ class LiteSATAPHY(LiteXModule):
         # ECP5.
         elif re.match("^LFE5UM5G-", device):
             from litesata.phy.ecp5sataphy import ECP5LiteSATAPHYCRG, ECP5LiteSATAPHY
-            self.phy = ECP5LiteSATAPHY(refclk, pads, gen, clk_freq, data_width)
+            self.phy = ECP5LiteSATAPHY(refclk, pads, gen, clk_freq, data_width, dual=dual, channel=channel)
             self.crg = ECP5LiteSATAPHYCRG(self.phy)
 
         # Unknown.
@@ -103,6 +103,9 @@ class LiteSATAPHY(LiteXModule):
         if hasattr(self.phy, "tx_init") and hasattr(self.phy, "rx_init"):
             self.comb += self.phy.tx_init.restart.eq(~self.enable)
             self.comb += self.phy.rx_init.restart.eq(~self.enable | self.ctrl.rx_reset)
+        elif hasattr(self.phy, "serdes"):
+            # ECP5: restart the full SerDes init sequence when disabled.
+            self.comb += self.phy.serdes.init.rst.eq(~self.enable)
         self.comb += self.ready.eq(self.phy.ready & self.ctrl.ready)
 
         # CSRs.
@@ -136,7 +139,12 @@ class LiteSATAPHY(LiteXModule):
         if hasattr(self.phy, "tx_init") and hasattr(self.phy, "rx_init"):
             self.comb += self._status.fields.tx_ready.eq(self.phy.tx_init.done)
             self.comb += self._status.fields.rx_ready.eq(self.phy.rx_init.done)
+        elif hasattr(self.phy, "serdes"):
+            self.comb += self._status.fields.tx_ready.eq(self.phy.serdes.tx_ready)
+            self.comb += self._status.fields.rx_ready.eq(self.phy.serdes.rx_ready)
         else:
             self.comb += self._status.fields.tx_ready.eq(self.phy.ready)
             self.comb += self._status.fields.rx_ready.eq(self.phy.ready)
         self.comb += self._status.fields.ctrl_ready.eq(self.ctrl.ready)
+        if hasattr(self.phy, "add_oob_csr"):
+            self.phy.add_oob_csr()
