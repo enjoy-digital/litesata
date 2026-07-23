@@ -361,12 +361,14 @@ class SerDesECP5(LiteXModule):
         channel     = 0,
         data_width  = 20,
         tx_polarity = 0,
-        rx_polarity = 0):
+        rx_polarity = 0,
+        oob_config  = {"ei", "ldr_tx", "ldr_rx"}):
         assert dual       in [0, 1]
         assert channel    in [0, 1]
         assert data_width in [20]
-        self.dual    = dual
-        self.channel = channel
+        self.dual       = dual
+        self.channel    = channel
+        self.oob_config = oob_config
 
         # TX controls.
         self.tx_enable              = Signal(reset=1)
@@ -514,6 +516,9 @@ class SerDesECP5(LiteXModule):
                  2: "0b010",
                  1: "0b000"}[pll.config["d"]],
             p_D_BITCLK_LOCAL_EN     = "0b1",    # Use clock from local PLL
+            # OOB: local TX sync enable (Diamond/Clarity sets it; without it the TX gearbox sync
+            # never starts and FF_TX_PCLK stays dead while the TX PLL still reports lock).
+            p_D_SYNC_LOCAL_EN       = "0b1",
 
             # DCU ­— unknown
             p_D_CMUSETBIASI         = "0b00",   # begin undocumented (10BSER sample code used)
@@ -620,11 +625,6 @@ class SerDesECP5(LiteXModule):
             p_CHX_RX_LOS_LVL        = "0b100",  # Lattice "TBD" (wizard value used)
             p_CHX_RX_LOS_CEQ        = "0b11",   # Lattice "TBD" (wizard value used)
 
-            # OOB: CHX RX - LDR low-speed line observation (raw digitized view of the RX pair,
-            # usable for fabric-side OOB burst/idle detection as an alternative to RLOS).
-            p_CHX_LDR_RX2CORE_SEL   = "0b1",    # Enable low-speed out-of-band input.
-            o_CHX_LDR_RX2CORE       = self.rx_oob_data,
-
             # CHX RX — loss of lock
             o_CHX_FFS_RLOL          = rx_lol,
 
@@ -686,15 +686,6 @@ class SerDesECP5(LiteXModule):
             p_CHX_TDRV_SLICE5_CUR   = "0b00",   # 800 uA
             p_CHX_TDRV_SLICE5_SEL   = "0b00",   # power down
 
-            # OOB: CHX TX - electrical idle (direct port, ~220ns response measured; only ever held
-            # as a level during OOB phases, burst timing is defined by the fast LDR enable below).
-            i_CHX_FFC_EI_EN         = ei_en,
-
-            # OOB: CHX TX - LDR direct pad drive (out-of-band burst generation, LUNA-style).
-            p_CHX_LDR_CORE2TX_SEL    = "0b0",   # Use FFC_LDR_CORE2TX_EN to enable OOB output.
-            i_CHX_LDR_CORE2TX        = self.tx_oob_data,
-            i_CHX_FFC_LDR_CORE2TX_EN = self.tx_oob_en,
-
             # CHX TX — clocking
             o_CHX_FF_TX_PCLK        = self.txoutclk,
             i_CHX_FF_TXI_CLK        = ClockSignal("tx"),
@@ -706,6 +697,28 @@ class SerDesECP5(LiteXModule):
             # CHX TX — data
             **{"i_CHX_FF_TX_D_%d" % n: tx_bus[n] for n in range(tx_bus.nbits)}
         )
+
+        # OOB: optional DCU OOB hookups (separable for hardware debug/bisect).
+        if "ei" in oob_config:
+            # CHX TX - electrical idle (direct port, ~220ns response measured; only ever held as a
+            # level during OOB phases, burst timing is defined by the fast LDR enable below).
+            self.serdes_params.update(
+                i_CHX_FFC_EI_EN = ei_en,
+            )
+        if "ldr_tx" in oob_config:
+            # CHX TX - LDR direct pad drive (out-of-band burst generation, LUNA-style).
+            self.serdes_params.update(
+                p_CHX_LDR_CORE2TX_SEL    = "0b0", # Use FFC_LDR_CORE2TX_EN to enable OOB output.
+                i_CHX_LDR_CORE2TX        = self.tx_oob_data,
+                i_CHX_FFC_LDR_CORE2TX_EN = self.tx_oob_en,
+            )
+        if "ldr_rx" in oob_config:
+            # CHX RX - LDR low-speed line observation (raw digitized view of the RX pair, usable
+            # for fabric-side OOB burst/idle detection as an alternative to RLOS).
+            self.serdes_params.update(
+                p_CHX_LDR_RX2CORE_SEL = "0b1", # Enable low-speed out-of-band input.
+                o_CHX_LDR_RX2CORE     = self.rx_oob_data,
+            )
 
         # SCI Reconfiguration ----------------------------------------------------------------------
         # OOB: reset released with tx_ready (not full init.ready) so polarity/cdr_hold writes work

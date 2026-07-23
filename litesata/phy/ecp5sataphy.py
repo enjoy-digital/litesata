@@ -247,7 +247,8 @@ class COMChecker(LiteXModule):
 # ECP5LiteSATAPHY ----------------------------------------------------------------------------------
 
 class ECP5LiteSATAPHY(LiteXModule):
-    def __init__(self, refclk, pads, gen, clk_freq, data_width=16, dual=0, channel=0, refclk_freq=150e6):
+    def __init__(self, refclk, pads, gen, clk_freq, data_width=16, dual=0, channel=0, refclk_freq=None,
+        oob_config={"ei", "ldr_tx", "ldr_rx"}):
         assert data_width in [16]
         assert gen in ["gen1", "gen2"]
         # Common signals
@@ -305,6 +306,11 @@ class ECP5LiteSATAPHY(LiteXModule):
         tx_clk_freq = linerate/20
 
         # PLL --------------------------------------------------------------------------------------
+        # Default refclk = linerate/20, selecting the x20 DCU PLL multiplier: the x10 multiplier
+        # setting has been observed non-functional on hardware (VCO at 2x the requested rate, TX
+        # word clock dead); all known-working ECP5 SerDes configs use x20/x25.
+        if refclk_freq is None:
+            refclk_freq = linerate/20
         assert isinstance(refclk, (Signal, ClockSignal)), "ECP5 PHY expects a refclk Signal (from a fabric PLL)."
         self.pll = SerDesECP5PLL(refclk, refclk_freq=refclk_freq, linerate=linerate)
 
@@ -317,6 +323,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             data_width  = 20,
             tx_polarity = self.tx_polarity,
             rx_polarity = self.rx_polarity,
+            oob_config  = oob_config,
         )
         serdes.add_stream_endpoints()
 

@@ -96,13 +96,15 @@ class SATATestSoC(SoCMini):
         with_bist       = False,
         with_analyzer   = False,
         analyzer_domain = "sys",
+        oob_config      = {"ei", "ldr_tx", "ldr_rx"},
     ):
         assert gen in ["gen1", "gen2"]
         assert analyzer_domain in ["sys", "tx", "rx"]
         sata_clk_freq = {"gen1": 75e6, "gen2": 150e6}[gen]
 
         # CRG --------------------------------------------------------------------------------------
-        self.crg = _CRG(platform, sys_clk_freq)
+        # SATA SerDes refclk = linerate/20 (x20 DCU PLL multiplier, see ecp5sataphy.py).
+        self.crg = _CRG(platform, sys_clk_freq, refclk_freq=sata_clk_freq)
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on ECPIX-5.")
@@ -120,7 +122,11 @@ class SATATestSoC(SoCMini):
             data_width = 16,
             dual       = 1,
             channel    = 0,
+            oob_config = oob_config,
         )
+
+        # SerDes TX/RX word clock measurement (debug).
+        self.sata_phy.phy.serdes.add_clock_cycles()
 
         # Core / Crossbar / BIST
         if with_bist:
@@ -231,6 +237,8 @@ def main():
     parser.add_argument("--with-analyzer",   action="store_true", help="Add LiteScope Analyzer.")
     parser.add_argument("--analyzer-domain", default="sys", choices=["sys", "tx", "rx"],
         help="LiteScope Analyzer clock domain/probe set (default: sys).")
+    parser.add_argument("--oob-config", default="ei,ldr_tx,ldr_rx",
+        help="DCU OOB hookups to enable (comma list of ei/ldr_tx/ldr_rx, empty for none).")
     args = parser.parse_args()
 
     platform = lambdaconcept_ecpix5.Platform(device=args.device, toolchain=args.toolchain)
@@ -241,6 +249,7 @@ def main():
         with_bist       = args.with_bist,
         with_analyzer   = args.with_analyzer,
         analyzer_domain = args.analyzer_domain,
+        oob_config      = set(filter(None, args.oob_config.split(","))),
     )
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)
