@@ -188,3 +188,7 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   tolerant). Endgame: golden-reference diff (real host + scope), differential probing, Lattice
   support case (data package ready), TX-switch interposer.
   TODO(gateware): ctrl retry limit + backoff CSR (polite-host behavior, avoids wedging drives).
+- [drive 3 quick test] Third SSD, clean-shot protocol, near-optimal settings (G8B10B textbook
+  wg=20 / SER+D10.2+8seq / vanilla wg=16): answers EVERY COMRESET (12k bursts per 20s attempt,
+  textbook COMINIT 310-330ns gaps), never replies COMWAKE. Three drives, identical signature -
+  the analog-quality suspicion stands. Line left quiet.
