@@ -99,6 +99,7 @@ class SATATestSoC(SoCMini):
         oob_config      = {"ei", "ldr_tx", "ldr_rx"},
         pcs_mode        = "bypass",
         pcie_mode       = False,
+        tx_boost        = False,
     ):
         assert gen in ["gen1", "gen2"]
         assert analyzer_domain in ["sys", "tx", "rx"]
@@ -127,6 +128,7 @@ class SATATestSoC(SoCMini):
             oob_config = oob_config,
             pcs_mode   = pcs_mode,
             pcie_mode  = pcie_mode,
+            tx_boost   = tx_boost,
         )
 
         # SerDes TX/RX word clock measurement (debug).
@@ -247,6 +249,8 @@ def main():
         help="SerDes PCS mode: bypass (fabric 8b10b) or g8b10b (DCU-internal 8b10b).")
     parser.add_argument("--pcie-mode", action="store_true",
         help="Set CHX_PCIE_MODE (g8b10b mode only).")
+    parser.add_argument("--tx-boost", action="store_true",
+        help="Max TX driver slice currents (OOB hearing-margin experiment).")
     args = parser.parse_args()
 
     platform = lambdaconcept_ecpix5.Platform(device=args.device, toolchain=args.toolchain)
@@ -260,6 +264,7 @@ def main():
         oob_config      = set(filter(None, args.oob_config.split(","))),
         pcs_mode        = args.pcs_mode,
         pcie_mode       = args.pcie_mode,
+        tx_boost        = args.tx_boost,
     )
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)

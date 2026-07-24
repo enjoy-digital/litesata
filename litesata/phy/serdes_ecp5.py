@@ -364,6 +364,7 @@ class SerDesECP5(LiteXModule):
         rx_polarity = 0,
         oob_config  = {"ei", "ldr_tx", "ldr_rx"},
         pcs_mode    = "bypass",
+        tx_boost    = False,
         pcie_mode   = False):
         assert dual       in [0, 1]
         assert channel    in [0, 1]
@@ -398,7 +399,11 @@ class SerDesECP5(LiteXModule):
         # tx_oob_en/tx_oob_data/tx_oob_idle are expected to be driven from the "tx" clock domain
         # (burst timing is defined by tx_oob_en alone); rx_oob_data is a raw asynchronous view of
         # the RX differential pair, to be synchronized by the consumer.
-        self.tx_oob_en              = Signal() # i, tx domain: drive pads via LDR (burst gate).
+        self.tx_oob_en              = Signal()
+        self.rx_det_en   = Signal() # i: PCIe receiver-detect enable (TX in EI).
+        self.rx_det_ct   = Signal() # i: receiver-detect trigger.
+        self.rx_det_done = Signal() # o: detect sequence done.
+        self.rx_det_con  = Signal() # o: far-end receiver termination present. # i, tx domain: drive pads via LDR (burst gate).
         self.tx_oob_data            = Signal() # i, tx domain: LDR level (square wave).
         self.tx_oob_idle            = Signal() # i, tx domain: extra EI request (OR'ed with tx_idle).
         self.tx_oob_active          = Signal() # i, tx domain: OOB sequence in progress.
@@ -734,6 +739,15 @@ class SerDesECP5(LiteXModule):
             self.serdes_params.update(
                 i_CHX_FFC_PCIE_CT = ei_en,
             )
+        else:
+            # CHX TX - PCIe receiver detect: senses far-end RX termination through the AC coupling
+            # caps (TX must be in electrical idle). Used to test TX-path continuity to the drive.
+            self.serdes_params.update(
+                i_CHX_FFC_PCIE_DET_EN = self.rx_det_en,
+                i_CHX_FFC_PCIE_CT     = self.rx_det_ct,
+                o_CHX_FFS_PCIE_DONE   = self.rx_det_done,
+                o_CHX_FFS_PCIE_CON    = self.rx_det_con,
+            )
         if "ldr_tx" in oob_config:
             # CHX TX - LDR direct pad drive (out-of-band burst generation, LUNA-style).
             self.serdes_params.update(
@@ -767,6 +781,24 @@ class SerDesECP5(LiteXModule):
             if pcie_mode:
                 self.serdes_params.update(p_CHX_PCIE_MODE = "0b1")
             del self.serdes_params["i_CHX_FFC_SIGNAL_DETECT"]
+
+        # OOB: TX driver boost (max slice currents, hearing-margin experiment: the drive's OOB
+        # squelch shows marginal detection of our bursts at nominal amplitude).
+        if tx_boost:
+            self.serdes_params.update(
+                p_CHX_TDRV_SLICE0_CUR = "0b111",
+                p_CHX_TDRV_SLICE0_SEL = "0b01",
+                p_CHX_TDRV_SLICE1_CUR = "0b111",
+                p_CHX_TDRV_SLICE1_SEL = "0b01",
+                p_CHX_TDRV_SLICE2_CUR = "0b11",
+                p_CHX_TDRV_SLICE2_SEL = "0b01",
+                p_CHX_TDRV_SLICE3_CUR = "0b11",
+                p_CHX_TDRV_SLICE3_SEL = "0b01",
+                p_CHX_TDRV_SLICE4_CUR = "0b11",
+                p_CHX_TDRV_SLICE4_SEL = "0b01",
+                p_CHX_TDRV_SLICE5_CUR = "0b11",
+                p_CHX_TDRV_SLICE5_SEL = "0b01",
+            )
 
         # SCI Reconfiguration ----------------------------------------------------------------------
         # OOB: reset released with tx_ready (not full init.ready) so polarity/cdr_hold writes work

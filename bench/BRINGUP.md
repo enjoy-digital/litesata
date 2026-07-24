@@ -225,3 +225,64 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
     attempt counter outside the FSM ResetInserter domain), sim-tested (test_ctrl_backoff);
     default None = behavior identical for all existing PHYs.
   Board state: bypass gen2 bitstream, line QUIET. 14 ECP5 tests green.
+
+## 2026-07-24 late session - campaign 10: ATTRIBUTION COLLAPSE - the drive never heard us at all
+- [gap-visibility probe, v1+v2] New COMGenerator probe mode (oob_control.probe, bit 23): emit a
+  COMINIT-shaped sequence with gap #3 = wake_gap, using the drive's COMINIT "response" as an
+  oracle for gap visibility. First sweep: response ~300/0.5s for EVERY X from 26ns to 1200ns,
+  including gaps far above the COMINIT window. Suspected boundary chaining (FINISH->IDLE is
+  2 cycles, boundary gap ~333ns is itself in-window) -> added probe inter-sequence QUIET state
+  (oob_seq_quiet CSR, tx cycles). Isolated probe: STILL response=300 at every X, including
+  1200ns negative controls... and then the killer control:
+- [BASELINE BLOWN] response=300 with tx_test OFF entirely. And ctrl parked (new
+  oob_control.ctrl_dis bit 26: masks ctrl's OOB TX requests + forces EI => first truly silent
+  TX line of the whole campaign): STILL 576-600 bursts/s, textbook COMINIT signature
+  (bursts 100-110ns, gaps 310-330ns).
+  **The drive free-runs an autonomous COMINIT beacon: period 10.003ms, rock-stable.**
+- [beacon invariance] Beacon rate identical for: silent line, COMRESET storms at 2.3k/9k/55k
+  sequences/s, continuous LDR carrier. Rate attribution is therefore worthless.
+- [beacon-phase instrument] New CSRs _oob_lat (sys cycles from TX sequence end txcomfinish to
+  next RX burst start) + _oob_beacon (interval between RX beacon starts, gap>100us qualifier).
+  Phase test: COMRESET storm at P~441us (incommensurate with 10.003ms) -> latency distribution
+  over [0,P): UNIFORM (chi2 ~ 1-2 over 10 bins, n=375). **The drive's beacon phase is completely
+  uncorrelated with our COMRESET sequences: the drive has NEVER decoded a single sequence we
+  sent - LDR or serializer, bypass or g8b10b, any trail/content/amplitude.**
+  All prior "COMRESET answered" results were this beacon + attribution error (a 10ms-retry ctrl
+  always "sees a response" within its window). COMWAKE was never the specific blocker.
+  False-positive taxonomy (documented so nobody re-chases them):
+  * trail=4 chi2 ~ 80-160 comb: appears ONLY at trail=4 (107+27ns bursts), vanishes at
+    trail=6..15 (147-208ns bursts) -> non-monotone needle = internal artifact, not audibility
+    (a real squelch-attack-time effect would be monotone in burst length).
+  * single-shot "excess" of sub-ms latencies: exactly reproduced by the beacon landing inside
+    the multi-ms tx_test-on host window (UART turnaround) - measurement-window artifact.
+- [TX config exonerated vs Diamond] Full TX-analog param diff vs the Diamond reference netlist
+  (method that found D_SYNC_LOCAL_EN): TDRV slices identical; RTERM_TX/RTERM_RX absent from our
+  instance but nextpnr defaults RTERM_TX to 19 (50 ohm) in the emitted .config - verified in
+  fuses; TXAMPLITUDE is documentation-only (slices are the real control). TX boost added
+  (serdes tx_boost=True / bench --tx-boost: all 6 TDRV slices at max current, fuses verified):
+  NO effect on beacon phase or handshake. LDR amplitude unaffected by TDRV slices (separate
+  fixed-drive aux buffer, ~285mV/leg when the probe made good contact).
+- [wire vs drive contradiction] Scope at C113 (TX pair AC cap): LDR carrier measured up to
+  ~285mV/leg (~570mVppd, spec-level) in good-contact sessions; serializer ALIGN fuzz present.
+  Probe contact is hand-placed and drifted badly across sessions (30-300mV for identical
+  configs) - absolute amplitude claims unreliable, but signal presence + timing at C113 are
+  solid (earlier wire-verified 95-147ns gaps). Meanwhile the drive hears nothing.
+- [receiver-detect attempt] Wired DCU FFC_PCIE_DET_EN/CT + FFS_PCIE_DONE/CON (_oob_rxdet CSRs)
+  to sense far-end RX termination through the caps: DONE never asserts in bypass config on
+  trellis - inconclusive, likely needs PCS mode/clocks we don't run.
+- [WHERE THIS LEAVES US] Our RX path is perfect (3 drives, textbook beacon signatures). Our TX
+  is spec-configured, present and correctly timed at C113, yet zero reception at the drive.
+  Fault domain: physical TX path beyond C113 (cap solder/crack, connector pin/footprint, cable
+  pair) OR drive-side gap/burst visibility through the AC caps (residual-differential during
+  EI, tau ~ 300ns vs 320ns gaps - old hypothesis b, still uneliminated remotely).
+  Hands-on next steps (morning):
+  1. SATA LOOPBACK: cable/adapter from our TX back to our RX - our own proven-good RX becomes
+     the far-end detector for the whole TX+caps+connector+cable path. One experiment, splits
+     the fault space in half. (LambdaConcept factory-tested this port, method unknown.)
+  2. Two-channel/differential probing of BOTH TX legs at BOTH sides of C112/C113 during OOB.
+  3. Cable swap + continuity meter on the TX pair.
+  4. Golden-reference capture of a real host's COMRESET (unchanged).
+  New knobs this session: oob_control.probe(23)/kick(24-25)/ctrl_dis(26)/pat_force(27),
+  _oob_seq_quiet, _oob_lat, _oob_beacon, _oob_rxdet, serdes tx_boost (+ bench --tx-boost),
+  wake_gap widened to 8 bits. 14 ECP5 tests green throughout.
+  Board state: A-gen2-boost bypass bitstream loaded, ctrl parked, line at EI (silent).
