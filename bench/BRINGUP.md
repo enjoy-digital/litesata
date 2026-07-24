@@ -134,3 +134,23 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
     b. Residual differential activity during our EI gaps (invisible single-ended, would explain
        COMINIT-tolerant/COMWAKE-strict asymmetry): needs differential or two-channel A-B probing.
     c. Board-level TX switch assist (unchanged fallback).
+- [campaign 3 - Xilinx comparison + Lattice documentation dig] Per Florent's suggestion:
+  * Xilinx GTP OOB attributes (a7sataphy): detector windows in 75MHz oobclk units - notably
+    SATA_MAX_WAKE=7 (~93ns-class upper bound), suggesting real detectors sit well below the
+    175ns theoretical limit -> motivated sub-nominal gap sweep (emitted 60-100ns): no link.
+  * Lattice FPGA-TN-02206 (SerDes/PCS User Guide) key finds (PDF text in scratchpad tn02206.txt):
+    - 8.25: tx_idle_chx_c (FFC_EI_EN) is a PIPELINED WORD-SYNCHRONOUS control, idle achieved
+      <20 UI after the designated word, and requires "all zeros" clocked on the parallel bus
+      during EI. THIS DESCRIBES PCS-MANAGED MODES - our 10BSER/UC_MODE bypass config likely
+      routes EI through a slow async path instead => PRIME ROOT-CAUSE SUSPECT: switch the PHY
+      to G8B10B PCS mode (as LUNA does) and re-measure EI crispness. Next-session experiment.
+    - Table 8.2: RLOS assert AND deassert response: 8-10ns typ/max (RX detection never the issue).
+    - 8.30: official OOB/LDR path documentation (TXD_LDR/TX_LDR_EN, RXD_LDR/RXD_LDR_EN).
+    - 8.27: PCIe receiver detect procedure (EI >=120ns then pci_det_en).
+  * zero_bus experiment (TN 8.25 zeros discipline, tx_produce_pattern mux): made emission WORSE
+    in current bypass mode (gaps nearly vanished on wire) - consistent with the mode hypothesis.
+  * All sweeps negative for link. Board restored to best-known state (COMRESET/COMINIT handshake
+    live at 480 responses/s).
+  NEXT-SESSION SHORTLIST: (1) G8B10B PCS-mode PHY variant + wire EI re-measure [prime suspect],
+  (2) golden-reference capture of real host COMWAKE to this drive (PC SATA + scope),
+  (3) differential-probe gap measurement, (4) analog-switch interposer.

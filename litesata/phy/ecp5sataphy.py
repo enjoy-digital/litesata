@@ -393,7 +393,10 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.comb += self.rxdisperr.eq(0) # Not provided by the fabric 8b10b decoder (status only).
 
         # Electrical idle / CDR hold ---------------------------------------------------------------
+        self.oob_zero_bus = Signal() # Force raw zeros on the TX parallel bus during OOB phases
+                                     # (TN-02206 8.25: required for clean electrical idle).
         self.comb += [
+            serdes.tx_produce_pattern.eq(self.oob_zero_bus & self.tx_idle),
             self.txelecidle.eq(self.tx_idle),
             serdes.tx_idle.eq(self.txelecidle),
             serdes.ei_mode.eq(self.ei_mode),
@@ -534,6 +537,8 @@ class ECP5LiteSATAPHY(LiteXModule):
                 ("``0b0``", "OOB bursts via LDR square wave."),
                 ("``0b1``", "OOB bursts via serializer content (LDR off, EI shaping only).")],
             ),
+            CSRField("zero_bus", size=1, offset=19,
+                description="Force raw zeros on the TX parallel bus during OOB (clean EI, TN-02206 8.25)."),
         ])
         self.comb += [
             self.oob_rx_sel.eq(     self._oob_control.fields.rx_sel),
@@ -545,6 +550,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_gap_mode.eq(   self._oob_control.fields.gap_mode),
             self.oob_force_wake.eq( self._oob_control.fields.force_wake),
             self.oob_burst_mode.eq( self._oob_control.fields.burst_mode),
+            self.oob_zero_bus.eq(   self._oob_control.fields.zero_bus),
         ]
 
         # Shaped EI request (lead/trail compensation + COMWAKE gap stretch), see COMGenerator.
