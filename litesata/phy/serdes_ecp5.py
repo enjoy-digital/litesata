@@ -397,9 +397,12 @@ class SerDesECP5(LiteXModule):
         self.tx_oob_en              = Signal() # i, tx domain: drive pads via LDR (burst gate).
         self.tx_oob_data            = Signal() # i, tx domain: LDR level (square wave).
         self.tx_oob_idle            = Signal() # i, tx domain: extra EI request (OR'ed with tx_idle).
+        self.tx_oob_active          = Signal() # i, tx domain: OOB sequence in progress.
+        self.tx_oob_ei_req          = Signal() # i, tx domain: shaped EI request (lead/trail comp.).
         self.rx_oob_data            = Signal() # o, async   : raw LDR_RX2CORE line observation.
         self.ei_mode                = Signal() # i, quasi-static: 0 = EI masked during LDR drive
-                                               #                  (LUNA-style), 1 = EI held.
+                                               #                  (LUNA-style), 1 = shaped EI
+                                               #                  (COMGenerator lead/trail comp.).
 
         # Loopback.
         self.loopback               = Signal() # FIXME: reconfigure lb_ctl to 0b0001 but does not seem enough
@@ -456,7 +459,16 @@ class SerDesECP5(LiteXModule):
             MultiReg(self.tx_idle, tx_idle_tx, "tx"),
             MultiReg(self.ei_mode, ei_mode_tx, "tx"),
         ]
-        self.comb += ei_en.eq((tx_idle_tx | self.tx_oob_idle) & ~(self.tx_oob_en & ~ei_mode_tx))
+        ei_legacy = Signal()
+        ei_shaped = Signal()
+        self.comb += [
+            # LUNA-style: EI whenever idle is requested, masked while LDR is driving.
+            ei_legacy.eq((tx_idle_tx | self.tx_oob_idle) & ~self.tx_oob_en),
+            # Shaped: during an OOB sequence the COMGenerator emits an EI request with lead/trail
+            # compensation for the slow FFC_EI_EN response; outside sequences ctrl's tx_idle rules.
+            ei_shaped.eq(Mux(self.tx_oob_active, self.tx_oob_ei_req, tx_idle_tx)),
+            ei_en.eq(Mux(ei_mode_tx, ei_shaped, ei_legacy)),
+        ]
 
         self.specials += [
             MultiReg(self.rx_align, rx_align, "rx"),
@@ -700,10 +712,17 @@ class SerDesECP5(LiteXModule):
 
         # OOB: optional DCU OOB hookups (separable for hardware debug/bisect).
         if "ei" in oob_config:
-            # CHX TX - electrical idle (direct port, ~220ns response measured; only ever held as a
-            # level during OOB phases, burst timing is defined by the fast LDR enable below).
+            # CHX TX - electrical idle (direct port; idle requests < ~220ns are swallowed entirely,
+            # measured on hardware -> unusable for COMWAKE gaps, kept for long idle phases).
             self.serdes_params.update(
                 i_CHX_FFC_EI_EN = ei_en,
+            )
+        if "pcie_ct" in oob_config:
+            # CHX TX - PCIe electrical idle (FFC_PCIE_CT). Tested on hardware as a fast-EI
+            # alternative for short OOB gaps: kills TX entirely in this 10BSER/bypassed-PCS
+            # config, with or without p_CHX_PCIE_MODE=0b1. Kept for documentation only.
+            self.serdes_params.update(
+                i_CHX_FFC_PCIE_CT = ei_en,
             )
         if "ldr_tx" in oob_config:
             # CHX TX - LDR direct pad drive (out-of-band burst generation, LUNA-style).

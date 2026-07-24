@@ -96,17 +96,36 @@ class COMGenerator(LiteXModule):
         wake_cycles  = cycles(160) # 106.7ns COMWAKE          inter-burst gap.
         init_cycles  = cycles(480) # 320.0ns COMRESET/COMINIT inter-burst gap.
         assert burst_cycles >= 4
+        self.burst_cycles = burst_cycles
+        self.wake_cycles  = wake_cycles
+
+        # Shaped EI request (compensates the slow FFC_EI_EN response, all runtime adjustable):
+        # - ei_lead : raise the EI request this many cycles before the burst ends (the LDR drive
+        #             keeps the burst alive until EI physically engages).
+        # - ei_trail: drop the EI request this many cycles before the gap ends.
+        # - wake_gap: COMWAKE inter-burst gap in cycles (device detect window is 55-175ns, so the
+        #             gap may be stretched to gain EI engage margin).
+        self.ei_lead  = Signal(5)                    # i
+        self.ei_trail = Signal(4)                    # i
+        self.wake_gap = Signal(6, reset=wake_cycles) # i
+        self.gap_mode = Signal()                     # i: 0 = EI gaps / 1 = LDR-constant gaps
+                                                     #    (no transitions, EI off in-sequence).
+        self.ei_req   = Signal()                     # o
 
         # Square wave generation -------------------------------------------------------------------
+        square    = Signal()
+        in_gap    = Signal()
         div_count = Signal(4)
         self.sync += [
             If(div_count == 0,
-                self.tx_oob_data.eq(~self.tx_oob_data),
+                square.eq(~square),
                 div_count.eq(self.toggle_div),
             ).Else(
                 div_count.eq(div_count - 1)
             )
         ]
+        # In LDR-constant gap mode the LDR keeps driving a constant low level during gaps.
+        self.comb += self.tx_oob_data.eq(square & ~(in_gap & self.gap_mode))
 
         # Burst/Gap sequencing ---------------------------------------------------------------------
         count   = Signal(8)
@@ -126,15 +145,19 @@ class COMGenerator(LiteXModule):
             self.active.eq(1),
             self.tx_idle.eq(1),
             self.tx_oob_en.eq(1),
+            self.ei_req.eq(~self.gap_mode & (count < self.ei_lead)), # Raise EI request in the burst tail.
             NextValue(count, count - 1),
             If(count == 0,
-                NextValue(count, Mux(is_wake, wake_cycles - 1, init_cycles - 1)),
+                NextValue(count, Mux(is_wake, self.wake_gap - 1, init_cycles - 1)),
                 NextState("GAP")
             )
         )
         fsm.act("GAP",
             self.active.eq(1),
             self.tx_idle.eq(1),
+            in_gap.eq(1),
+            self.tx_oob_en.eq(self.gap_mode), # LDR-constant gaps: keep driving (constant level).
+            self.ei_req.eq(~self.gap_mode & (count >= self.ei_trail)), # EI gaps: request w/ trail.
             NextValue(count, count - 1),
             If(count == 0,
                 If(loops == 0,
@@ -149,6 +172,7 @@ class COMGenerator(LiteXModule):
         fsm.act("FINISH",
             self.active.eq(1),
             self.tx_idle.eq(1),
+            self.ei_req.eq(1),
             self.finish.eq(1),
             NextState("IDLE")
         )
@@ -389,13 +413,35 @@ class ECP5LiteSATAPHY(LiteXModule):
             MultiReg(self.oob_tx_test,    oob_tx_test_tx, "tx"),
             MultiReg(self.oob_toggle_div, toggle_div_tx,  "tx"),
         ]
+        # Shaped EI controls (quasi-static, sys -> tx).
+        self.oob_ei_lead  = Signal(5)
+        self.oob_ei_trail = Signal(4)
+        self.oob_wake_gap = Signal(6, reset=com_gen.wake_cycles)
+        self.oob_gap_mode = Signal()
+        ei_lead_tx  = Signal(5)
+        ei_trail_tx = Signal(4)
+        wake_gap_tx = Signal(6, reset=com_gen.wake_cycles)
+        gap_mode_tx = Signal()
+        self.specials += [
+            MultiReg(self.oob_ei_lead,  ei_lead_tx,  "tx"),
+            MultiReg(self.oob_ei_trail, ei_trail_tx, "tx"),
+            MultiReg(self.oob_wake_gap, wake_gap_tx, "tx"),
+            MultiReg(self.oob_gap_mode, gap_mode_tx, "tx"),
+        ]
+
         self.comb += [
             com_gen.cominit.eq(txcominit),
             com_gen.comwake.eq(txcomwake | oob_tx_test_tx),
             com_gen.toggle_div.eq(toggle_div_tx),
+            com_gen.ei_lead.eq(ei_lead_tx),
+            com_gen.ei_trail.eq(ei_trail_tx),
+            com_gen.wake_gap.eq(wake_gap_tx),
+            com_gen.gap_mode.eq(gap_mode_tx),
             serdes.tx_oob_en.eq(com_gen.tx_oob_en),
             serdes.tx_oob_data.eq(com_gen.tx_oob_data),
             serdes.tx_oob_idle.eq(com_gen.tx_idle),
+            serdes.tx_oob_active.eq(com_gen.active),
+            serdes.tx_oob_ei_req.eq(com_gen.ei_req),
         ]
 
         # tx clk -> sys clk
@@ -445,6 +491,10 @@ class ECP5LiteSATAPHY(LiteXModule):
             CSRField("toggle_div",  size=4, offset=4, description="OOB burst square wave half-period - 1 (tx_clk cycles)."),
             CSRField("ldr_timeout", size=8, offset=8, reset=self.ldr_timeout.reset.value,
                 description="LDR activity timeout (sys_clk cycles without transition = idle)."),
+            CSRField("gap_mode", size=1, offset=16, values=[
+                ("``0b0``", "OOB inter-burst gaps via electrical idle."),
+                ("``0b1``", "OOB inter-burst gaps via LDR constant level (EI off in-sequence).")],
+            ),
         ])
         self.comb += [
             self.oob_rx_sel.eq(     self._oob_control.fields.rx_sel),
@@ -453,6 +503,19 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_tx_test.eq(    self._oob_control.fields.tx_test),
             self.oob_toggle_div.eq( self._oob_control.fields.toggle_div),
             self.ldr_timeout.eq(    self._oob_control.fields.ldr_timeout),
+            self.oob_gap_mode.eq(   self._oob_control.fields.gap_mode),
+        ]
+
+        # Shaped EI request (lead/trail compensation + COMWAKE gap stretch), see COMGenerator.
+        self._oob_ei_shape = CSRStorage(fields=[
+            CSRField("lead",     size=5, offset=0),
+            CSRField("trail",    size=4, offset=5),
+            CSRField("wake_gap", size=6, offset=9, reset=self.oob_wake_gap.reset.value),
+        ])
+        self.comb += [
+            self.oob_ei_lead.eq( self._oob_ei_shape.fields.lead),
+            self.oob_ei_trail.eq(self._oob_ei_shape.fields.trail),
+            self.oob_wake_gap.eq(self._oob_ei_shape.fields.wake_gap),
         ]
 
         # RX OOB gap detection windows (sys_clk cycles).

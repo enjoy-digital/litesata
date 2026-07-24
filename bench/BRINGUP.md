@@ -37,3 +37,43 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   Silent liteiclink bug since 2019 (TX PCLK dead on trellis builds at least on ECPIX-5/DCU1).
   Also learned: nextpnr ignores D_TX_MAX_RATE/CDR_MAX_RATE (Diamond-only); prjtrellis maps
   VCO_CK_DIV/DCO_CK_DIV/RATE_MODE/CMU params directly.
+- 02:10 [M1a/M1b ACHIEVED @gen2] With TX alive + LDR bursts: device answers our COMRESET at the
+  ctrl retry rate (282 bursts/s vs 12/s spontaneous floor). ctrl walks COMINIT -> AWAIT-COMINIT ->
+  CALIBRATE -> COMWAKE; our COMWAKE transmits with spec-exact total duration (ack 1.33us after
+  stb, capture bench/captures/comwake.csv). RLOS-based COMChecker classifies device COMINIT
+  cleanly (gaps 310-330ns).
+- 02:30-03:30 [M1c BLOCKED - root cause characterized] Device never answers our COMWAKE. Device-
+  in-the-loop gap sweep (tx_test free-running sequences, device COMRESET acceptance window
+  [175,525]ns as the measuring instrument):
+    gap request >= 226ns -> device responds (massively); <= 200ns -> NOTHING (sharp cliff).
+  With ei_lead shaping: lead=4 cycles (27ns) converts COMRESET gaps into device-invisible ones.
+  MODEL (all observations consistent): FFC_EI_EN engagement completes ~220ns after request
+  assert; requests dropped before completion are SWALLOWED ENTIRELY (no idle emitted). Matches
+  Florent's 2022 measurement (220ns min pulse) exactly.
+  => Shortest emittable TX idle gap ~226ns > COMWAKE max gap 175ns:
+  => HOST COMWAKE IS NOT PRODUCIBLE through the ECP5 DCU EI path. Also tested and dead:
+    - EI held + LDR bursts: EI mutes LDR entirely (12/s floor).
+    - LDR_CORE2TX_SEL=0b1: identical to 0b0.
+    - LDR-constant-level gaps (AC-decay bet): not seen as idle even at 320ns (COMRESET dies).
+    - FFC_PCIE_CT (with and without CHX_PCIE_MODE): kills TX entirely in 10BSER config.
+- 03:45 [gen1 status] After SYNC_LOCAL_EN fix: gen1 (VCO 3G, d=2) TX word clock alive (74.9MHz),
+  RX side dead (rx_lol stuck, RLOS blind). Diamond reference shows all 10 CHx_DCO* CDR values
+  differ for divided-rate configs; transplanting the Lattice 1.25G set (312.5MHz-refclk-tuned)
+  killed TX PLL lock too -> reverted. gen1 RX needs proper VCO-3G/d=2 DCO tuning (Diamond/
+  Clarity generation or fuzzing) - follow-up work. gen2 is the healthy config.
+- 04:00 Consolidation: canonical gen1/gen2 bitstreams rebuilt + archived under
+  bench/captures/bitstreams/, captures archived, sims green (13 tests), board left on gen2
+  (COMRESET/COMINIT handshake live, LEDs: sys/tx/rx heartbeats + ready off).
+
+## Paths forward for COMWAKE (issue #27)
+
+1. Try other SATA drives: many real PHYs accept COMWAKE gaps beyond the 175ns spec detector
+   bound; gaps of 226-240ns ARE producible. The sweep harness automates the test (2min/drive):
+   tx_test + wake_gap=34..36, watch for device COMWAKE-class response.
+2. Scope the TX pair to confirm the swallow behavior and search SCI undocumented registers for
+   an EI timing control (SCI reg map is largely undocumented; a targeted scan is possible).
+3. Ask Lattice / check TN1261 errata for fast-EI or SATA OOB guidance on DCU.
+4. Board-level assist (next revision / rework): differential analog switch or attenuator on the
+   TX pair driven by a fabric GPIO would make OOB trivial and keep everything else as-is.
+5. Upstream the independent fixes now (liteiclink): D_SYNC_LOCAL_EN (un-breaks ECP5 DCU TX on
+   nextpnr/trellis for everyone), refclk-selection notes, litescope enum-row CLI fix.
