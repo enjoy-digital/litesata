@@ -77,3 +77,14 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
    TX pair driven by a fabric GPIO would make OOB trivial and keep everything else as-is.
 5. Upstream the independent fixes now (liteiclink): D_SYNC_LOCAL_EN (un-breaks ECP5 DCU TX on
    nextpnr/trellis for everyone), refclk-selection notes, litescope enum-row CLI fix.
+- 04:30 [liteiclink] D_SYNC_LOCAL_EN fix applied upstream on branch `ecp5-dcu-tx-fix` (0db96f7).
+  Note: the upstream bench cannot self-observe the fix with a silent link partner - cd_tx reset
+  and sci_reconfig reset are both gated on full init.ready (needs RX lock), the exact structural
+  issue the litesata vendored copy fixes with split tx_ready/rx_ready. For SGMII/PCIe use-cases
+  (partner transmits immediately) the one-line fix is sufficient and effective. Recommend also
+  upstreaming the split-ready SerdesInit later (API/semantics change - Florent's call).
+- 04:35 [ktemkin blog re-check] Fetched https://ktemk.in/post/serdes-lfps/ - confirms the
+  technique is the DCU LDR path (FFC_LDR_CORE2TX_EN/LDR_CORE2TX, LDR_RX2CORE), NOT fabric GPIO
+  (DCU pads cannot be PIO). Blog says nothing about idle between bursts (USB3 LFPS gaps are us-
+  scale, 20-80x longer than COMWAKE's 106.7ns, so the ~220ns EI engage floor never matters for
+  LFPS). Our PHY already uses this exact technique - it is what makes COMRESET work.
