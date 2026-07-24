@@ -136,8 +136,20 @@ class COMGenerator(LiteXModule):
         fsm.act("IDLE",
             If(self.cominit | self.comwake,
                 NextValue(is_wake, self.comwake & ~self.cominit),
-                NextValue(count, burst_cycles - 1),
+                NextValue(count, self.ei_trail),
                 NextValue(loops, 6 - 1),
+                NextState("PRE")
+            )
+        )
+        fsm.act("PRE",
+            # Pre-release EI before the first burst so its head is not eaten by the EI release
+            # lag (the line carries serializer content during PRE, extending burst 1 backwards).
+            self.active.eq(1),
+            self.tx_idle.eq(1),
+            self.ei_req.eq(0),
+            NextValue(count, count - 1),
+            If(count == 0,
+                NextValue(count, burst_cycles - 1),
                 NextState("BURST")
             )
         )
@@ -435,16 +447,19 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_ei_lead  = Signal(5)
         self.oob_ei_trail = Signal(4)
         self.oob_wake_gap = Signal(6, reset=com_gen.wake_cycles)
-        self.oob_gap_mode = Signal()
-        ei_lead_tx  = Signal(5)
-        ei_trail_tx = Signal(4)
-        wake_gap_tx = Signal(6, reset=com_gen.wake_cycles)
-        gap_mode_tx = Signal()
+        self.oob_gap_mode   = Signal()
+        self.oob_burst_mode = Signal() # 0: LDR square bursts / 1: serializer bursts (LDR off).
+        ei_lead_tx    = Signal(5)
+        ei_trail_tx   = Signal(4)
+        wake_gap_tx   = Signal(6, reset=com_gen.wake_cycles)
+        gap_mode_tx   = Signal()
+        burst_mode_tx = Signal()
         self.specials += [
-            MultiReg(self.oob_ei_lead,  ei_lead_tx,  "tx"),
-            MultiReg(self.oob_ei_trail, ei_trail_tx, "tx"),
-            MultiReg(self.oob_wake_gap, wake_gap_tx, "tx"),
-            MultiReg(self.oob_gap_mode, gap_mode_tx, "tx"),
+            MultiReg(self.oob_ei_lead,    ei_lead_tx,    "tx"),
+            MultiReg(self.oob_ei_trail,   ei_trail_tx,   "tx"),
+            MultiReg(self.oob_wake_gap,   wake_gap_tx,   "tx"),
+            MultiReg(self.oob_gap_mode,   gap_mode_tx,   "tx"),
+            MultiReg(self.oob_burst_mode, burst_mode_tx, "tx"),
         ]
 
         self.comb += [
@@ -455,7 +470,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             com_gen.ei_trail.eq(ei_trail_tx),
             com_gen.wake_gap.eq(wake_gap_tx),
             com_gen.gap_mode.eq(gap_mode_tx),
-            serdes.tx_oob_en.eq(com_gen.tx_oob_en),
+            serdes.tx_oob_en.eq(com_gen.tx_oob_en & ~burst_mode_tx),
             serdes.tx_oob_data.eq(com_gen.tx_oob_data),
             serdes.tx_oob_idle.eq(com_gen.tx_idle),
             serdes.tx_oob_active.eq(com_gen.active),
@@ -515,6 +530,10 @@ class ECP5LiteSATAPHY(LiteXModule):
             ),
             CSRField("force_wake", size=1, offset=17,
                 description="Skip COMWAKE: auto-ack TX and synthesize a device COMWAKE response."),
+            CSRField("burst_mode", size=1, offset=18, values=[
+                ("``0b0``", "OOB bursts via LDR square wave."),
+                ("``0b1``", "OOB bursts via serializer content (LDR off, EI shaping only).")],
+            ),
         ])
         self.comb += [
             self.oob_rx_sel.eq(     self._oob_control.fields.rx_sel),
@@ -525,6 +544,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.ldr_timeout.eq(    self._oob_control.fields.ldr_timeout),
             self.oob_gap_mode.eq(   self._oob_control.fields.gap_mode),
             self.oob_force_wake.eq( self._oob_control.fields.force_wake),
+            self.oob_burst_mode.eq( self._oob_control.fields.burst_mode),
         ]
 
         # Shaped EI request (lead/trail compensation + COMWAKE gap stretch), see COMGenerator.

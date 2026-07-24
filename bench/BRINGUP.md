@@ -118,3 +118,19 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   AWAIT-ALIGN 1.8us after device COMINIT, transmits ALIGNs) - drive 2 refuses: keeps re-sending
   COMINIT (498/s), strictly waiting for a real COMWAKE. Negative, as spec predicts.
   FINAL: all software avenues exhausted; COMWAKE emission is the sole blocker for link-up.
+- [scope campaign 2 - wire-guided COMWAKE shaping] With the probe finally landed, wire-measured
+  and iterated: (1) EI "swallow" refined: emitted gap = max(request+~20ns, ~200ns) for isolated
+  requests, BUT ei_trail pre-release BREAKS the floor: single-shot COMWAKE gaps shaped down to
+  95-147ns (wire-verified, trial with gaps 134-147ns all in spec window captured). (2) ei_trail
+  trades gap time for serializer-garbage burst extension -> added burst_mode CSR (serializer
+  bursts like the 2022 design, full-rate content) - COMRESET still answered. (3) Added PRE state
+  (pre-release EI before burst 1 to fix the runt first burst). Swept the full (wake_gap, trail)
+  x burst_mode x rx_detector plane with wire-verified near-nominal COMWAKEs (gaps 95-128ns,
+  bursts 85-119ns): drive answers COMINIT to everything COMRESET-like and NEVER replies COMWAKE.
+  litescope proof: RX flat on both detectors for 9.2us after each COMWAKE.
+  Open hypotheses requiring better instruments:
+    a. Golden-reference diff: capture a real host's COMWAKE to this drive (PC SATA port + scope
+       on the cable) and compare against ours - the definitive experiment.
+    b. Residual differential activity during our EI gaps (invisible single-ended, would explain
+       COMINIT-tolerant/COMWAKE-strict asymmetry): needs differential or two-channel A-B probing.
+    c. Board-level TX switch assist (unchanged fallback).
