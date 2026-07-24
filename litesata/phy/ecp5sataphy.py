@@ -230,10 +230,11 @@ class COMChecker(LiteXModule):
         self.cominit_gaps = Signal(3)
         self.comwake_gaps = Signal(3)
 
-        # # #
+        # Quiet threshold (runtime adjustable): line idle longer than this ends the sequence and
+        # deasserts the detections (a real Xilinx detector deasserts much faster than 2us).
+        self.quiet_cycles = Signal(16, reset=int(2e-6*clk_freq))
 
-        quiet_cycles = int(2e-6*clk_freq)
-        assert quiet_cycles < 2**16
+        # # #
 
         rx_idle_d = Signal()
         gap_end   = Signal()
@@ -277,7 +278,7 @@ class COMChecker(LiteXModule):
                 )
             ),
             # Quiet line: sequence is over, deassert detections and re-arm.
-            If(self.gap_count == quiet_cycles,
+            If(self.gap_count == self.quiet_cycles,
                 self.cominit_det.eq(0),
                 self.comwake_det.eq(0),
                 self.cominit_gaps.eq(0),
@@ -382,9 +383,10 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # Datapath ---------------------------------------------------------------------------------
         oob_d102_active = Signal()
+        pattern_tx      = Signal(16, reset=0x4A4A) # MultiReg'd from oob_pattern below.
         self.comb += [
-            serdes.sink.data.eq(Mux(oob_d102_active, 0x4A4A, self.txdata)),
-            serdes.sink.ctrl.eq(Mux(oob_d102_active, 0,      self.txcharisk)),
+            serdes.sink.data.eq(Mux(oob_d102_active, pattern_tx, self.txdata)),
+            serdes.sink.ctrl.eq(Mux(oob_d102_active, 0,          self.txcharisk)),
             self.rxdata.eq(serdes.source.data),
             self.rxcharisk.eq(serdes.source.ctrl),
         ]
@@ -449,7 +451,25 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.tx_comwake_ack.eq(self.tx_comwake_stb & (self.txcomfinish | self.oob_force_wake)),
         ]
         self.submodules += _RisingEdge(self.tx_cominit_stb, self.txcominit)
-        self.submodules += _RisingEdge(self.tx_comwake_stb, self.txcomwake)
+        txcomwake_raw = Signal()
+        self.submodules += _RisingEdge(self.tx_comwake_stb, txcomwake_raw)
+
+        # Optional COMWAKE launch delay (device-calibration-window experiment).
+        self.oob_wake_delay = Signal(20) # sys cycles; 0 = immediate.
+        wake_delay_cnt      = Signal(20)
+        self.sync += [
+            self.txcomwake.eq(0),
+            If(txcomwake_raw & (self.oob_wake_delay == 0),
+                self.txcomwake.eq(1),
+            ).Elif(txcomwake_raw,
+                wake_delay_cnt.eq(self.oob_wake_delay),
+            ).Elif(wake_delay_cnt == 1,
+                self.txcomwake.eq(1),
+                wake_delay_cnt.eq(0),
+            ).Elif(wake_delay_cnt != 0,
+                wake_delay_cnt.eq(wake_delay_cnt - 1),
+            ),
+        ]
 
         # sys clk -> tx clk
         txcominit      = Signal()
@@ -471,8 +491,11 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_gap_mode   = Signal()
         self.oob_burst_mode = Signal() # 0: LDR square bursts / 1: serializer bursts (LDR off).
         self.oob_repeat     = Signal(2)
-        self.oob_d102       = Signal() # Force D10.2 on the TX datapath during OOB (Xilinx-like
-                                       # serializer burst content).
+        self.oob_d102       = Signal() # Force a pattern on the TX datapath during OOB (Xilinx-
+                                       # like serializer burst content).
+        self.oob_pattern    = Signal(16, reset=0x4A4A) # OOB burst word when oob_d102 is set:
+                                       # 0x4A4A = D10.2 (fund. = linerate/2), 0x3333 = 0011...
+                                       # (fund. = linerate/4 = Gen1-equivalent at gen2).
         ei_lead_tx    = Signal(5)
         ei_trail_tx   = Signal(4)
         wake_gap_tx   = Signal(6, reset=com_gen.wake_cycles)
@@ -488,7 +511,12 @@ class ECP5LiteSATAPHY(LiteXModule):
             MultiReg(self.oob_burst_mode, burst_mode_tx, "tx"),
             MultiReg(self.oob_repeat,     repeat_tx,     "tx"),
             MultiReg(self.oob_d102,       d102_tx,       "tx"),
+            MultiReg(self.oob_pattern,    pattern_tx,    "tx"),
         ]
+        # Raw serializer pattern for the zero_bus/produce_pattern path (bypass mode): the
+        # oob_pattern word replicated to 20b raw symbols; e.g. 0x3333 -> 0011... repeating =
+        # Gen1-rate-equivalent burst content when running at gen2.
+        self.comb += serdes.tx_pattern.eq(Cat(self.oob_pattern, self.oob_pattern[0:4]))
 
         self.comb += [
             com_gen.cominit.eq(txcominit),
@@ -572,8 +600,14 @@ class ECP5LiteSATAPHY(LiteXModule):
             CSRField("repeat", size=2, offset=20,
                 description="Emit 2^repeat back-to-back OOB sequences per request (host-like sustained COMRESET)."),
             CSRField("d102", size=1, offset=22,
-                description="Force D10.2 serializer content during OOB bursts (Xilinx-like)."),
+                description="Force pattern serializer content during OOB bursts (Xilinx-like)."),
         ])
+        self._oob_pattern = CSRStorage(16, reset=0x4A4A,
+            description="OOB burst datapath word when d102 is set (0x4A4A=D10.2, 0x3333=Gen1-rate-equivalent).")
+        self._oob_quiet = CSRStorage(16, reset=self.com_check.quiet_cycles.reset.value,
+            description="RX OOB quiet threshold (sys cycles) ending a sequence / deasserting detections.")
+        self._oob_wake_delay = CSRStorage(20,
+            description="COMWAKE launch delay after ctrl request (sys cycles).")
         self.comb += [
             self.oob_rx_sel.eq(     self._oob_control.fields.rx_sel),
             self.ei_mode.eq(        self._oob_control.fields.ei_mode),
@@ -587,6 +621,9 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_zero_bus.eq(   self._oob_control.fields.zero_bus),
             self.oob_repeat.eq(     self._oob_control.fields.repeat),
             self.oob_d102.eq(       self._oob_control.fields.d102),
+            self.oob_pattern.eq(    self._oob_pattern.storage),
+            self.com_check.quiet_cycles.eq(self._oob_quiet.storage),
+            self.oob_wake_delay.eq( self._oob_wake_delay.storage),
         ]
 
         # Shaped EI request (lead/trail compensation + COMWAKE gap stretch), see COMGenerator.

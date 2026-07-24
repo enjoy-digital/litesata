@@ -204,3 +204,24 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   most decisive remaining instruments. Also searched: no other public ECP5/Gowin SATA OOB
   implementation found (Antmicro's open-tools SATA = Xilinx GTP hard OOB; ECP3 SATA IP not
   located; whitequark IRC archive bot-blocked).
+- [autonomous session, campaigns 7-9] All hands-free avenues executed:
+  * SCI hidden-bit exploration: all mode-differing regs (0x00/0x03/0x04/0x38) and every unknown
+    bit of reg 0x02/0x04 flipped with the drive as oracle -> completely flat (those SCI-visible
+    regs behave as status shadows, not live controls). CLOSED, negative.
+  * Burst content RATE hypothesis (Gen1-rate qualifier): new oob_pattern CSR drives raw
+    serializer symbols during OOB (produce_pattern path, bypass mode): tested 750MHz fundamental
+    (0x33333 = Gen1-D10.2-equivalent at gen2), 1.5GHz (0x4A4A), 375MHz (0x0F0F) -> identical
+    behavior, no COMWAKE reply. CLOSED, negative (also explains nothing Xilinx-specific).
+  * COMWAKE launch-timing dimension: new oob_quiet (COMChecker quiet threshold) and
+    oob_wake_delay CSRs; swept launch from +600ns (Xilinx-like early) to +5ms (calibration
+    window) after device COMINIT, on golden and spec shapings -> all negative. CLOSED.
+  * Quantitative model elimination: no single TX-side impairment model (start/end lag, mid-gap
+    transient, gap chopping) is consistent with the complete dataset - each predicts acceptance
+    somewhere in the swept ranges or breaks COMINIT. The remaining explanation space is
+    structurally invisible from this side of the link (differential/analog signature or a
+    shared device-side qualification) - exactly what the golden-reference capture and the
+    licensed DCUA behavioral sim (bench/dcusim, ready to run) will decide.
+  * Polite-host feature: LiteSATAPHYCtrl gains opt-in oob_retries/oob_backoff (BACKOFF state,
+    attempt counter outside the FSM ResetInserter domain), sim-tested (test_ctrl_backoff);
+    default None = behavior identical for all existing PHYs.
+  Board state: bypass gen2 bitstream, line QUIET. 14 ECP5 tests green.

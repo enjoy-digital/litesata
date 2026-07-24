@@ -310,6 +310,57 @@ class TestECP5OOB(unittest.TestCase):
 
         run_simulation(dut, gen())
 
+    def test_ctrl_backoff(self):
+        clk_freq = 1e5  # retry timer -> 1000 cycles.
+
+        class _Stub(Module):
+            def __init__(self):
+                self.ready          = Signal(reset=1)
+                self.tx_idle        = Signal()
+                self.tx_polarity    = Signal()
+                self.rx_polarity    = Signal()
+                self.tx_cominit_stb = Signal()
+                self.tx_cominit_ack = Signal()
+                self.tx_comwake_stb = Signal()
+                self.tx_comwake_ack = Signal()
+                self.rx_idle        = Signal(reset=1)
+                self.rx_cdrhold     = Signal()
+                self.rx_cominit_stb = Signal()
+                self.rx_comwake_stb = Signal()
+                # Auto-ack COMINIT so ctrl proceeds to AWAIT-COMINIT and retries on timeout.
+                self.comb += self.tx_cominit_ack.eq(self.tx_cominit_stb)
+
+        class _CRG(Module):
+            def __init__(self):
+                self.tx_reset = Signal()
+                self.rx_reset = Signal()
+
+        class _DUT(Module):
+            def __init__(self):
+                self.submodules.trx  = _Stub()
+                self.submodules.crg  = _CRG()
+                self.submodules.ctrl = LiteSATAPHYCtrl(self.trx, self.crg, clk_freq,
+                    oob_retries=2, oob_backoff=2e-3)  # backoff = 200 cycles.
+
+        dut = _DUT()
+
+        def gen():
+            backoff_enc = dut.ctrl.fsm.encoding["BACKOFF"]
+            backoff_cycles = 0
+            resumed = 0
+            for i in range(10000):
+                yield
+                st = (yield dut.ctrl.fsm.state)
+                if st == backoff_enc:
+                    backoff_cycles += 1
+                elif backoff_cycles and (yield dut.trx.tx_cominit_stb):
+                    resumed = 1
+                    break
+            self.assertGreater(backoff_cycles, 150, "BACKOFF state never/barely entered")
+            self.assertEqual(resumed, 1, "retries never resumed after backoff")
+
+        run_simulation(dut, gen())
+
     # PHY selection / elaboration ----------------------------------------------------------------
     def test_ecp5_phy_selection(self):
         from migen.fhdl import verilog

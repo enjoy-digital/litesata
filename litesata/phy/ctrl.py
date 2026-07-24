@@ -28,7 +28,7 @@ class LiteSATAPHYCtrl(LiteXModule):
     The state machine is robust enough to handle hot plug/ power off/on sequences of the device
     # without reseting the FPGA core.
     """
-    def __init__(self, trx, crg, clk_freq):
+    def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1):
         self.clk_freq = clk_freq
         self.ready    = Signal()
         self.sink     = sink   = stream.Endpoint(phy_description(32))
@@ -184,6 +184,45 @@ class LiteSATAPHYCtrl(LiteXModule):
                 NextState("READY")
             )
         )
+
+        # Optional polite-host retry limit: after oob_retries failed OOB attempts, hold the line
+        # idle for oob_backoff seconds instead of hammering the device forever (some devices
+        # wedge on sustained incoherent OOB streams until power-cycled).
+        if oob_retries is not None:
+            # The attempt counter lives outside the FSM (the FSM ResetInserter clears NextValue
+            # state on every retry timeout).
+            attempts      = Signal(max=oob_retries + 1)
+            backoff_timer = WaitTimer(int(oob_backoff*clk_freq))
+            self.submodules += backoff_timer
+            self.comb += backoff_timer.wait.eq(fsm.ongoing("BACKOFF"))
+            fsm.act("BACKOFF",
+                self.tx_idle.eq(1),
+                trx.rx_cdrhold.eq(1),
+                If(backoff_timer.done,
+                    NextState("RESET")
+                )
+            )
+            reset_entry = Signal()
+            self.sync += reset_entry.eq(fsm.ongoing("RESET"))
+            self.sync += [
+                If(fsm.ongoing("RESET") & ~reset_entry,
+                    If(attempts != oob_retries,
+                        attempts.eq(attempts + 1)
+                    )
+                ),
+                If(fsm.ongoing("BACKOFF") & backoff_timer.done,
+                    attempts.eq(0)
+                ),
+            ]
+            # Divert to BACKOFF from RESET once the retry budget is exhausted.
+            reset_state = fsm.actions["RESET"]
+            fsm.actions["RESET"] = [
+                If((attempts == oob_retries) & ~fsm.ongoing("BACKOFF"),
+                    NextState("BACKOFF")
+                ).Else(
+                    *reset_state
+                )
+            ]
 
     def us(self, t):
         clk_period_us = 1e6/self.clk_freq
