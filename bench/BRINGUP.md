@@ -172,3 +172,19 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   not) or a device-side content qualification. Next instruments unchanged: golden-reference
   capture (real host + scope), differential probing. Note: a board-level TX switch interposer
   gates the full-quality serializer signal and is therefore MORE likely to work than before.
+- [campaign 5 - drive hygiene + host-likeness] Per Florent's insights: (a) clean-shot protocol
+  adopted (TX silent during drive plug, one spec-paced attempt then quiet - no more test-mode
+  storms; drives CAN wedge on incoherent OOB floods, keep this discipline); (b) new knobs:
+  oob_control.repeat (2^N back-to-back sequences = sustained host-like COMRESET assertion) and
+  oob_control.d102 (D10.2 serializer burst content, exactly what Xilinx GTP emits during OOB).
+  Fresh re-plugged drive, clean attempts: golden timing / 8-sequence sustained reset / D10.2
+  content / combinations -> drive answers EVERY COMRESET (COMINIT-class only), never COMWAKE.
+  EXONERATED SO FAR: gap/burst timing (wire-verified textbook), burst content (LDR square
+  9-75MHz, serializer D0.0, serializer D10.2), sequence sustain (1/2/4/8), first-burst quality,
+  both PCS modes, both EI modes, zeros-on-bus, PCIE_CT/pcie_ei_en, RX detectors, two drives,
+  fresh-drive clean pacing.
+  REMAINING SUSPECT (needs instruments beyond this bench): analog/differential behavior of our
+  EI gaps and LDR bursts at the device's COMWAKE-path squelch (COMINIT path demonstrably
+  tolerant). Endgame: golden-reference diff (real host + scope), differential probing, Lattice
+  support case (data package ready), TX-switch interposer.
+  TODO(gateware): ctrl retry limit + backoff CSR (polite-host behavior, avoids wedging drives).

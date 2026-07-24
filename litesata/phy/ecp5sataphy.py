@@ -110,6 +110,8 @@ class COMGenerator(LiteXModule):
         self.wake_gap = Signal(6, reset=wake_cycles) # i
         self.gap_mode = Signal()                     # i: 0 = EI gaps / 1 = LDR-constant gaps
                                                      #    (no transitions, EI off in-sequence).
+        self.repeat   = Signal(2)                    # i: emit 2^repeat back-to-back sequences
+                                                     #    (real hosts assert COMRESET for many).
         self.ei_req   = Signal()                     # o
 
         # Square wave generation -------------------------------------------------------------------
@@ -130,6 +132,7 @@ class COMGenerator(LiteXModule):
         # Burst/Gap sequencing ---------------------------------------------------------------------
         count   = Signal(8)
         loops   = Signal(3)
+        seqs    = Signal(8)
         is_wake = Signal()
 
         self.fsm = fsm = FSM(reset_state="IDLE")
@@ -138,6 +141,7 @@ class COMGenerator(LiteXModule):
                 NextValue(is_wake, self.comwake & ~self.cominit),
                 NextValue(count, self.ei_trail),
                 NextValue(loops, 6 - 1),
+                NextValue(seqs, (1 << self.repeat) - 1),
                 NextState("PRE")
             )
         )
@@ -173,7 +177,15 @@ class COMGenerator(LiteXModule):
             NextValue(count, count - 1),
             If(count == 0,
                 If(loops == 0,
-                    NextState("FINISH")
+                    If(seqs == 0,
+                        NextState("FINISH")
+                    ).Else(
+                        # Back-to-back sequence repeat (continuous COMRESET/COMWAKE assertion).
+                        NextValue(seqs, seqs - 1),
+                        NextValue(loops, 6 - 1),
+                        NextValue(count, burst_cycles - 1),
+                        NextState("BURST")
+                    )
                 ).Else(
                     NextValue(loops, loops - 1),
                     NextValue(count, burst_cycles - 1),
@@ -369,9 +381,10 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.comb += self.ready.eq(serdes.tx_ready & serdes.rx_ready)
 
         # Datapath ---------------------------------------------------------------------------------
+        oob_d102_active = Signal()
         self.comb += [
-            serdes.sink.data.eq(self.txdata),
-            serdes.sink.ctrl.eq(self.txcharisk),
+            serdes.sink.data.eq(Mux(oob_d102_active, 0x4A4A, self.txdata)),
+            serdes.sink.ctrl.eq(Mux(oob_d102_active, 0,      self.txcharisk)),
             self.rxdata.eq(serdes.source.data),
             self.rxcharisk.eq(serdes.source.ctrl),
         ]
@@ -457,17 +470,24 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_wake_gap = Signal(6, reset=com_gen.wake_cycles)
         self.oob_gap_mode   = Signal()
         self.oob_burst_mode = Signal() # 0: LDR square bursts / 1: serializer bursts (LDR off).
+        self.oob_repeat     = Signal(2)
+        self.oob_d102       = Signal() # Force D10.2 on the TX datapath during OOB (Xilinx-like
+                                       # serializer burst content).
         ei_lead_tx    = Signal(5)
         ei_trail_tx   = Signal(4)
         wake_gap_tx   = Signal(6, reset=com_gen.wake_cycles)
         gap_mode_tx   = Signal()
         burst_mode_tx = Signal()
+        repeat_tx     = Signal(2)
+        d102_tx       = Signal()
         self.specials += [
             MultiReg(self.oob_ei_lead,    ei_lead_tx,    "tx"),
             MultiReg(self.oob_ei_trail,   ei_trail_tx,   "tx"),
             MultiReg(self.oob_wake_gap,   wake_gap_tx,   "tx"),
             MultiReg(self.oob_gap_mode,   gap_mode_tx,   "tx"),
             MultiReg(self.oob_burst_mode, burst_mode_tx, "tx"),
+            MultiReg(self.oob_repeat,     repeat_tx,     "tx"),
+            MultiReg(self.oob_d102,       d102_tx,       "tx"),
         ]
 
         self.comb += [
@@ -478,6 +498,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             com_gen.ei_trail.eq(ei_trail_tx),
             com_gen.wake_gap.eq(wake_gap_tx),
             com_gen.gap_mode.eq(gap_mode_tx),
+            com_gen.repeat.eq(repeat_tx),
             serdes.tx_oob_en.eq(com_gen.tx_oob_en & ~burst_mode_tx),
             serdes.tx_oob_data.eq(com_gen.tx_oob_data),
             serdes.tx_oob_idle.eq(com_gen.tx_idle),
@@ -487,6 +508,10 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # tx clk -> sys clk
         self.submodules += _PulseSynchronizer(com_gen.finish, "tx", self.txcomfinish, "sys")
+
+        # D10.2 OOB burst content (Xilinx-like): force the serializer datapath to D10.2 while the
+        # OOB sequence is active (tx domain).
+        self.comb += oob_d102_active.eq(d102_tx & com_gen.active)
 
         # RX OOB (COMINIT/COMWAKE detection) -------------------------------------------------------
         # Source A (default): RLOS squelch (serdes.rx_idle, already synchronized to sys).
@@ -544,6 +569,10 @@ class ECP5LiteSATAPHY(LiteXModule):
             ),
             CSRField("zero_bus", size=1, offset=19,
                 description="Force raw zeros on the TX parallel bus during OOB (clean EI, TN-02206 8.25)."),
+            CSRField("repeat", size=2, offset=20,
+                description="Emit 2^repeat back-to-back OOB sequences per request (host-like sustained COMRESET)."),
+            CSRField("d102", size=1, offset=22,
+                description="Force D10.2 serializer content during OOB bursts (Xilinx-like)."),
         ])
         self.comb += [
             self.oob_rx_sel.eq(     self._oob_control.fields.rx_sel),
@@ -556,6 +585,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_force_wake.eq( self._oob_control.fields.force_wake),
             self.oob_burst_mode.eq( self._oob_control.fields.burst_mode),
             self.oob_zero_bus.eq(   self._oob_control.fields.zero_bus),
+            self.oob_repeat.eq(     self._oob_control.fields.repeat),
+            self.oob_d102.eq(       self._oob_control.fields.d102),
         ]
 
         # Shaped EI request (lead/trail compensation + COMWAKE gap stretch), see COMGenerator.
