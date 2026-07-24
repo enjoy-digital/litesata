@@ -88,3 +88,20 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   (DCU pads cannot be PIO). Blog says nothing about idle between bursts (USB3 LFPS gaps are us-
   scale, 20-80x longer than COMWAKE's 106.7ns, so the ~220ns EI engage floor never matters for
   LFPS). Our PHY already uses this exact technique - it is what makes COMRESET work.
+- 05:00 [Drive 2 test] Second SSD connected, gen2 bitstream:
+  * Answers our COMRESET at ~570 bursts/s (every retry, textbook COMINIT 100-120ns/310-330ns).
+  * ZERO spontaneous COMINITs (TX off -> 0/s) - every response is caused by our TX (clean ruler
+    for TX-aliveness, unlike drive 1's 12/s background).
+  * Responds COMINIT (~330-680/s) to nearly any TX activity, including gap-swallowed continuous
+    burst streams - unlike drive 1 which ignored those. So drive 2's response *rate* cannot
+    measure our emitted gap lengths.
+  * NEVER replies COMWAKE: full-sequence sweeps (wake_gap 93-293ns, trail 0/4, ei_mode legacy +
+    shaped) all COMINIT-class only, ctrl_ready never set.
+  * SCI experiment (runtime, no rebuild): set pcie_ei_en (CH reg 0x02 bit 6, read 0x0c ->
+    wrote 0x4c) - no behavioral change on full sequence or tx_test. CH regs 0x00-0x3F dumped in
+    journal history for reference.
+  CONCLUSION: two drives with different personalities both answer COMRESET and both refuse
+  COMWAKE -> the common factor is our transmitted COMWAKE, consistent with the EI ~220ns
+  swallow pathology (and with the 2022 scope measurement). Definitive next step needs eyes on
+  the TX pair: scope in tx_test mode (continuous COMWAKE pattern) shows in one glance whether
+  107ns gaps exist on the wire.
