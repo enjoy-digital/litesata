@@ -105,3 +105,16 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   swallow pathology (and with the 2022 scope measurement). Definitive next step needs eyes on
   the TX pair: scope in tx_test mode (continuous COMWAKE pattern) shows in one glance whether
   107ns gaps exist on the wire.
+- [scope session] Direct probing of the TX pair failed repeatedly (probe/access issues), but the
+  crosstalk of our own TX onto the RX pair + the FPGA-side recorders turned out to be a working
+  self-measurement channel: control pattern (320ns gap requests) shows our gaps on the wire
+  (floor 310ns); COMWAKE patterns (107ns and 160ns requests) show NO emitted gaps at all (RX
+  sees only the drive's COMINITs). Retroactively, the night's high-rate recorder counts (47k+)
+  were this same self-echo. The ~220ns EI swallow is thereby confirmed by three independent
+  measurements: drive-1 acceptance cliff (226 vs 200ns), self-echo cliff, explicit no-gap
+  COMWAKE captures. Scope no longer needed.
+- [force_wake experiment] Out-of-spec shortcut: skip COMWAKE (auto-ack + synthesized device
+  response, CSR oob_control.force_wake). Mechanism verified with litescope (ctrl reaches
+  AWAIT-ALIGN 1.8us after device COMINIT, transmits ALIGNs) - drive 2 refuses: keeps re-sending
+  COMINIT (498/s), strictly waiting for a real COMWAKE. Negative, as spec predicts.
+  FINAL: all software avenues exhausted; COMWAKE emission is the sole blocker for link-up.

@@ -392,10 +392,28 @@ class ECP5LiteSATAPHY(LiteXModule):
         # TX OOB (COMRESET/COMINIT/COMWAKE generation) ---------------------------------------------
         self.com_gen = com_gen = ClockDomainsRenamer("tx")(COMGenerator(tx_clk_freq))
 
+        # Debug: skip COMWAKE (out-of-spec experiment): immediately ack the ctrl's COMWAKE request
+        # and synthesize a device COMWAKE response, so ctrl proceeds to ALIGN transmission right
+        # after the device's COMINIT (some devices proceed on sustained ALIGN activity).
+        self.oob_force_wake = Signal()
+        force_wake_cnt      = Signal(16)
+        force_wake_stb      = Signal()
+        self.sync += [
+            If(~self.oob_force_wake,
+                force_wake_cnt.eq(0),
+            ).Elif(self.tx_comwake_ack,
+                force_wake_cnt.eq(1),
+            ).Elif(force_wake_cnt != 0,
+                force_wake_cnt.eq(force_wake_cnt + 1),
+            ),
+        ]
+        self.comb += force_wake_stb.eq((force_wake_cnt > int(200e-9*clk_freq)) &
+                                       (force_wake_cnt < int(1.2e-6*clk_freq)))
+
         # Generic <-> specific handshake (mirrors Xilinx TXCOMINIT/TXCOMWAKE/TXCOMFINISH).
         self.comb += [
             self.tx_cominit_ack.eq(self.tx_cominit_stb & self.txcomfinish),
-            self.tx_comwake_ack.eq(self.tx_comwake_stb & self.txcomfinish),
+            self.tx_comwake_ack.eq(self.tx_comwake_stb & (self.txcomfinish | self.oob_force_wake)),
         ]
         self.submodules += _RisingEdge(self.tx_cominit_stb, self.txcominit)
         self.submodules += _RisingEdge(self.tx_comwake_stb, self.txcomwake)
@@ -473,7 +491,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.rxcominitdet.eq(com_check.cominit_det),
             self.rxcomwakedet.eq(com_check.comwake_det),
             self.rx_cominit_stb.eq(self.rxcominitdet),
-            self.rx_comwake_stb.eq(self.rxcomwakedet),
+            self.rx_comwake_stb.eq(self.rxcomwakedet | force_wake_stb),
         ]
 
     def add_oob_csr(self):
@@ -495,6 +513,8 @@ class ECP5LiteSATAPHY(LiteXModule):
                 ("``0b0``", "OOB inter-burst gaps via electrical idle."),
                 ("``0b1``", "OOB inter-burst gaps via LDR constant level (EI off in-sequence).")],
             ),
+            CSRField("force_wake", size=1, offset=17,
+                description="Skip COMWAKE: auto-ack TX and synthesize a device COMWAKE response."),
         ])
         self.comb += [
             self.oob_rx_sel.eq(     self._oob_control.fields.rx_sel),
@@ -504,6 +524,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_toggle_div.eq( self._oob_control.fields.toggle_div),
             self.ldr_timeout.eq(    self._oob_control.fields.ldr_timeout),
             self.oob_gap_mode.eq(   self._oob_control.fields.gap_mode),
+            self.oob_force_wake.eq( self._oob_control.fields.force_wake),
         ]
 
         # Shaped EI request (lead/trail compensation + COMWAKE gap stretch), see COMGenerator.
