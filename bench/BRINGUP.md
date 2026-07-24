@@ -192,3 +192,15 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   wg=20 / SER+D10.2+8seq / vanilla wg=16): answers EVERY COMRESET (12k bursts per 20s attempt,
   textbook COMINIT 310-330ns gaps), never replies COMWAKE. Three drives, identical signature -
   the analog-quality suspicion stands. Line left quiet.
+- [campaign 6 - out-of-the-box: Diamond behavioral simulation] Discovered /opt/diamond/3.12
+  installed with bundled ModelSim + compiled DCUA BEHAVIORAL model (ovi_ecp5u lib). Built
+  bench/dcusim/: auto-generated DCUA testbenches from our exact bypass/g8b10b parameter sets
+  with 4 OOB scenarios (S1 EI step latency, S2 gap-request swallow sweep, S3 LDR-through-
+  held-EI mute test, S4 masked-EI COMWAKE) + VCD analyzer. Compiles clean; simulation BLOCKED
+  on license: /opt/diamond/license.dat expired 04-nov-2025 and lacks 'latticemsim', and its
+  HOSTID matches no current NIC. ONE free-license renewal (latticesemi.com, MAC
+  04:d9:f5:d4:31:4c) unlocks BOTH the DCUA behavioral sim (bench/dcusim/run_and_analyze.sh)
+  AND Clarity/IPexpress generation of Lattice's official SATA-preset DCU netlist - the two
+  most decisive remaining instruments. Also searched: no other public ECP5/Gowin SATA OOB
+  implementation found (Antmicro's open-tools SATA = Xilinx GTP hard OOB; ECP3 SATA IP not
+  located; whitequark IRC archive bot-blocked).
