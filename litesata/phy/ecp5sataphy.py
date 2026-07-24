@@ -284,7 +284,7 @@ class COMChecker(LiteXModule):
 
 class ECP5LiteSATAPHY(LiteXModule):
     def __init__(self, refclk, pads, gen, clk_freq, data_width=16, dual=0, channel=0, refclk_freq=None,
-        oob_config={"ei", "ldr_tx", "ldr_rx"}):
+        oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False):
         assert data_width in [16]
         assert gen in ["gen1", "gen2"]
         # Common signals
@@ -360,6 +360,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             tx_polarity = self.tx_polarity,
             rx_polarity = self.rx_polarity,
             oob_config  = oob_config,
+            pcs_mode    = pcs_mode,
+            pcie_mode   = pcie_mode,
         )
         serdes.add_stream_endpoints()
 
@@ -388,7 +390,10 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # 8b10b decode errors (rx -> sys) ----------------------------------------------------------
         rxnotintable = Signal(data_width//8)
-        self.comb += rxnotintable.eq(Cat(*[serdes.decoders[i].invalid for i in range(data_width//8)]))
+        if hasattr(serdes, "decoders"):
+            self.comb += rxnotintable.eq(Cat(*[serdes.decoders[i].invalid for i in range(data_width//8)]))
+        else:
+            self.comb += rxnotintable.eq(serdes.rx_errs)
         self.specials += MultiReg(rxnotintable, self.rxnotintable, "sys")
         self.comb += self.rxdisperr.eq(0) # Not provided by the fabric 8b10b decoder (status only).
 

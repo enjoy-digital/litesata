@@ -362,10 +362,14 @@ class SerDesECP5(LiteXModule):
         data_width  = 20,
         tx_polarity = 0,
         rx_polarity = 0,
-        oob_config  = {"ei", "ldr_tx", "ldr_rx"}):
+        oob_config  = {"ei", "ldr_tx", "ldr_rx"},
+        pcs_mode    = "bypass",
+        pcie_mode   = False):
         assert dual       in [0, 1]
         assert channel    in [0, 1]
         assert data_width in [20]
+        assert pcs_mode   in ["bypass", "g8b10b"]
+        self.pcs_mode = pcs_mode
         self.dual       = dual
         self.channel    = channel
         self.oob_config = oob_config
@@ -411,8 +415,13 @@ class SerDesECP5(LiteXModule):
 
         self.nwords = nwords = data_width//10
 
-        self.encoder  = ClockDomainsRenamer("tx")(Encoder(nwords, True))
-        self.decoders = [ClockDomainsRenamer("rx")(Decoder(True)) for _ in range(nwords)]
+        if pcs_mode == "bypass":
+            self.encoder  = ClockDomainsRenamer("tx")(Encoder(nwords, True))
+            self.decoders = [ClockDomainsRenamer("rx")(Decoder(True)) for _ in range(nwords)]
+        else:
+            # OOB: G8B10B mode uses the DCU-internal 8b10b; invalid received symbols are decoded
+            # as 0xEE with the K flag set (see LUNA/TN-02206).
+            self.rx_errs = Signal(nwords)
 
         # Transceiver direct clock outputs (useful to specify clock constraints).
         self.txoutclk = Signal()
@@ -426,6 +435,7 @@ class SerDesECP5(LiteXModule):
         rx_lol     = Signal()
         rx_lsm     = Signal()
         rx_align   = Signal()
+        cg_align_pulse = Signal() # OOB: g8b10b word-aligner re-arm pulse (edge-sensitive input).
         rx_data    = Signal(20)
         rx_bus     = Signal(24)
 
@@ -739,6 +749,25 @@ class SerDesECP5(LiteXModule):
                 o_CHX_LDR_RX2CORE     = self.rx_oob_data,
             )
 
+        # OOB: G8B10B PCS mode (DCU-internal 8b10b). Per TN-02206 8.25 the electrical idle enable
+        # is a pipelined word-synchronous control in PCS-managed modes (idle achieved <20 UI after
+        # the designated word) - unlike the slow asynchronous behavior measured in the 10BSER/UC
+        # bypass configuration. Alignment: the link state machine must be disabled and the
+        # edge-sensitive FFC_ENABLE_CGALIGN input pulsed to re-arm the word aligner (per LUNA).
+        if pcs_mode == "g8b10b":
+            self.serdes_params.update(
+                p_CHX_PROTOCOL           = "G8B10B",
+                p_CHX_UC_MODE            = "0b0",
+                p_CHX_ENC_BYPASS         = "0b0",
+                p_CHX_DEC_BYPASS         = "0b0",
+                p_CHX_LSM_DISABLE        = "0b1",
+                p_CHX_ENABLE_CG_ALIGN    = "0b0",
+                i_CHX_FFC_ENABLE_CGALIGN = cg_align_pulse,
+            )
+            if pcie_mode:
+                self.serdes_params.update(p_CHX_PCIE_MODE = "0b1")
+            del self.serdes_params["i_CHX_FFC_SIGNAL_DETECT"]
+
         # SCI Reconfiguration ----------------------------------------------------------------------
         # OOB: reset released with tx_ready (not full init.ready) so polarity/cdr_hold writes work
         # while the RX side is still unlocked (i.e. during the OOB sequence).
@@ -750,35 +779,71 @@ class SerDesECP5(LiteXModule):
         self.comb += sci_reconfig.tx_polarity.eq(tx_polarity)
         self.comb += sci_reconfig.rx_cdr_hold.eq(self.rx_cdr_hold)
 
-        # TX Datapath and PRBS ---------------------------------------------------------------------
-        self.tx_prbs = ClockDomainsRenamer("tx")(PRBSTX(data_width, reverse=True))
-        self.comb += self.tx_prbs.config.eq(tx_prbs_config)
-        self.comb += [
-            self.tx_prbs.i.eq(Cat(*[self.encoder.output[i] for i in range(nwords)])),
-            If(tx_produce_square_wave,
-                # square wave @ linerate/data_width for scope observation
-                tx_data.eq(Signal(data_width, reset=(1<<(data_width//2))-1))
-            ).Elif(tx_produce_pattern,
-                tx_data.eq(tx_pattern)
-            ).Else(
-                tx_data.eq(self.tx_prbs.o)
-            ),
-            tx_bus[ 0:10].eq(tx_data[ 0:10]),
-            tx_bus[12:22].eq(tx_data[10:20]),
-        ]
+        # TX/RX Datapaths (and PRBS in bypass mode) ------------------------------------------------
+        if pcs_mode == "bypass":
+            self.tx_prbs = ClockDomainsRenamer("tx")(PRBSTX(data_width, reverse=True))
+            self.comb += self.tx_prbs.config.eq(tx_prbs_config)
+            self.comb += [
+                self.tx_prbs.i.eq(Cat(*[self.encoder.output[i] for i in range(nwords)])),
+                If(tx_produce_square_wave,
+                    # square wave @ linerate/data_width for scope observation
+                    tx_data.eq(Signal(data_width, reset=(1<<(data_width//2))-1))
+                ).Elif(tx_produce_pattern,
+                    tx_data.eq(tx_pattern)
+                ).Else(
+                    tx_data.eq(self.tx_prbs.o)
+                ),
+                tx_bus[ 0:10].eq(tx_data[ 0:10]),
+                tx_bus[12:22].eq(tx_data[10:20]),
+            ]
 
-        # RX Datapath and PRBS ---------------------------------------------------------------------
-        self.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(data_width, reverse=True))
-        self.comb += [
-            self.rx_prbs.config.eq(rx_prbs_config),
-            self.rx_prbs.pause.eq(rx_prbs_pause),
-            rx_prbs_errors.eq(self.rx_prbs.errors),
-            rx_data[ 0:10].eq(rx_bus[ 0:10]),
-            rx_data[10:20].eq(rx_bus[12:22]),
-        ]
-        for i in range(nwords):
-            self.sync.rx += self.decoders[i].input.eq(rx_data[10*i:10*(i+1)])
-        self.sync.rx += self.rx_prbs.i.eq(rx_data)
+            self.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(data_width, reverse=True))
+            self.comb += [
+                self.rx_prbs.config.eq(rx_prbs_config),
+                self.rx_prbs.pause.eq(rx_prbs_pause),
+                rx_prbs_errors.eq(self.rx_prbs.errors),
+                rx_data[ 0:10].eq(rx_bus[ 0:10]),
+                rx_data[10:20].eq(rx_bus[12:22]),
+            ]
+            for i in range(nwords):
+                self.sync.rx += self.decoders[i].input.eq(rx_data[10*i:10*(i+1)])
+            self.sync.rx += self.rx_prbs.i.eq(rx_data)
+        else:
+            # OOB: G8B10B datapaths: 8-bit data + K flag per byte on the DCU bus (disparity bits
+            # left at 0 = automatic running disparity).
+            self.tx_word_data = Signal(nwords*8)
+            self.tx_word_ctrl = Signal(nwords)
+            self.rx_word_data = Signal(nwords*8)
+            self.rx_word_ctrl = Signal(nwords)
+            self.comb += [
+                If(tx_produce_pattern,
+                    # zero_bus support: raw zeros (D0.0, K=0) during electrical idle.
+                    tx_bus.eq(0),
+                ).Else(
+                    tx_bus[ 0: 8].eq(self.tx_word_data[0: 8]),
+                    tx_bus[    8].eq(self.tx_word_ctrl[0]),
+                    tx_bus[12:20].eq(self.tx_word_data[8:16]),
+                    tx_bus[   20].eq(self.tx_word_ctrl[1]),
+                ),
+                self.rx_word_data[0: 8].eq(rx_bus[ 0: 8]),
+                self.rx_word_data[8:16].eq(rx_bus[12:20]),
+                self.rx_word_ctrl[0].eq(rx_bus[ 8]),
+                self.rx_word_ctrl[1].eq(rx_bus[20]),
+                self.rx_errs[0].eq(rx_bus[ 8] & (rx_bus[ 0: 8] == 0xEE)),
+                self.rx_errs[1].eq(rx_bus[20] & (rx_bus[12:20] == 0xEE)),
+            ]
+            # Word-aligner re-arm: pulse the edge-sensitive CGALIGN input on decode errors,
+            # with a holdoff to let the barrel shifter settle.
+            holdoff = Signal(8)
+            self.sync.rx += [
+                cg_align_pulse.eq(0),
+                If(holdoff != 0,
+                    holdoff.eq(holdoff - 1)
+                ).Elif(rx_align & (self.rx_errs != 0),
+                    cg_align_pulse.eq(1),
+                    holdoff.eq(255),
+                )
+            ]
 
     def add_stream_endpoints(self):
         self.sink   =   sink = stream.Endpoint([("data", self.nwords*8), ("ctrl", self.nwords)])
@@ -786,12 +851,20 @@ class SerDesECP5(LiteXModule):
 
         self.comb += sink.ready.eq(1)
         self.comb += source.valid.eq(1)
-        for i in range(self.nwords):
+        if self.pcs_mode == "bypass":
+            for i in range(self.nwords):
+                self.comb += [
+                    self.encoder.k[i].eq(sink.ctrl[i]),
+                    self.encoder.d[i].eq(sink.data[8*i:8*(i+1)]),
+                    source.ctrl[i].eq(self.decoders[i].k),
+                    source.data[8*i:8*(i+1)].eq(self.decoders[i].d),
+                ]
+        else:
             self.comb += [
-                self.encoder.k[i].eq(sink.ctrl[i]),
-                self.encoder.d[i].eq(sink.data[8*i:8*(i+1)]),
-                source.ctrl[i].eq(self.decoders[i].k),
-                source.data[8*i:8*(i+1)].eq(self.decoders[i].d),
+                self.tx_word_data.eq(sink.data),
+                self.tx_word_ctrl.eq(sink.ctrl),
+                source.data.eq(self.rx_word_data),
+                source.ctrl.eq(self.rx_word_ctrl),
             ]
 
     def add_base_control(self, auto_enable=True):

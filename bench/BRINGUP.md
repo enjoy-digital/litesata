@@ -154,3 +154,21 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   NEXT-SESSION SHORTLIST: (1) G8B10B PCS-mode PHY variant + wire EI re-measure [prime suspect],
   (2) golden-reference capture of real host COMWAKE to this drive (PC SATA + scope),
   (3) differential-probe gap measurement, (4) analog-switch interposer.
+- [campaign 4 - G8B10B PCS mode] Implemented pcs_mode="g8b10b" in the vendored serdes (DCU-
+  internal 8b10b, LUNA bus mappings: data[0:8]/K[8]/data[12:20]/K[20], invalid symbols decode
+  0xEE+K, LSM_DISABLE=1 + edge-sensitive FFC_ENABLE_CGALIGN re-arm pulses, optional PCIE_MODE),
+  plumbed through PHY/LiteSATAPHY/bench (--pcs-mode g8b10b). Results:
+  * Mode fully healthy: word clocks 149.8MHz, drive answers COMRESET at full rate.
+  * EI PATH IS MODE-DEPENDENT (TN-02206 hypothesis partially validated): at spec-timed COMWAKE
+    requests, bypass mode emits NO gaps at all; g8b10b emits real gaps. Wire calibration found
+    a textbook emission point: LDR bursts, wake_gap=20 -> burst med 114ns / gap med 126ns with
+    28/29 gaps in the COMWAKE window.
+  * DECISIVE NEGATIVE: 60s soak at that textbook emission (~5000+ valid COMWAKE sequences) ->
+    drive never replies. G8B10B serializer-burst sweep also all-negative.
+  REVISED CONCLUSION: burst/gap TIMING is achievable and is NOT the blocker. The drives reject
+  a wire-verified spec-timed COMWAKE -> the remaining difference is invisible to single-ended
+  band-limited probing: prime suspects are the differential/amplitude quality of LDR bursts at
+  the device squelch (COMINIT's forgiving detector accepts them; COMWAKE's stricter one may
+  not) or a device-side content qualification. Next instruments unchanged: golden-reference
+  capture (real host + scope), differential probing. Note: a board-level TX switch interposer
+  gates the full-quality serializer signal and is therefore MORE likely to work than before.

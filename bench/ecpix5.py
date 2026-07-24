@@ -97,6 +97,8 @@ class SATATestSoC(SoCMini):
         with_analyzer   = False,
         analyzer_domain = "sys",
         oob_config      = {"ei", "ldr_tx", "ldr_rx"},
+        pcs_mode        = "bypass",
+        pcie_mode       = False,
     ):
         assert gen in ["gen1", "gen2"]
         assert analyzer_domain in ["sys", "tx", "rx"]
@@ -123,6 +125,8 @@ class SATATestSoC(SoCMini):
             dual       = 1,
             channel    = 0,
             oob_config = oob_config,
+            pcs_mode   = pcs_mode,
+            pcie_mode  = pcie_mode,
         )
 
         # SerDes TX/RX word clock measurement (debug).
@@ -239,6 +243,10 @@ def main():
         help="LiteScope Analyzer clock domain/probe set (default: sys).")
     parser.add_argument("--oob-config", default="ei,ldr_tx,ldr_rx",
         help="DCU OOB hookups to enable (comma list of ei/ldr_tx/ldr_rx, empty for none).")
+    parser.add_argument("--pcs-mode",  default="bypass", choices=["bypass", "g8b10b"],
+        help="SerDes PCS mode: bypass (fabric 8b10b) or g8b10b (DCU-internal 8b10b).")
+    parser.add_argument("--pcie-mode", action="store_true",
+        help="Set CHX_PCIE_MODE (g8b10b mode only).")
     args = parser.parse_args()
 
     platform = lambdaconcept_ecpix5.Platform(device=args.device, toolchain=args.toolchain)
@@ -250,6 +258,8 @@ def main():
         with_analyzer   = args.with_analyzer,
         analyzer_domain = args.analyzer_domain,
         oob_config      = set(filter(None, args.oob_config.split(","))),
+        pcs_mode        = args.pcs_mode,
+        pcie_mode       = args.pcie_mode,
     )
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)
