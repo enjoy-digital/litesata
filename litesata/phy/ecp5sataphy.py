@@ -106,7 +106,7 @@ class COMGenerator(LiteXModule):
         # - wake_gap: COMWAKE inter-burst gap in cycles (device detect window is 55-175ns, so the
         #             gap may be stretched to gain EI engage margin).
         self.ei_lead  = Signal(5)                    # i
-        self.ei_trail = Signal(4)                    # i
+        self.ei_trail = Signal(8)                    # i
         self.wake_gap = Signal(8, reset=wake_cycles) # i
         self.gap_mode = Signal()                     # i: 0 = EI gaps / 1 = LDR-constant gaps
                                                      #    (no transitions, EI off in-sequence).
@@ -563,7 +563,7 @@ class ECP5LiteSATAPHY(LiteXModule):
         ]
         # Shaped EI controls (quasi-static, sys -> tx).
         self.oob_ei_lead  = Signal(5)
-        self.oob_ei_trail = Signal(4)
+        self.oob_ei_trail = Signal(8)
         self.oob_wake_gap = Signal(8, reset=com_gen.wake_cycles)
         self.oob_gap_mode   = Signal()
         self.oob_burst_mode = Signal() # 0: LDR square bursts / 1: serializer bursts (LDR off).
@@ -577,7 +577,7 @@ class ECP5LiteSATAPHY(LiteXModule):
                                        # 0x4A4A = D10.2 (fund. = linerate/2), 0x3333 = 0011...
                                        # (fund. = linerate/4 = Gen1-equivalent at gen2).
         ei_lead_tx    = Signal(5)
-        ei_trail_tx   = Signal(4)
+        ei_trail_tx   = Signal(8)
         wake_gap_tx   = Signal(8, reset=com_gen.wake_cycles)
         gap_mode_tx   = Signal()
         burst_mode_tx = Signal()
@@ -762,8 +762,8 @@ class ECP5LiteSATAPHY(LiteXModule):
         # Shaped EI request (lead/trail compensation + COMWAKE gap stretch), see COMGenerator.
         self._oob_ei_shape = CSRStorage(fields=[
             CSRField("lead",     size=5, offset=0),
-            CSRField("trail",    size=4, offset=5),
-            CSRField("wake_gap", size=8, offset=9, reset=self.oob_wake_gap.reset.value),
+            CSRField("trail",    size=8, offset=5),
+            CSRField("wake_gap", size=8, offset=13, reset=self.oob_wake_gap.reset.value),
         ])
         self.comb += [
             self.oob_ei_lead.eq( self._oob_ei_shape.fields.lead),

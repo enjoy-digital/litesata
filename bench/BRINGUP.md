@@ -451,3 +451,40 @@ Board state: B-gen2-g8b10b-fix reloaded, ctrl parked, line silent, drive beaconi
 
 CONCLUSION UNCHANGED AND SHARPENED: hardware fix required. Swap C112/C113 100nF -> 1nF
 (NOT 10nF), then gap_mode=1 driven-gap handshake. All-silicon paths exhausted.
+
+## Campaign 15 (2026-07-25, Codex-review follow-ups): true PCIe-EI path implemented, verification blocked
+
+External review (Codex) invalidated two claims: (1) the "EI mute latches >1.7us" inference was
+wrong - ei_trail gates EI release to the FINAL trail cycles of each gap (4-bit field, max
+100ns), so the 1.7us gap sweep never tested more than ~100-200ns of release lead; the data
+only shows unmute > ~200ns. (2) FFC_PCIE_CT is the receiver-DETECT strobe, not PCIe EI -
+abusing it proves nothing about the PCIe idle path.
+
+The REAL PCIe electrical idle (TN1261 pp.~50/163): per-byte EI enables ride the TX data bus
+(FF_TX_D bits 11/23 = pci_ei_en[0]/[1], verified in TN1261 bus table), pipelined with data,
+EI reached <20UI after assertion, min idle 50UI; documented word-synchronous. Additionally
+prjtrellis fuzzer exposes a CHx_PCIE_EI_EN feature-enable defparam (present in the Diamond
+reference netlist) that gates the whole mechanism - never set by any of our configs.
+
+IMPLEMENTED (pcs_mode="pcie"): PROTOCOL="PCIE" + PCIE_MODE=1 + PCIE_EI_EN=1, G8B10B-style
+bus map + tx_bus[11]/[23] driven word-synchronously from the existing ei_en expression;
+FFC_EI_EN left unwired (--oob-config ldr_tx,ldr_rx). Bitstream C-gen2-pcie. Serdes inits,
+beacon decodes (576-600/s). Also widened ei_trail 4->8 bits (ei_shape layout NOW: lead[0:5]
+trail[5:13] wake_gap[13:21]) so PRE can pre-release EI up to 1.7us for a proper unmute-
+latency measurement.
+
+RESULTS SO FAR: no drive response to PCIe-EI handshakes (serializer D10.2 bursts or LDR
+bursts). BUT emission is unverified: scope SCPI crashed (needs power cycle) and the drive
+occupies the connector (no loopback). The drive-reaction energy probe was insensitive (even
+the driven-gap positive control elicited 0 windows this session - the reaction cycle is not
+a reliable meter).
+
+NEXT (needs hands, either one):
+- Scope power cycle -> triggered burst-amplitude test of the PCIe-EI storm at C113 (LDR
+  bursts are in-band; also unmute-latency sweep with the widened trail via PRE).
+- OR swap drive->loopback cable -> rx_sel=0 RLOS decode of our own PCIe-EI storm (the RLOS
+  decoded the drive beacon through the same path, so full-amplitude bursts + real EI gaps
+  would decode beacon-like: ~107ns bursts / 320ns gaps at wake_gap=48).
+Also queued from review: empirical tau measurement (driven carrier -> 20-50us constant gap,
+fit decay at connector side); cap choice 470-680pF (NOT 1nF, NOT 10nF) if soldering; RF
+series switch as production-grade alternative; TXPWDNB/PCIE_DET_EN characterization.

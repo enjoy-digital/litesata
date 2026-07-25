@@ -370,7 +370,7 @@ class SerDesECP5(LiteXModule):
         assert dual       in [0, 1]
         assert channel    in [0, 1]
         assert data_width in [20]
-        assert pcs_mode   in ["bypass", "g8b10b"]
+        assert pcs_mode   in ["bypass", "g8b10b", "pcie"]
         self.pcs_mode = pcs_mode
         self.dual       = dual
         self.channel    = channel
@@ -770,7 +770,7 @@ class SerDesECP5(LiteXModule):
         # the designated word) - unlike the slow asynchronous behavior measured in the 10BSER/UC
         # bypass configuration. Alignment: the link state machine must be disabled and the
         # edge-sensitive FFC_ENABLE_CGALIGN input pulsed to re-arm the word aligner (per LUNA).
-        if pcs_mode == "g8b10b":
+        if pcs_mode in ["g8b10b", "pcie"]:
             self.serdes_params.update(
                 p_CHX_PROTOCOL           = "G8B10B",
                 p_CHX_UC_MODE            = "0b0",
@@ -780,6 +780,16 @@ class SerDesECP5(LiteXModule):
                 p_CHX_ENABLE_CG_ALIGN    = "0b0",
                 i_CHX_FFC_ENABLE_CGALIGN = cg_align_pulse,
             )
+            if pcs_mode == "pcie":
+                # OOB: true PCIe protocol mode - the ONLY documented word-synchronous TX
+                # electrical idle: per-byte EI flags ride the TX bus (bits 11/23, TN-02206
+                # Table 7.3, <20UI to reach EI). FFC_PCIE_CT is NOT this (it is the receiver
+                # detect strobe) and FFC_EI_EN is the slow asynchronous path.
+                self.serdes_params.update(
+                    p_CHX_PROTOCOL   = "PCIE",
+                    p_CHX_PCIE_MODE  = "0b1",
+                    p_CHX_PCIE_EI_EN = "0b1", # feature enable for the per-byte EI flags
+                )
             if pcie_mode:
                 self.serdes_params.update(p_CHX_PCIE_MODE = "0b1")
             del self.serdes_params["i_CHX_FFC_SIGNAL_DETECT"]
@@ -866,6 +876,13 @@ class SerDesECP5(LiteXModule):
                 self.rx_errs[0].eq(rx_bus[ 8] & (rx_bus[ 0: 8] == 0xEE)),
                 self.rx_errs[1].eq(rx_bus[20] & (rx_bus[12:20] == 0xEE)),
             ]
+            if pcs_mode == "pcie":
+                # Word-synchronous electrical idle request per geared byte (tx domain, same
+                # expression that drives FFC_EI_EN in the other modes).
+                self.comb += [
+                    tx_bus[11].eq(ei_en),
+                    tx_bus[23].eq(ei_en),
+                ]
             # Word-aligner re-arm: pulse the edge-sensitive CGALIGN input on decode errors,
             # with a holdoff to let the barrel shifter settle.
             holdoff = Signal(8)
