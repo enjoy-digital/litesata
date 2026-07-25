@@ -472,6 +472,7 @@ class ECP5LiteSATAPHY(LiteXModule):
                                      # (TN-02206 8.25: required for clean electrical idle).
         self.oob_ctrl_dis = Signal() # Park ctrl: mask its OOB TX requests + force EI (silent
                                      # line for attribution-clean OOB experiments).
+        self.oob_align_force = Signal() # Line test: force continuous ALIGN primitive transmission.
         self.oob_echo_mask = Signal() # Loopback: mask self-echo OOB detections while stb high.
         self.oob_pat_force = Signal() # Line test: force continuous raw-pattern transmission with
                                       # EI off (DC amplitude measurement on scope).
@@ -722,6 +723,8 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Force continuous raw oob_pattern transmission, EI off (line test)."),
             CSRField("echo_mask", size=1, offset=28,
                 description="Loopback: mask self-echo OOB detections while our request strobe is high."),
+            CSRField("align_force", size=1, offset=29,
+                description="Force continuous ALIGN primitive transmission (speed-negotiation answer test)."),
         ])
         self._oob_pattern = CSRStorage(16, reset=0x4A4A,
             description="OOB burst datapath word when d102 is set (0x4A4A=D10.2, 0x3333=Gen1-rate-equivalent).")
@@ -748,6 +751,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_ctrl_dis.eq(   self._oob_control.fields.ctrl_dis),
             self.oob_pat_force.eq(  self._oob_control.fields.pat_force),
             self.oob_echo_mask.eq(  self._oob_control.fields.echo_mask),
+            self.oob_align_force.eq(self._oob_control.fields.align_force),
             self.oob_seq_quiet.eq(  self._oob_seq_quiet.storage),
             self.oob_kick.eq(       self._oob_control.fields.kick),
             self.oob_pattern.eq(    self._oob_pattern.storage),

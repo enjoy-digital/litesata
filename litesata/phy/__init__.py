@@ -91,6 +91,8 @@ class LiteSATAPHY(LiteXModule):
         # Control.
         # --------
         self.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq)
+        if hasattr(self.phy, "oob_align_force"):
+            self.comb += self.ctrl.align_force.eq(self.phy.oob_align_force)
 
         # Datapath.
         # ---------

@@ -196,6 +196,15 @@ class LiteSATAPHYCtrl(LiteXModule):
             )
         )
 
+        # Line test: continuously transmit ALIGN primitives regardless of FSM state (overrides the
+        # FSM's source drive; used to answer a device's autonomous speed-negotiation windows).
+        self.align_force = Signal()
+        self.comb += If(self.align_force,
+            source.valid.eq(1),
+            source.data.eq(primitives["ALIGN"]),
+            source.charisk.eq(0b0001),
+        )
+
         # Optional polite-host retry limit: after oob_retries failed OOB attempts, hold the line
         # idle for oob_backoff seconds instead of hammering the device forever (some devices
         # wedge on sustained incoherent OOB streams until power-cycled).

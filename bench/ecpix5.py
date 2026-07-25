@@ -166,6 +166,19 @@ class SATATestSoC(SoCMini):
         # ready
         self.comb += platform.request("rgb_led", 3).g.eq(~self.sata_phy.ctrl.ready)
 
+        # Long-activity trigger: RX line continuously active >5us (far longer than any beacon
+        # burst) - isolates the rare long-carrier events for litescope content inspection.
+        long_act_cnt = Signal(10)
+        self.long_activity = Signal()
+        self.sync += [
+            If(self.sata_phy.phy.rx_idle,
+                long_act_cnt.eq(0)
+            ).Elif(~self.long_activity,
+                long_act_cnt.eq(long_act_cnt + 1)
+            ),
+            self.long_activity.eq(long_act_cnt == 500),
+        ]
+
         # Analyzer ---------------------------------------------------------------------------------
         if with_analyzer:
             phy    = self.sata_phy.phy
@@ -193,6 +206,9 @@ class SATATestSoC(SoCMini):
                         phy.com_check.comwake_gaps,
                         phy.tx_polarity,
                         phy.rx_polarity,
+                        self.long_activity,
+                        serdes.rx_word_data,
+                        serdes.rx_word_ctrl,
                         self.sata_phy.datapath.rx.source.valid,
                         self.sata_phy.datapath.rx.source.data,
                         self.sata_phy.datapath.rx.source.charisk,

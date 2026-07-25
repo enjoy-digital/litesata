@@ -416,3 +416,38 @@ never on silent line) remain unexplained - possibly TX->RX crosstalk at RLOS thr
 possibly a real drive reaction; content capture needed if pursued.
 
 Board state: B-gen2-g8b10b-fix reloaded, ctrl parked, line silent, drive beaconing happily.
+
+## Campaign 14 (2026-07-25, "think harder" pass): cap values verified, serializer-EI bug, long events resolved
+
+- [SATA cap standard - user question CONFIRMED] Visually verified in SCH_ECPIX-5_R02.PDF p5:
+  C112/C113 (TX) and C122/C127 (RX) are 100nF - the PCIe convention, NOT the SATA standard
+  (10nF nominal, 12nF max per SATA-IO). All ECPIX-5 serdes lanes use 100nF (GTP4 even 0R).
+  Real hosts tolerate 100nF because their PHYs ACTIVELY drive differential-zero at EI entry;
+  gap visibility never relies on cap decay. IMPORTANT: even the standard 10nF would NOT fix
+  our driven-gap scheme: tau_diff = 5nF x 100R = 500ns -> a 320ns gap retains ~53% swing
+  (~265mV) - still above squelch. Passive decay needs ~1nF (tau=50ns: COMRESET gap ->0.2%,
+  COMWAKE 106ns gap ->12%). The 1nF recommendation stands and is REQUIRED, not optional.
+- [burst_mode config bug found] In legacy EI mode, burst_mode leaves tx_oob_en=0 so
+  ei_legacy=(tx_idle|tx_oob_idle)&~tx_oob_en is asserted THROUGH THE BURSTS - all previous
+  "serializer bursts + legacy EI" tests had EI permanently on (invalid). Serializer bursts
+  require ei_mode=1 (shaped). Retested properly vs drive (g8b10b, shaped, D10.2 content):
+  still no response - but amplitude unverifiable (scope SCPI crashed; needs power cycle).
+- [long-carrier events RESOLVED - drive analog reaction, not data] Full anatomy: rx_idle
+  (RLOS) low for >=655us, but RAW pre-decoder rx_word bus = constant 0x0000/k=0/no error
+  markers for the whole event (full-rate litescope capture) => no bit transitions; and no
+  rotation of ALIGN or D10.2 streams can decode as D0.0 (exhaustive 8b10b rotation analysis)
+  => the events are NOT data. They are the drive's analog squelch-exit/termination reaction
+  (DC step settling through the 100nF caps, tau-consistent) to detecting our carrier:
+  0 events on silent line, many with carrier on. VALUE: proves our full-amplitude carrier IS
+  detected by the drive's receiver - the deafness is specifically our muted OOB bursts.
+- [ALIGN-answer experiments] New align_force CSR (bit 29): continuous ALIGN primitive
+  transmission (100% duty). Drive elicited analog events in ~50% of 5s windows but beacon
+  never stopped over minutes: the drive requires real OOB before speed-negotiation; it does
+  not leniently lock on sustained ALIGNs. force_wake + echo_mask ALIGN-answering: no link.
+- [gen2 RX word clock collapse RECONFIRMED] With CDR released on the mostly-idle line, the
+  rx word clock dies and rx-domain analyzer signals FREEZE (the "100% valid 570us" capture
+  was this artifact). CDR-held captures decode with periodic ppm slips (93% valid) - use
+  CDR-held for content work pre-linkup.
+
+CONCLUSION UNCHANGED AND SHARPENED: hardware fix required. Swap C112/C113 100nF -> 1nF
+(NOT 10nF), then gap_mode=1 driven-gap handshake. All-silicon paths exhausted.
