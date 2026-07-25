@@ -483,6 +483,9 @@ class ECP5LiteSATAPHY(LiteXModule):
                                      # line for attribution-clean OOB experiments).
         self.oob_align_force = Signal() # Line test: force continuous ALIGN primitive transmission.
         self.oob_burst_len = Signal(8, reset=round(160*tx_clk_freq/1.5e9))
+        self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
+        self.oob_sci_burst_val = Signal(8, reset=0x55)
+        self.oob_sci_gap_val   = Signal(8)
         self.oob_pwdn_gap    = Signal() # OOB gaps made by main-TX power-down (serializer bursts).
         self.oob_lane_rst_auto = Signal() # Auto lane-reset during the OOB phase.
         self.oob_tx_pwdn     = Signal() # Silence the main TX driver (LDR stays alive).
@@ -648,6 +651,11 @@ class ECP5LiteSATAPHY(LiteXModule):
             # carry line-rate serializer content (a SATA squelch expects GHz energy; the LDR aux
             # path can only make a ~75MHz square, likely far below the receiver's detection band).
             # FFC_TXPWDNB is a direct fabric port, so this avoids the EI pipeline entirely.
+            # SCI slice gate: burst/gap level from the OOB generator (tx domain -> sys via MultiReg
+            # below); the gate itself lives in the SCI reconfig FSM.
+            serdes.sci_oob_gate_en.eq(self.oob_sci_gate),
+            serdes.sci_oob_burst_val.eq(self.oob_sci_burst_val),
+            serdes.sci_oob_gap_val.eq(self.oob_sci_gap_val),
             serdes.tx_pwdn.eq(self.oob_tx_pwdn | (pwdn_gap_tx & com_gen.ei_req)),
             # lane_rst_auto: hold the main TX driver in reset for the whole OOB phase (ctrl keeps
             # tx_idle asserted until AWAIT-ALIGN), then release it for the data phase. This is the
@@ -659,6 +667,10 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # tx clk -> sys clk
         self.submodules += _PulseSynchronizer(com_gen.finish, "tx", self.txcomfinish, "sys")
+        # OOB burst/gap level for the SCI slice gate (1 = burst). Outside a sequence the slices
+        # stay enabled so the normal data path is untouched.
+        self.specials += MultiReg(~com_gen.active | ~com_gen.ei_req,
+                                  serdes.sci_oob_gate_lvl, "sys")
 
         # D10.2 OOB burst content (Xilinx-like): force the serializer datapath to D10.2 while the
         # OOB sequence is active (tx domain).
@@ -769,6 +781,14 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Hold the TX lane in reset during the OOB phase, release for data."),
             CSRField("pwdn_gap", size=1, offset=3,
                 description="Make OOB gaps by powering down the main TX driver (serializer bursts)."),
+            CSRField("sci_gate", size=1, offset=4,
+                description="Make OOB gaps by SCI-writing CH_12 TDRV slice select (~20ns/write)."),
+        ])
+        self._oob_sci_vals = CSRStorage(fields=[
+            CSRField("burst", size=8, offset=0, reset=0x55,
+                description="CH_12 value during OOB bursts (TDRV slices selecting main data)."),
+            CSRField("gap",   size=8, offset=8, reset=0x00,
+                description="CH_12 value during OOB gaps (TDRV slices powered down)."),
         ])
         self._oob_burst_len = CSRStorage(8, reset=self.oob_burst_len.reset.value,
             description="OOB burst length in tx cycles (16 = 106.7ns spec nominal).")
@@ -804,6 +824,9 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_tx_lane_rst.eq( self._oob_txctl.fields.lane_rst),
             self.oob_lane_rst_auto.eq(self._oob_txctl.fields.lane_rst_auto),
             self.oob_pwdn_gap.eq(    self._oob_txctl.fields.pwdn_gap),
+            self.oob_sci_gate.eq(    self._oob_txctl.fields.sci_gate),
+            self.oob_sci_burst_val.eq(self._oob_sci_vals.fields.burst),
+            self.oob_sci_gap_val.eq(  self._oob_sci_vals.fields.gap),
             self.oob_seq_quiet.eq(  self._oob_seq_quiet.storage),
             self.oob_kick.eq(       self._oob_control.fields.kick),
             self.oob_pattern.eq(    self._oob_pattern.storage),

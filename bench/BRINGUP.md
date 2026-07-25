@@ -592,3 +592,48 @@ only make COMRESET/COMINIT-timed gaps - which IS spec-legal and worth a beacon-p
 content + TDRV slice power-down as gap gate; (3) two-probe differential check of the LDR output
 (is the LDR differential at all, or common-mode? - would explain a perfect single-ended
 waveform that no device can hear); (4) 470-680pF cap swap remains the fallback.
+
+### Campaign 16 addendum 2: SCI slice gate implemented; compliant-timing negative; aliasing trap
+
+External review (3rd consult) delivered a decisive correction: **the OOB windows used all campaign
+were the "may detect" windows, not the "shall detect" ones.**
+  * COMWAKE: may 55-175ns, SHALL 101.3-112ns, compliant TX gap 103.5-109.9ns.
+  * COMRESET/COMINIT: may 175-525ns, SHALL 304-336ns, compliant TX gap 310.4-329.6ns.
+  * Burst duration must also be ~103.5-110ns (the 427ns anti-sag burst was non-compliant).
+  * OOB content is specified as repeated D24.3 (or ALIGN) AT THE GEN1 RATE for every generation:
+    D24.3 at 1.5Gb/s = a **375MHz** square. A drive is NOT required to detect our ~75MHz LDR
+    square at any amplitude - the LDR's response at 75MHz is simply undefined by spec.
+  * Also flagged: with EI unwired, dropping FFC_LDR_CORE2TX_EN does NOT idle the main serializer;
+    unless pwdn=1 is held, the drive sees continuous 3Gb/s energy through our "gaps".
+
+**Compliant COMRESET achieved and tested** (D-gen2-noei, pwdn=1 held, wake_gap=48, 16-cycle
+bursts): wire-measured bursts 117ns, gaps 312ns, 4/5 gaps inside the 304-336ns SHALL-DETECT
+window. Scored per the SATA interop procedure: (a) beacon suppression while COMRESET is
+sustained - NONE (600 bursts/s throughout); (b) COMINIT phase reset after release, 39 trials -
+UNIFORM (chi2=18.7). **Clean negative with genuinely compliant timing.**
+
+**SCI TDRV-slice gate implemented** (Codex's top-ranked mechanism): a new state in the SCI
+reconfig FSM writes CH_12 (tdrv_slice*_sel) on every OOB burst/gap transition - a 2-cycle
+(~20ns) write at the driver's output-current stage, downstream of FIFO/gearbox/serializer, so
+it bypasses the EI pipeline entirely. CSRs `_oob_txctl.sci_gate` + `_oob_sci_vals`
+(burst/gap values). CH_12 reads 0x51 in the non-boost build (slices 0/2/3 on main data),
+exactly as predicted. Gate + serializer D10.2 bursts vs the drive: no beacon suppression, no
+link. NOTE: scope verification of the gate is still missing (probe drift left even the
+reference carrier below trigger); the mechanism is implemented and sim-clean but electrically
+UNVERIFIED.
+
+**NEW MEASUREMENT TRAP (cost me a false positive tonight):** host-paced phase tests alias
+against the 10.003ms beacon. A 30ms software loop produced chi2=39.6 with a striking
+alternating histogram - but the control with the TX completely dead (gate burst value 0x00)
+gave chi2=40.0, and merely changing the loop period to 37ms flipped which case looked
+"clustered". **Only hardware-paced tests (free-running storm + seq_quiet) are valid for phase
+analysis.** This is the same class of error as the beacon attribution collapse and the PCIE_MODE
+self-coupling artifact - the third one this campaign.
+
+**State of the diagnosis**: with compliant COMRESET timing, full amplitude, serializer silenced
+during gaps, and three independent gating mechanisms tried, the drive shows zero reaction of any
+kind. The two surviving explanations are (1) the ~75MHz LDR carrier is outside what any SATA
+squelch is required to detect - the spec wants a 375MHz Gen1-rate carrier; (2) the LDR output is
+not differential at the drive (a single-leg probe cannot tell). Both are addressed by the same
+next step: **Gen1-rate D24.3 serializer content + the SCI slice gate**, plus a two-probe
+differential check when hands are available.

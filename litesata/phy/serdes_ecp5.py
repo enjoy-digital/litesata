@@ -166,13 +166,28 @@ class SerDesECP5SCIReconfig(LiteXModule):
 
         self.sci = sci = SerDesECP5SCI(serdes)
 
+        # OOB slice gate (see PHY): when enabled, this FSM stops its background refresh loop and
+        # instead writes CH_12 (tdrv_slice*_sel) on every burst/gap transition of the OOB
+        # generator. A write is 2 SCI cycles (~20ns at 100MHz), i.e. fast enough for SATA OOB,
+        # unlike FFC_EI_EN whose un-mute latency is 213-427ns (measured).
+        self.oob_gate_en  = Signal()
+        self.oob_gate_lvl = Signal()   # 1 = burst (slices on), 0 = gap (slices powered down)
+        self.oob_burst_val = Signal(8)
+        self.oob_gap_val   = Signal(8)
+        oob_lvl_d = Signal(reset=1)
+
         first = Signal()
         data  = Signal(8)
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             self.done.status.eq(1),
-            If(self.pause.storage,
+            If(self.oob_gate_en,
+                If(oob_lvl_d != self.oob_gate_lvl,
+                    NextValue(oob_lvl_d, self.oob_gate_lvl),
+                    NextState("OOB-GATE")
+                )
+            ).Elif(self.pause.storage,
                 If(self.we.wr_stb,
                     NextState("WRITE")
                 ),
@@ -181,6 +196,16 @@ class SerDesECP5SCIReconfig(LiteXModule):
                 )
             ).Else(
                 NextState("READ-CH-01")
+            )
+        )
+        fsm.act("OOB-GATE",
+            sci.chan_sel.eq(1),
+            sci.we.eq(1),
+            sci.adr.eq(0x12),
+            sci.dat_w.eq(Mux(oob_lvl_d, self.oob_burst_val, self.oob_gap_val)),
+            If(~first & sci.done,
+                sci.we.eq(0),
+                NextState("IDLE")
             )
         )
         fsm.act("READ",
@@ -413,6 +438,10 @@ class SerDesECP5(LiteXModule):
         # OOB: runtime silencing of the MAIN (serializer) TX driver while leaving the LDR aux
         # driver alive - gives EI-free OOB gaps that are releasable for the data phase (unlike
         # p_CHX_PCIE_MODE, which achieves the same silence but is a fuse).
+        self.sci_oob_gate_en   = Signal() # i: SCI slice gate enable.
+        self.sci_oob_gate_lvl  = Signal() # i: 1 = burst, 0 = gap.
+        self.sci_oob_burst_val = Signal(8)
+        self.sci_oob_gap_val   = Signal(8)
         self.tx_pwdn                = Signal() # i, quasi-static: power down the TX driver.
         self.tx_lane_rst            = Signal() # i, quasi-static: hold the TX lane in reset.
         self.ei_mode                = Signal() # i, quasi-static: 0 = EI masked during LDR drive
@@ -838,6 +867,10 @@ class SerDesECP5(LiteXModule):
         self.comb += sci_reconfig.reset.eq(~self.init.tx_ready)
         self.comb += sci_reconfig.sci.dual_sel.eq(dual)
         self.comb += sci_reconfig.loopback.eq(self.loopback)
+        self.comb += sci_reconfig.oob_gate_en.eq(self.sci_oob_gate_en)
+        self.comb += sci_reconfig.oob_gate_lvl.eq(self.sci_oob_gate_lvl)
+        self.comb += sci_reconfig.oob_burst_val.eq(self.sci_oob_burst_val)
+        self.comb += sci_reconfig.oob_gap_val.eq(self.sci_oob_gap_val)
         self.comb += sci_reconfig.rx_polarity.eq(rx_polarity)
         self.comb += sci_reconfig.tx_polarity.eq(tx_polarity)
         self.comb += sci_reconfig.rx_cdr_hold.eq(self.rx_cdr_hold)
