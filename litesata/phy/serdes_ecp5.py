@@ -365,6 +365,7 @@ class SerDesECP5(LiteXModule):
         oob_config  = {"ei", "ldr_tx", "ldr_rx"},
         pcs_mode    = "bypass",
         tx_boost    = False,
+        rx_los_lvl  = 4,
         pcie_mode   = False):
         assert dual       in [0, 1]
         assert channel    in [0, 1]
@@ -649,7 +650,8 @@ class SerDesECP5(LiteXModule):
             o_CHX_FFS_RLOS          = rx_los,
             p_CHX_RLOS_SEL          = "0b1",
             p_CHX_RX_LOS_EN         = "0b1",
-            p_CHX_RX_LOS_LVL        = "0b100",  # Lattice "TBD" (wizard value used)
+            p_CHX_RX_LOS_LVL        = "0b{:03b}".format(rx_los_lvl), # Lattice "TBD" (wizard value 0b100;
+                                                # lower = more sensitive, used for crosstalk hunting)
             p_CHX_RX_LOS_CEQ        = "0b11",   # Lattice "TBD" (wizard value used)
 
             # CHX RX — loss of lock

@@ -349,7 +349,8 @@ class COMChecker(LiteXModule):
 
 class ECP5LiteSATAPHY(LiteXModule):
     def __init__(self, refclk, pads, gen, clk_freq, data_width=16, dual=0, channel=0, refclk_freq=None,
-        oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False, tx_boost=False):
+        oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False, tx_boost=False,
+        rx_los_lvl=4):
         assert data_width in [16]
         assert gen in ["gen1", "gen2"]
         # Common signals
@@ -427,6 +428,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             oob_config  = oob_config,
             pcs_mode    = pcs_mode,
             tx_boost    = tx_boost,
+            rx_los_lvl  = rx_los_lvl,
             pcie_mode   = pcie_mode,
         )
         serdes.add_stream_endpoints()

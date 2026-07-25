@@ -100,6 +100,7 @@ class SATATestSoC(SoCMini):
         pcs_mode        = "bypass",
         pcie_mode       = False,
         tx_boost        = False,
+        rx_los_lvl      = 4,
     ):
         assert gen in ["gen1", "gen2"]
         assert analyzer_domain in ["sys", "tx", "rx"]
@@ -129,6 +130,7 @@ class SATATestSoC(SoCMini):
             pcs_mode   = pcs_mode,
             pcie_mode  = pcie_mode,
             tx_boost   = tx_boost,
+            rx_los_lvl = rx_los_lvl,
         )
 
         # SerDes TX/RX word clock measurement (debug).
@@ -218,7 +220,8 @@ class SATATestSoC(SoCMini):
                     0: [
                         serdes.source.data,
                         serdes.source.ctrl,
-                        Cat(*[serdes.decoders[i].invalid for i in range(2)]),
+                        serdes.decoders[0].invalid,
+                        serdes.decoders[1].invalid,
                         phy.source,
                     ],
                 }
@@ -251,6 +254,8 @@ def main():
         help="Set CHX_PCIE_MODE (g8b10b mode only).")
     parser.add_argument("--tx-boost", action="store_true",
         help="Max TX driver slice currents (OOB hearing-margin experiment).")
+    parser.add_argument("--rx-los-lvl", default=4, type=int,
+        help="CHX_RX_LOS_LVL threshold 0-7 (default 4; lower = more sensitive).")
     args = parser.parse_args()
 
     platform = lambdaconcept_ecpix5.Platform(device=args.device, toolchain=args.toolchain)
@@ -265,6 +270,7 @@ def main():
         pcs_mode        = args.pcs_mode,
         pcie_mode       = args.pcie_mode,
         tx_boost        = args.tx_boost,
+        rx_los_lvl      = args.rx_los_lvl,
     )
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)

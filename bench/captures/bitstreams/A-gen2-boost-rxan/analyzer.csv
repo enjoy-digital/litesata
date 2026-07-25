@@ -1,0 +1,17 @@
+config,None,data_width,42
+config,None,storage_width,42
+config,None,depth,1024
+config,None,samplerate,150000000
+config,None,subsampler_width,16
+config,None,with_rle,0
+config,None,rle_length,256
+signal,0,phy_serdesecp5_source_payload_data,16
+signal,0,phy_serdesecp5_source_payload_ctrl,2
+signal,0,phy_serdesecp5_decoder0_invalid,1
+signal,0,phy_serdesecp5_decoder1_invalid,1
+signal,0,phy_source_source_valid,1
+signal,0,phy_source_source_ready,1
+signal,0,phy_source_source_first,1
+signal,0,phy_source_source_last,1
+signal,0,phy_source_source_payload_data,16
+signal,0,phy_source_source_payload_charisk,2

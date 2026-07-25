@@ -286,3 +286,40 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   _oob_seq_quiet, _oob_lat, _oob_beacon, _oob_rxdet, serdes tx_boost (+ bench --tx-boost),
   wake_gap widened to 8 bits. 14 ECP5 tests green throughout.
   Board state: A-gen2-boost bypass bitstream loaded, ctrl parked, line at EI (silent).
+
+## 2026-07-25 remote-only addendum - internal loopback + crosstalk hunt (no hands available)
+- [SCI raw access] sci_reconfig CSRs (pause/sel/adr/we/re/dat) work on the live bitstream; full
+  CH reg dump recorded (see session log). Protocol: pause=1 freezes the reconfig FSM (which
+  otherwise continuously rewrites CH 0x15/0x18 from the wrapper control signals - raw writes
+  only stick while paused; cdr_hold/polarity changes need pause=0 to propagate).
+- [SCI serial loopback: NONFUNCTIONAL] Swept CH reg 0x15 lb_ctl nibble through all 15 non-zero
+  values (writes verified by readback) with three independent indicators: (1) drive beacon
+  presence on RX (never vanished -> RX input mux never switched), (2) RX decode content via new
+  rx-domain analyzer build (all-zero always), (3) RX recovered word clock with CDR released and
+  continuous D10.2 on TX (never snapped to 150MHz -> CDR never saw looped data). liteiclink's
+  "FIXME: lb_ctl 0b0001 does not seem enough" is CONFIRMED: no SCI-only serial loopback in this
+  10BSER/trellis config. SB_BYPASS/RX_SB_BYPASS fuses are 0 (SB active, same as Diamond ref).
+  => Internal loopback CANNOT substitute for a physical loopback cable.
+- [NEW SILICON FINDING - gen2 RX word clock fragility] With CDR released (cdrhold_dis) on an
+  idle line, FF_RX_PCLK collapses/wanders (~1-40MHz measured vs 150MHz nominal; clock-counter
+  latch CDC itself degrades in this state, negative deltas). Never noticed before because ALL
+  OOB instrumentation (RLOS, COMChecker, recorders) is clockless/sys-domain. Re-verify CDR
+  acquisition + word clock once a real link partner sends ALIGNs; potential post-link-up
+  landmine. (Historical note: M0 "PRBS BER 0" was already flagged VACUOUS on night one; and the
+  01:25 M1 entry literally says "SSD sends spontaneous COMINITs" - the beacon was observed and
+  its attribution hazard missed. Hindsight is 20/20.)
+- [RX_LOS_LVL knob + crosstalk hunt] p_CHX_RX_LOS_LVL plumbed as serdes/bench arg
+  (--rx-los-lvl, default 4 = wizard value). Calibration: LVL=1 is below the RX noise floor
+  (RLOS saturates >65k bursts/s on a quiet line); LVL=2 is clean (600/s beacon only).
+  Crosstalk hunt at LVL=2: TX storms (LDR + serializer/D102/boost) produce ZERO burst-rate
+  increase and zero crosstalk-class (<5us) latencies on the RX pair -> no detectable NEXT from
+  our TX into the RX pair. INCONCLUSIVE by design (expected cable NEXT ~10mVppd is likely below
+  the LVL=2 threshold); only a positive would have been informative.
+- [bench fix] rx-domain analyzer group used an unhashable Cat() (never buildable since written)
+  - split into individual decoder invalid signals; A-gen2-boost-rxan archived.
+- Bitstream archives added: A-gen2-boost-rxan (rx-domain analyzer), A-gen2-los1, A-gen2-los2.
+- CONCLUSION unchanged and sharpened: every remote avenue is now exhausted. The fault domain is
+  strictly physical/external (TX path beyond C113, or drive-side gap visibility through the AC
+  caps). Next session needs hands: (1) SATA loopback cable TX->RX (single decisive experiment),
+  (2) both-legs/both-sides probing of C112/C113, (3) cable swap + continuity.
+  Board state: A-gen2-boost loaded, ctrl parked, TX at EI, beacon 600 bursts/s confirmed.
