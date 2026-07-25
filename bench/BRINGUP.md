@@ -375,3 +375,44 @@ DC termination). With a drive attached the drive terminates DC and the island va
   (2) precharge carrier (>=35s driven) then immediate EI-gapped clean-shot handshake (bursts at
   ~full amplitude for the first seconds); (3) scope C113 during both to confirm burst amplitude
   at the drive-relevant states.
+
+## Campaign 13 (2026-07-25, drive replugged): root cause CLOSED - EI mute is unfixable in silicon
+
+Drive replugged after loopback campaign; beacon textbook (600 bursts/s, 100-110ns/310-330ns).
+Handshake attempts (all no-link, RX = pure beacon, zero COMWAKE-class gaps):
+  A) gap_mode=1 driven-gap handshake  B) 40s precharge + driven-gap  C/D) precharge + legacy-EI
+  gaps (scoped)  E) force_wake leniency shot.
+
+DEFINITIVE with-drive measurements (drive termination = no loopback island effects):
+- LDR carrier: 236-256mV at t=1s, flat at 30s => the seconds-scale "charge" dynamics of the
+  loopback night were the DC-floating island, NOT the driver. With a real load there is no
+  slow charging.
+- EI-gapped OOB bursts NEVER cross 25mV at C113 (scope NORM trigger): trail 4-15 (bursts
+  133-207ns), gaps 320ns-1.7us, legacy or shaped, launched from a charged carrier or not.
+  Meanwhile the same LDR content as continuous carrier = 236mV, driven-gap storm = 158mV+.
+  => FFC_EI_EN mute LATCHES: un-mute >> 1.7us (likely needs sustained drive). No compliant
+  OOB burst can follow a real EI gap on this silicon config. This retro-explains the entire
+  3-drive deafness (every handshake burst was sub-30mV).
+- PCIe path (G8B10B + p_CHX_PCIE_MODE=1, FFC_PCIE_CT as idle, oob_config pcie_ct): TX
+  completely dead including the driven-gap control => PCIe EI unusable too (matches the old
+  bypass-mode note). ALL silicon EI mechanisms are now closed.
+
+THE DILEMMA (final): full amplitude XOR real gaps.
+- Driven-constant gaps (gap_mode=1): full amplitude, but through our 100nF caps into the
+  drive's 50R the differential decays with tau=5us => a 320ns "gap" retains ~94% swing =>
+  invisible to an amplitude squelch. (Our transition-based rx_sel=1 sees them; this drive's
+  squelch evidently does not.)
+- Real EI gaps: bursts muted to <25mV.
+
+HARDWARE fixes identified (need soldering, pick one):
+1. **Swap C112/C113 from 100nF to ~1nF** (tau=50ns): driven-constant gaps then decay to ~2%
+   within 320ns => drive-visible OOB with FULL amplitude and NO silicon EI involved.
+   gap_mode=1 handshake + 1nF caps is the complete recipe. (4.7nF marginal, 10nF too slow.
+   1.5/3.0Gbps data through 1nF: Xc~0.1R, baseline wander 50ns >> 3.3ns max run - fine.)
+2. Fabric-IO differential pair resistively bridged onto the TX pair for OOB (LUNA-inverse;
+   more invasive).
+Note: drive long-carrier events (655us continuous RX activity, only during our TX phases,
+never on silent line) remain unexplained - possibly TX->RX crosstalk at RLOS threshold,
+possibly a real drive reaction; content capture needed if pursued.
+
+Board state: B-gen2-g8b10b-fix reloaded, ctrl parked, line silent, drive beaconing happily.
