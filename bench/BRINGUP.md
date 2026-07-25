@@ -500,3 +500,17 @@ series switch as production-grade alternative; TXPWDNB/PCIE_DET_EN characterizat
   enabled as the open toolchain can express.
 - Drive still silent to PCIe-EI OOB (LDR and serializer bursts). Emission verification
   blocked on: scope power-cycle (SCPI crashed) OR drive->loopback swap (RLOS self-decode).
+
+### Campaign 15 addendum 2: scope recovered via VXI-11; PCIe-EI vs LDR exclusivity
+- Scope SCPI (raw 5025) dead but VXI-11 (port 111) alive: device_clear() + full control
+  restored WITHOUT power cycle. bench/sds1104.py now has SDS1104XEVXI transport.
+- PCIE_MODE=1: TX completely dead (LDR carrier 4mV) - BUT the PCIe receiver-detect hard
+  sequence WORKS in this mode: FFC_PCIE_DET_EN + CT pulse -> FFS_PCIE_DONE=1, PCIE_CON=1
+  (drive termination sensed THROUGH the 100nF caps; never worked in bypass). New capability.
+- PCIE_EI_EN=1 alone (PCIE_MODE=0): LDR carrier STILL dead. Also dead with FFC_EI_EN wired
+  (unconnected-port confound eliminated). Attribution: the PCIe-EI flag feature disables the
+  LDR output path (mutually exclusive muxing). G8B10B ref build (EI_EN=0): 152-256mV alive.
+- Consequence: PCIe-EI (bits 11/23) can only be verified with SERIALIZER burst content,
+  which is invisible to the 100MHz scope. FINAL VERIFICATION = loopback swap: RLOS decode of
+  our own serializer-burst + EI-bit-gap storm (expect beacon-like ~107ns bursts / 320ns gaps
+  at wake_gap=48 if the feature works).

@@ -785,9 +785,10 @@ class SerDesECP5(LiteXModule):
                 # electrical idle: per-byte EI flags ride the TX bus (bits 11/23, TN-02206
                 # Table 7.3, <20UI to reach EI). FFC_PCIE_CT is NOT this (it is the receiver
                 # detect strobe) and FFC_EI_EN is the slow asynchronous path.
+                # PCIE_MODE=1 kills the TX outright (holds it idle via the PCIe power-state
+                # machinery, receiver-detect completing notwithstanding - measured). The EI-flag
+                # feature (PCIE_EI_EN) is an independent fuse: enable it alone.
                 self.serdes_params.update(
-                    p_CHX_PROTOCOL   = "PCIE",
-                    p_CHX_PCIE_MODE  = "0b1",
                     p_CHX_PCIE_EI_EN = "0b1", # feature enable for the per-byte EI flags
                 )
             if pcie_mode:

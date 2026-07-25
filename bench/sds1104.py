@@ -9,6 +9,29 @@
 
 import time
 import re
+import socket
+
+class SDS1104XEVXI:
+    """VXI-11 transport variant (port 111/RPC). The raw-socket SCPI server (5025) crashes
+    under heavy use and never recovers without a power cycle; the VXI-11 server survives and
+    its device_clear() unsticks the parser. Requires python-vxi11."""
+    def __init__(self, host, timeout=10.0):
+        import vxi11
+        self.i = vxi11.Instrument(host)
+        self.i.timeout = timeout
+        self.i.clear()
+    def cmd(self, c):
+        self.i.write(c)
+    def query(self, c):
+        return self.i.ask(c)
+    def query_bin(self, c):
+        self.i.write(c)
+        data = self.i.read_raw()
+        i = data.index(b"#9")
+        n = int(data[i+2:i+11])
+        return data[i+11:i+11+n]
+    def close(self):
+        self.i.close()
 
 class SDS1104XE:
     def __init__(self, host, port=5025, timeout=5.0):
