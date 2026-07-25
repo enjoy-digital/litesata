@@ -514,3 +514,50 @@ series switch as production-grade alternative; TXPWDNB/PCIE_DET_EN characterizat
   which is invisible to the 100MHz scope. FINAL VERIFICATION = loopback swap: RLOS decode of
   our own serializer-burst + EI-bit-gap storm (expect beacon-like ~107ns bursts / 320ns gaps
   at wake_gap=48 if the feature works).
+
+## Campaign 16 (2026-07-25/26 night): EI characterized, first spec-shaped OOB waveform, 3 retractions
+
+**Codex's correction was right: EI does NOT latch.** Measured un-mute latency by sweeping the
+EI release lead (widened ei_trail, PRE pre-release): bursts are absent at 213ns lead, present
+at 427ns (162mV) and full at 853ns+ (222-238mV). So EI un-mute is 213-427ns =>
+**minimum EI-carved gap ~400ns: COMINIT/COMRESET window (175-525ns) is REACHABLE, COMWAKE
+(55-175ns) is not.** ei_carve mode (LDR drives the whole sequence, EI carves gaps) added and
+tested: every burst eaten, as predicted by the 400ns un-mute.
+
+**FIRST SPEC-SHAPED OOB WAVEFORM OF THE CAMPAIGN.** Root cause of the previous "amplitude
+starvation": with `--oob-config ei,...` the FFC_EI_EN port is wired and a momentary EI assert
+between sequences mutes the LDR for ~400ns, eating the bursts. Build WITHOUT the ei port
+(`--oob-config ldr_tx,ldr_rx`, bitstream D-gen2-noei) gives clean LDR OOB, wire-verified at
+C113: bursts 176-408mV with gaps of **81-108ns (COMWAKE window!)** and, at wake_gap=48,
+**270-297ns (COMINIT window)**. Burst-train amplitude sag is fixed by longer bursts
+(new `_oob_burst_len` CSR: 427ns bursts give 174/142/138/134mV, uniform).
+
+**New runtime TX controls** (`_oob_txctl`): FFC_TXPWDNB (pwdn), FFC_LANE_TX_RST (lane_rst),
+lane_rst_auto (assert during OOB phase, release for data), pwdn_gap (gaps by power-down).
+- pwdn=1: main driver down, LDR alive (224mV) -> LDR OOB with EI-free gaps.
+- lane_rst=1: LDR carrier peaks at 402mV (best of campaign) but LDR *bursts* vanish.
+- pwdn as a gap gate: produces a large ~406mV LOW-FREQUENCY transient, not clean gating.
+- tx clock survives both (154MHz).
+
+**THREE RETRACTIONS (instrument artifacts, all caught by controls):**
+1. "chi2=3600 drive heard our COMRESET": with the LDR disabled and NOTHING emitted, the RX
+   still reported the identical 0.52us fixed latency and identical chi2 => internal TX->RX
+   self-coupling. **Present only in PCIE_MODE builds**; the D-gen2-noei build's RX is clean
+   (600/s in every TX state). New `_oob_lat_holdoff` CSR rejects such artifacts by time.
+2. Campaign 14's "drive reacts to our carrier with 655us events": these occur at the SAME rate
+   on a SILENT line (4/8 windows silent vs 1/8 with carrier). No evidence the drive's receiver
+   ever sees us. RETRACTED.
+3. "PCIE_MODE/PCIE_EI_EN kills the serializer (8mV)": a healthy serializer carrier also reads
+   only 20mV at C113 - the 100MHz scope simply cannot see 3Gbps content. Serializer amplitude
+   claims from any campaign are void. (PCIE_EI_EN=1 killing the *LDR* is real and confirmed by
+   SCI: channel reg 0x02 bit 6 = static force-idle; clearing it via SCI revives the carrier.)
+
+**Drive still unresponsive** to: spec-shaped LDR COMWAKE (full amplitude, 81-108ns gaps),
+serializer bursts with pwdn gaps (all lead/trail), paced and continuous storms. Beacon
+unchanged at 600 bursts/s throughout, gaps always [310-330ns].
+
+**Live hypothesis**: LDR content is a ~75MHz square - far below a SATA receiver's detection
+band (CTLE/AGC optimized for 1.5-6Gbps, internally AC-coupled). If so, LDR-based OOB can never
+be heard regardless of amplitude/timing, and the only viable transmitter is serializer content
+(line-rate) with a gating mechanism. EI is the only clean gate we have, and at ~400ns it can
+only make COMRESET/COMINIT-timed gaps - which IS spec-legal and worth a beacon-phase test.

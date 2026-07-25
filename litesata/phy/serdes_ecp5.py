@@ -370,7 +370,7 @@ class SerDesECP5(LiteXModule):
         assert dual       in [0, 1]
         assert channel    in [0, 1]
         assert data_width in [20]
-        assert pcs_mode   in ["bypass", "g8b10b", "pcie"]
+        assert pcs_mode   in ["bypass", "g8b10b", "pcie", "pcie_bypass"]
         self.pcs_mode = pcs_mode
         self.dual       = dual
         self.channel    = channel
@@ -410,6 +410,11 @@ class SerDesECP5(LiteXModule):
         self.tx_oob_active          = Signal() # i, tx domain: OOB sequence in progress.
         self.tx_oob_ei_req          = Signal() # i, tx domain: shaped EI request (lead/trail comp.).
         self.rx_oob_data            = Signal() # o, async   : raw LDR_RX2CORE line observation.
+        # OOB: runtime silencing of the MAIN (serializer) TX driver while leaving the LDR aux
+        # driver alive - gives EI-free OOB gaps that are releasable for the data phase (unlike
+        # p_CHX_PCIE_MODE, which achieves the same silence but is a fuse).
+        self.tx_pwdn                = Signal() # i, quasi-static: power down the TX driver.
+        self.tx_lane_rst            = Signal() # i, quasi-static: hold the TX lane in reset.
         self.ei_mode                = Signal() # i, quasi-static: 0 = EI masked during LDR drive
                                                #                  (LUNA-style), 1 = shaped EI
                                                #                  (COMGenerator lead/trail comp.).
@@ -421,7 +426,7 @@ class SerDesECP5(LiteXModule):
 
         self.nwords = nwords = data_width//10
 
-        if pcs_mode == "bypass":
+        if pcs_mode in ["bypass", "pcie_bypass"]:
             self.encoder  = ClockDomainsRenamer("tx")(Encoder(nwords, True))
             self.decoders = [ClockDomainsRenamer("rx")(Decoder(True)) for _ in range(nwords)]
         else:
@@ -682,11 +687,11 @@ class SerDesECP5(LiteXModule):
             # CHX transmit -------------------------------------------------------------------------
             # CHX TX — power management
             p_CHX_TPWDNB            = "0b1",
-            i_CHX_FFC_TXPWDNB       = 1,
+            i_CHX_FFC_TXPWDNB       = ~self.tx_pwdn,
 
             # CHX TX — reset
             i_D_FFC_TRST            = ~self.tx_enable | init.tx_rst,
-            i_CHX_FFC_LANE_TX_RST   = ~self.tx_enable | init.pcs_rst,
+            i_CHX_FFC_LANE_TX_RST   = ~self.tx_enable | init.pcs_rst | self.tx_lane_rst,
 
             # CHX TX - output
             o_CHX_HDOUTP            = tx_pads.p,
@@ -770,6 +775,13 @@ class SerDesECP5(LiteXModule):
         # the designated word) - unlike the slow asynchronous behavior measured in the 10BSER/UC
         # bypass configuration. Alignment: the link state machine must be disabled and the
         # edge-sensitive FFC_ENABLE_CGALIGN input pulsed to re-arm the word aligner (per LUNA).
+        if pcs_mode == "pcie_bypass":
+            # OOB: EI-flag feature on top of the raw 10BSER bypass datapath: bits 11/23 are
+            # unused in bypass gearing, so the per-byte EI flags can ride them if the feature
+            # samples the bus in this mode (experiment: raw patterns give scope-visible content).
+            self.serdes_params.update(
+                p_CHX_PCIE_EI_EN = "0b1",
+            )
         if pcs_mode in ["g8b10b", "pcie"]:
             self.serdes_params.update(
                 p_CHX_PROTOCOL           = "G8B10B",
@@ -785,12 +797,18 @@ class SerDesECP5(LiteXModule):
                 # electrical idle: per-byte EI flags ride the TX bus (bits 11/23, TN-02206
                 # Table 7.3, <20UI to reach EI). FFC_PCIE_CT is NOT this (it is the receiver
                 # detect strobe) and FFC_EI_EN is the slow asynchronous path.
-                # PCIE_MODE=1 kills the TX outright (holds it idle via the PCIe power-state
-                # machinery, receiver-detect completing notwithstanding - measured). The EI-flag
-                # feature (PCIE_EI_EN) is an independent fuse: enable it alone.
+                # Diamond PCIe reference recipe (pcie_2p5_100mhzrefclk.v): PCIE_MODE=1 with
+                # PCIE_EI_EN=0. PCIE_EI_EN is NOT a feature enable - it is a STATIC force-idle
+                # (the fuse image of SCI CH_02 bit 6, hardware-verified: setting it kills the TX,
+                # clearing it via SCI revives it). The per-byte EI flags (bits 11/23) are the
+                # dynamic mechanism and only have EI semantics in PCIe mode.
                 self.serdes_params.update(
-                    p_CHX_PCIE_EI_EN = "0b1", # feature enable for the per-byte EI flags
+                    p_CHX_PCIE_MODE  = "0b1",
+                    p_CHX_PCIE_EI_EN = "0b0",
                 )
+                # Keep the slow asynchronous FFC_EI_EN path OUT of the picture in this mode:
+                # idle is requested exclusively through the word-synchronous flags.
+                self.serdes_params["i_CHX_FFC_EI_EN"] = 0
             if pcie_mode:
                 self.serdes_params.update(p_CHX_PCIE_MODE = "0b1")
             del self.serdes_params["i_CHX_FFC_SIGNAL_DETECT"]
@@ -825,7 +843,7 @@ class SerDesECP5(LiteXModule):
         self.comb += sci_reconfig.rx_cdr_hold.eq(self.rx_cdr_hold)
 
         # TX/RX Datapaths (and PRBS in bypass mode) ------------------------------------------------
-        if pcs_mode == "bypass":
+        if pcs_mode in ["bypass", "pcie_bypass"]:
             self.tx_prbs = ClockDomainsRenamer("tx")(PRBSTX(data_width, reverse=True))
             self.comb += self.tx_prbs.config.eq(tx_prbs_config)
             self.comb += [
@@ -850,6 +868,11 @@ class SerDesECP5(LiteXModule):
                 rx_data[ 0:10].eq(rx_bus[ 0:10]),
                 rx_data[10:20].eq(rx_bus[12:22]),
             ]
+            if pcs_mode == "pcie_bypass":
+                self.comb += [
+                    tx_bus[11].eq(ei_en),
+                    tx_bus[23].eq(ei_en),
+                ]
             for i in range(nwords):
                 self.sync.rx += self.decoders[i].input.eq(rx_data[10*i:10*(i+1)])
             self.sync.rx += self.rx_prbs.i.eq(rx_data)
@@ -903,7 +926,7 @@ class SerDesECP5(LiteXModule):
 
         self.comb += sink.ready.eq(1)
         self.comb += source.valid.eq(1)
-        if self.pcs_mode == "bypass":
+        if self.pcs_mode in ["bypass", "pcie_bypass"]:
             for i in range(self.nwords):
                 self.comb += [
                     self.encoder.k[i].eq(sink.ctrl[i]),

@@ -107,6 +107,12 @@ class COMGenerator(LiteXModule):
         #             gap may be stretched to gain EI engage margin).
         self.ei_lead  = Signal(5)                    # i
         self.ei_trail = Signal(8)                    # i
+        # ei_carve: keep the LDR driving for the WHOLE sequence and carve the gaps with EI
+        # requests instead of toggling the LDR enable (whose analog settling makes burst 2..6
+        # amplitude sag from 242mV to ~85mV, measured). The gap shape then comes purely from the
+        # EI engage/release latencies, compensated with ei_lead/ei_trail.
+        self.ei_carve = Signal()                     # i
+        self.burst_len = Signal(8, reset=burst_cycles) # i: burst length override (tx cycles).
         self.wake_gap = Signal(8, reset=wake_cycles) # i
         self.gap_mode = Signal()                     # i: 0 = EI gaps / 1 = LDR-constant gaps
                                                      #    (no transitions, EI off in-sequence).
@@ -174,10 +180,11 @@ class COMGenerator(LiteXModule):
             # lag (the line carries serializer content during PRE, extending burst 1 backwards).
             self.active.eq(1),
             self.tx_idle.eq(1),
+            self.tx_oob_en.eq(self.ei_carve),
             self.ei_req.eq(0),
             NextValue(count, count - 1),
             If(count == 0,
-                NextValue(count, burst_cycles - 1),
+                NextValue(count, self.burst_len - 1),
                 NextState("BURST")
             )
         )
@@ -206,9 +213,11 @@ class COMGenerator(LiteXModule):
             If(kick_active,
                 self.tx_oob_en.eq(1),
             ).Else(
-                self.tx_oob_en.eq(self.gap_mode), # LDR-constant gaps: keep driving.
+                # LDR-constant gaps / carve mode: keep driving.
+                self.tx_oob_en.eq(self.gap_mode | self.ei_carve),
             ),
-            self.ei_req.eq(~self.gap_mode & ~kick_active & (count >= self.ei_trail)),
+            self.ei_req.eq(((~self.gap_mode) | self.ei_carve) & ~kick_active &
+                           (count >= self.ei_trail)),
             NextValue(count, count - 1),
             If(count == 0,
                 If(loops == 0,
@@ -218,12 +227,12 @@ class COMGenerator(LiteXModule):
                         # Back-to-back sequence repeat (continuous COMRESET/COMWAKE assertion).
                         NextValue(seqs, seqs - 1),
                         NextValue(loops, 6 - 1),
-                        NextValue(count, burst_cycles - 1),
+                        NextValue(count, self.burst_len - 1),
                         NextState("BURST")
                     )
                 ).Else(
                     NextValue(loops, loops - 1),
-                    NextValue(count, burst_cycles - 1),
+                    NextValue(count, self.burst_len - 1),
                     NextState("BURST")
                 )
             )
@@ -473,6 +482,12 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_ctrl_dis = Signal() # Park ctrl: mask its OOB TX requests + force EI (silent
                                      # line for attribution-clean OOB experiments).
         self.oob_align_force = Signal() # Line test: force continuous ALIGN primitive transmission.
+        self.oob_burst_len = Signal(8, reset=round(160*tx_clk_freq/1.5e9))
+        self.oob_pwdn_gap    = Signal() # OOB gaps made by main-TX power-down (serializer bursts).
+        self.oob_lane_rst_auto = Signal() # Auto lane-reset during the OOB phase.
+        self.oob_tx_pwdn     = Signal() # Silence the main TX driver (LDR stays alive).
+        self.oob_tx_lane_rst = Signal() # Hold the TX lane in reset.
+        self.oob_ei_carve  = Signal() # LDR drives continuously, EI carves the gaps.
         self.oob_echo_mask = Signal() # Loopback: mask self-echo OOB detections while stb high.
         self.oob_pat_force = Signal() # Line test: force continuous raw-pattern transmission with
                                       # EI off (DC amplitude measurement on scope).
@@ -578,6 +593,9 @@ class ECP5LiteSATAPHY(LiteXModule):
                                        # (fund. = linerate/4 = Gen1-equivalent at gen2).
         ei_lead_tx    = Signal(5)
         ei_trail_tx   = Signal(8)
+        ei_carve_tx   = Signal()
+        pwdn_gap_tx   = Signal()
+        burst_len_tx  = Signal(8, reset=self.oob_burst_len.reset.value)
         wake_gap_tx   = Signal(8, reset=com_gen.wake_cycles)
         gap_mode_tx   = Signal()
         burst_mode_tx = Signal()
@@ -589,6 +607,9 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.specials += [
             MultiReg(self.oob_ei_lead,    ei_lead_tx,    "tx"),
             MultiReg(self.oob_ei_trail,   ei_trail_tx,   "tx"),
+            MultiReg(self.oob_ei_carve,   ei_carve_tx,   "tx"),
+            MultiReg(self.oob_pwdn_gap,   pwdn_gap_tx,   "tx"),
+            MultiReg(self.oob_burst_len,  burst_len_tx,  "tx"),
             MultiReg(self.oob_wake_gap,   wake_gap_tx,   "tx"),
             MultiReg(self.oob_gap_mode,   gap_mode_tx,   "tx"),
             MultiReg(self.oob_burst_mode, burst_mode_tx, "tx"),
@@ -610,6 +631,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             com_gen.toggle_div.eq(toggle_div_tx),
             com_gen.ei_lead.eq(ei_lead_tx),
             com_gen.ei_trail.eq(ei_trail_tx),
+            com_gen.ei_carve.eq(ei_carve_tx),
+            com_gen.burst_len.eq(burst_len_tx),
             com_gen.wake_gap.eq(wake_gap_tx),
             com_gen.gap_mode.eq(gap_mode_tx),
             com_gen.repeat.eq(repeat_tx),
@@ -621,6 +644,17 @@ class ECP5LiteSATAPHY(LiteXModule):
             serdes.tx_oob_idle.eq(com_gen.tx_idle),
             serdes.tx_oob_active.eq(com_gen.active),
             serdes.tx_oob_ei_req.eq(com_gen.ei_req),
+            # pwdn_gap: make the OOB gaps by POWERING DOWN the main TX driver, so the bursts can
+            # carry line-rate serializer content (a SATA squelch expects GHz energy; the LDR aux
+            # path can only make a ~75MHz square, likely far below the receiver's detection band).
+            # FFC_TXPWDNB is a direct fabric port, so this avoids the EI pipeline entirely.
+            serdes.tx_pwdn.eq(self.oob_tx_pwdn | (pwdn_gap_tx & com_gen.ei_req)),
+            # lane_rst_auto: hold the main TX driver in reset for the whole OOB phase (ctrl keeps
+            # tx_idle asserted until AWAIT-ALIGN), then release it for the data phase. This is the
+            # runtime equivalent of p_CHX_PCIE_MODE's permanent silence: the LDR aux driver stays
+            # alive (402mV, its best amplitude) and OOB gaps need no EI request at all.
+            serdes.tx_lane_rst.eq(self.oob_tx_lane_rst |
+                                  (self.oob_lane_rst_auto & self.tx_idle & ~self.oob_pat_force)),
         ]
 
         # tx clk -> sys clk
@@ -725,7 +759,19 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Loopback: mask self-echo OOB detections while our request strobe is high."),
             CSRField("align_force", size=1, offset=29,
                 description="Force continuous ALIGN primitive transmission (speed-negotiation answer test)."),
+            CSRField("ei_carve", size=1, offset=30,
+                description="LDR drives the whole sequence; EI carves the gaps (no enable toggling)."),
         ])
+        self._oob_txctl = CSRStorage(fields=[
+            CSRField("pwdn",     size=1, offset=0, description="Power down the main TX driver."),
+            CSRField("lane_rst", size=1, offset=1, description="Hold the TX lane in reset."),
+            CSRField("lane_rst_auto", size=1, offset=2,
+                description="Hold the TX lane in reset during the OOB phase, release for data."),
+            CSRField("pwdn_gap", size=1, offset=3,
+                description="Make OOB gaps by powering down the main TX driver (serializer bursts)."),
+        ])
+        self._oob_burst_len = CSRStorage(8, reset=self.oob_burst_len.reset.value,
+            description="OOB burst length in tx cycles (16 = 106.7ns spec nominal).")
         self._oob_pattern = CSRStorage(16, reset=0x4A4A,
             description="OOB burst datapath word when d102 is set (0x4A4A=D10.2, 0x3333=Gen1-rate-equivalent).")
         self._oob_quiet = CSRStorage(16, reset=self.com_check.quiet_cycles.reset.value,
@@ -752,6 +798,12 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_pat_force.eq(  self._oob_control.fields.pat_force),
             self.oob_echo_mask.eq(  self._oob_control.fields.echo_mask),
             self.oob_align_force.eq(self._oob_control.fields.align_force),
+            self.oob_ei_carve.eq(  self._oob_control.fields.ei_carve),
+            self.oob_burst_len.eq( self._oob_burst_len.storage),
+            self.oob_tx_pwdn.eq(     self._oob_txctl.fields.pwdn),
+            self.oob_tx_lane_rst.eq( self._oob_txctl.fields.lane_rst),
+            self.oob_lane_rst_auto.eq(self._oob_txctl.fields.lane_rst_auto),
+            self.oob_pwdn_gap.eq(    self._oob_txctl.fields.pwdn_gap),
             self.oob_seq_quiet.eq(  self._oob_seq_quiet.storage),
             self.oob_kick.eq(       self._oob_control.fields.kick),
             self.oob_pattern.eq(    self._oob_pattern.storage),
@@ -867,6 +919,9 @@ class ECP5LiteSATAPHY(LiteXModule):
                                                      "sequence end to next RX burst start.")
         self._oob_beacon = CSRStatus(32, description="[24]=valid, [23:0]=sys cycles between RX "
                                                      "beacon starts (gap > 100us qualifies).")
+        self._oob_lat_holdoff = CSRStorage(16, description=
+            "Latency instrument: ignore RX bursts within N sys cycles after TX sequence end "
+            "(rejects the TX-correlated internal self-coupling artifact, ~0.5us).")
         lat_cnt     = Signal(24)
         lat_run     = Signal()
         bcn_cnt     = Signal(24)
@@ -883,7 +938,7 @@ class ECP5LiteSATAPHY(LiteXModule):
                 If(self.txcomfinish,
                     lat_cnt.eq(0),
                     lat_run.eq(1),
-                ).Elif(lat_run & burst_start,
+                ).Elif(lat_run & burst_start & (lat_cnt >= self._oob_lat_holdoff.storage),
                     self._oob_lat.status.eq(Cat(lat_cnt, 1)),
                     lat_run.eq(0),
                 ).Elif(lat_run & (lat_cnt != (2**24 - 1)),
