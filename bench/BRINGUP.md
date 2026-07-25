@@ -488,3 +488,15 @@ NEXT (needs hands, either one):
 Also queued from review: empirical tau measurement (driven carrier -> 20-50us constant gap,
 fit decay at connector side); cap choice 470-680pF (NOT 1nF, NOT 10nF) if soldering; RF
 series switch as production-grade alternative; TXPWDNB/PCIE_DET_EN characterization.
+
+### Campaign 15 addendum: fuse-level verification of the PCIe-EI config
+- nextpnr has NO CHX_PROTOCOL support (silently ignored, same class as D_TX_MAX_RATE).
+- BUT the trellis DB has no DCU.CHx_PROTOCOL entry either, despite the fuzzer fuzzing it =>
+  the enum touches NO fuses: Diamond's PROTOCOL attribute is a wizard-level macro; the real
+  configuration is entirely the individual words (UC_MODE, ENC/DEC_BYPASS, PCIE_MODE,
+  PCIE_EI_EN, CTC...). p_CHX_PROTOCOL can be dropped from the wrapper.
+- Emitted .config verified: DCU.CH0_PCIE_MODE=1, DCU.CH0_PCIE_EI_EN=1, and a full diff of
+  DB config words vs our emitted words shows NOTHING missing. The PCIe-EI feature is as
+  enabled as the open toolchain can express.
+- Drive still silent to PCIe-EI OOB (LDR and serializer bursts). Emission verification
+  blocked on: scope power-cycle (SCPI crashed) OR drive->loopback swap (RLOS self-decode).
