@@ -561,3 +561,34 @@ band (CTLE/AGC optimized for 1.5-6Gbps, internally AC-coupled). If so, LDR-based
 be heard regardless of amplitude/timing, and the only viable transmitter is serializer content
 (line-rate) with a gating mechanism. EI is the only clean gate we have, and at ~400ns it can
 only make COMRESET/COMINIT-timed gaps - which IS spec-legal and worth a beacon-phase test.
+
+### Campaign 16 addendum: cleanest deafness statement + SCI TX-driver register map
+
+- **Beacon interval instrument, 250 intervals per condition: 10.0029ms, sd = 0.0000ms, zero
+  outliers** - identical for silent line, spec-shaped LDR COMWAKE storm, LDR COMRESET storm,
+  and long-burst (427ns) COMWAKE. The drive's beacon is a perfect free-running oscillator; our
+  OOB does not perturb it by even one 10ns tick. This is the strongest deafness evidence yet.
+- Full ctrl handshake with the clean LDR waveform (5 variants: 107/213ns bursts, 107/160ns
+  gaps, main driver powered down, both RX detectors): no link, beacon unchanged.
+- Serializer bursts + pwdn gaps, ctrl handshake, lead/trail swept 0-53ns: no link.
+- **TN-02206 SCI TX register map recovered** (via external consult; addresses are direct, sel=0
+  selects the channel space, our SCI CSRs already reach them):
+  * CH_11: [4:0] rterm_tx (10011 = 50 ohm), [6:5] tx_cm_sel (doc: 00 = power down, 01 = 0.6V,
+    10 = 0.55V, 11 = 0.5V). Read back 0x13 => rterm 50 ohm and tx_cm_sel ALREADY 00 while the
+    TX works => the doc's "00 = power down" encoding does NOT match observed silicon.
+  * CH_12: tdrv_slice0..3_sel (00 = power down per slice); CH_13/CH_14: slice currents.
+  * CH_15: [3:0] lb_ctl (serial loopback, known nonfunctional), **[5:4] tdrv_dat_sel: 00 =
+    serializer data to driver, 01 = DATA RATE CLOCK to driver**, 10/11 = loopback paths.
+- `tdrv_dat_sel=01` is a promising untested burst source: a line-rate (1.5GHz at gen2) clock
+  straight out of the main driver, i.e. exactly the GHz content a SATA squelch expects, with no
+  datapath involvement. Combined with SCI-modulated TDRV slice power-down as the gap gate it
+  could be a complete OOB transmitter - IF an SCI write completes fast enough (our SCI is a
+  parallel fabric-side interface, a few sys cycles, NOT a slow serial bus: needs measuring).
+- CAUTION: tonight's SCI-on-live-TX measurements were unreliable (LDR carrier amplitude wandered
+  104-376mV across identical conditions - hand-placed single-ended probe drift, a hazard this
+  journal has recorded before). Re-do them with a fixed probe before trusting any of it.
+
+**Morning shortlist**: (1) measure SCI write latency in sys cycles; (2) tdrv_dat_sel=01 as burst
+content + TDRV slice power-down as gap gate; (3) two-probe differential check of the LDR output
+(is the LDR differential at all, or common-mode? - would explain a perfect single-ended
+waveform that no device can hear); (4) 470-680pF cap swap remains the fallback.
