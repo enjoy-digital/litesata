@@ -323,3 +323,55 @@ Hardware: ECPIX-5 85F (LFE5UM5G-85F), SSD on SATA connector (DCU1/CH0), FT2232 J
   caps). Next session needs hands: (1) SATA loopback cable TX->RX (single decisive experiment),
   (2) both-legs/both-sides probing of C112/C113, (3) cable swap + continuity.
   Board state: A-gen2-boost loaded, ctrl parked, TX at EI, beacon 600 bursts/s confirmed.
+
+## Campaign 12 (2026-07-25, loopback cable): SELF LINK-UP + EI amplitude-starvation discovery
+
+Setup: user-installed SATA loopback cable TX->RX (straight, no P/N swap: rx_polarity=0 all night).
+Schematic fact (SCH_ECPIX-5_R02.PDF): RX path has series caps C122/C127 (100nF) mirroring TX
+C112/C113 => in loopback the connector-to-connector segment is a DC-FLOATING island (4 caps, no
+DC termination). With a drive attached the drive terminates DC and the island vanishes.
+
+- [beacon origin re-confirmed] Silent line with loopback (no drive): RX = 0 events. The 10.003ms
+  beacon was the drive's, and our RX front-end is quiet.
+- [EI STARVES THE TX DRIVER - likely ROOT CAUSE of drive deafness] AC-probe at C113 (FPGA side,
+  DC solid at 1.2V rail in all states => not island drift):
+  * EI-gapped OOB storms (any PCS mode, any gap 106-1333ns, LDR or serializer content):
+    amplitude collapses to ~4-12mV from a drained state; from a freshly-driven state it starts
+    ~25% (90-350mV) and decays over seconds.
+  * Continuous driven carrier: recovers/holds 350-416mV (charge time seconds, full charge tens
+    of seconds).
+  * G8B10B EI identical (word-sync is digital only). TX/RX word clocks alive in all states
+    (clock death ruled out).
+  * Historical reconciliation: all good-amplitude scope sightings (285mV/leg) were continuous
+    carriers; the 30-300mV "probe contact" spread across identical configs was partly REAL
+    (charge-state dependence). EI-gapped handshake bursts (always launched from long EI parks)
+    likely left the pins far below any drive's squelch => 3 deaf drives.
+- [driven-gap OOB works through the physical path] gap_mode=1 (LDR keeps driving a constant
+  level during gaps) keeps full amplitude; through 4 caps + cable, our rx_sel=1 transition
+  detector (ldr_idle) decodes it: COMRESET gaps [170-570ns] @lt=8, in-window; COMWAKE needs
+  lt=4 (the ldr_timeout subtracts from the measured gap: gap_meas ~ gap - lt*10ns).
+  Amplitude detector (RLOS) cannot see driven gaps (expected).
+- [3 RTL bugs found & fixed via the loopback]
+  1. Handshake deadlock: tx_cominit/comwake requests crossed as one edge-derived pulse; if it
+     lands while the generator is busy (startup race) it is swallowed and ctrl waits forever
+     (stb held high, no new edge). Fix: pending requests re-pulse every 2^13 sys cycles.
+  2. COMChecker chatter sensitivity: 1-2 cycle idle glitches reset the consecutive-gap count.
+     Fix: 3-cycle persistence filter on the rx_idle observation.
+  3. ctrl.rx_reset unwired on ECP5 + RX 16->32 gearbox phase: misalign flapping READY->RESET_RX
+     every 160ns (beat pattern) can hold ctrl.ready off; converter self-reset usually lands the
+     right phase (10/10 in final build) - deterministic rephase is a TODO.
+- [loopback self-handshake support, echo_mask CSR bit 28 + ctrl loopback path]
+  ctrl COMINIT exit needs ack & ~rx_cominit which an instant echo makes unsatisfiable =>
+  echo_mask hides detections while our stb is high (echo outlives stb by the quiet window).
+  AWAIT-ALIGN transmits ALIGN (a real device link sends D10.2), SEND-ALIGN also counts our own
+  ALIGN echo (0xBC low byte), READY ignores RLOS rx_idle chatter in loopback.
+- [RESULT: SELF LINK-UP] gen2 G8B10B boost bitstream (B-gen2-g8b10b-fix), config: rx_sel=1,
+  ldr_timeout=4, gap_mode=1, ei_mode=1, cdrhold_dis=1, echo_mask=1: full OOB handshake +
+  ALIGN/SYNC 8b10b data at 3.0Gbps + 5ms stability => ctrl ready. 10/10 enable cycles, ~0.1s
+  each, holds indefinitely. The COMPLETE PHY chain (DCU config, OOB gen/det, EI, CDR, comma
+  align, 8b10b, gearbox, CDC, ctrl FSM) is hardware-proven through the physical connector path.
+- [MORNING PLAN with drive] (1) gap_mode=1 handshake against the drive (full amplitude + gaps
+  visible to transition-style squelch - never tested against a drive post-attribution-collapse);
+  (2) precharge carrier (>=35s driven) then immediate EI-gapped clean-shot handshake (bursts at
+  ~full amplitude for the first seconds); (3) scope C113 during both to confirm burst amplitude
+  at the drive-relevant states.

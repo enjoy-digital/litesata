@@ -212,6 +212,7 @@ class LiteSATAPHYDatapath(Module):
         rx    = LiteSATAPHYDatapathRX(trx.data_width)
         demux = Demultiplexer(phy_description(32), 2)
         align_timer = LiteSATAPHYAlignTimer()
+        self.rx = rx # exposed for debug/analyzer
         self.submodules += rx, demux, align_timer
         self.comb += [
             demux.sel.eq(ctrl.ready),

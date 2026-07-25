@@ -57,6 +57,13 @@ class LiteSATAPHYCtrl(LiteXModule):
         self.sync += crg.tx_reset.eq(self.tx_reset)
 
         # FSM.
+        # Loopback self-test support (ECP5 bench): when the PHY exposes an active echo-mask mode
+        # (TX externally looped to RX), transmit ALIGN during AWAIT-ALIGN so the handshake can
+        # complete against our own echo; a real device link transmits D10.2 there per spec.
+        loopback = getattr(trx, "oob_echo_mask", None)
+        if loopback is None:
+            loopback = Signal()
+
         self.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
         fsm.act("RESET",
@@ -131,9 +138,9 @@ class LiteSATAPHYCtrl(LiteXModule):
             )
         )
         fsm.act("AWAIT-ALIGN",
-            trx.rx_cdrhold.eq(1),
-            source.data.eq(0x4a4a4a4a),  # D10.2
-            source.charisk.eq(0b0000),
+            trx.rx_cdrhold.eq(~loopback),
+            source.data.eq(Mux(loopback, primitives["ALIGN"], 0x4a4a4a4a)),  # D10.2 (ALIGN in loopback)
+            source.charisk.eq(Mux(loopback, 0b0001, 0b0000)),
             align_timer.wait.eq(1),
             If(~trx.rx_idle,
                 If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN"]),
@@ -151,7 +158,9 @@ class LiteSATAPHYCtrl(LiteXModule):
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
             If(sink.valid & (sink.charisk == 0b0001),
-                If(sink.data[0:8] == 0x7c,
+                # Loopback: our own ALIGN echo (K28.5, 0xBC) counts too; a real device answers
+                # with 0x7C-low-byte (K28.3 family) primitives.
+                If((sink.data[0:8] == 0x7c) | (loopback & (sink.data[0:8] == 0xbc)),
                     NextValue(align_count, align_count - 1),
                 ).Else(
                     NextValue(align_count, 4-1),
@@ -172,7 +181,9 @@ class LiteSATAPHYCtrl(LiteXModule):
             source.charisk.eq(0b0001),
             stability_timer.wait.eq(1),
             self.ready.eq(stability_timer.done),
-            If(self.rx_idle,
+            # Loopback: RLOS-based rx_idle chatters through the doubly-AC-coupled loop; ignore it
+            # (a real link drop is caught by misalign and upper layers).
+            If(self.rx_idle & ~loopback,
                 NextState("RESET"),
             ).Elif(self.misalign,
                 self.rx_reset.eq(1),

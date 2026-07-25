@@ -472,6 +472,7 @@ class ECP5LiteSATAPHY(LiteXModule):
                                      # (TN-02206 8.25: required for clean electrical idle).
         self.oob_ctrl_dis = Signal() # Park ctrl: mask its OOB TX requests + force EI (silent
                                      # line for attribution-clean OOB experiments).
+        self.oob_echo_mask = Signal() # Loopback: mask self-echo OOB detections while stb high.
         self.oob_pat_force = Signal() # Line test: force continuous raw-pattern transmission with
                                       # EI off (DC amplitude measurement on scope).
         self.comb += [
@@ -510,9 +511,24 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.tx_cominit_ack.eq(self.tx_cominit_stb & self.txcomfinish),
             self.tx_comwake_ack.eq(self.tx_comwake_stb & (self.txcomfinish | self.oob_force_wake)),
         ]
-        self.submodules += _RisingEdge(self.tx_cominit_stb & ~self.oob_ctrl_dis, self.txcominit)
+        # Request pulses with periodic re-issue: a single edge-derived pulse can be swallowed if
+        # the generator is busy when it lands (startup race) - stb would then be held forever with
+        # no new edge and the handshake deadlocks. Re-pulse pending requests every ~2^13 sys cycles.
+        cominit_edge = Signal()
+        comwake_edge = Signal()
+        reissue      = Signal(13)
+        self.submodules += _RisingEdge(self.tx_cominit_stb & ~self.oob_ctrl_dis, cominit_edge)
+        self.submodules += _RisingEdge(self.tx_comwake_stb & ~self.oob_ctrl_dis, comwake_edge)
+        self.sync += If((self.tx_cominit_stb | self.tx_comwake_stb) & ~self.txcomfinish,
+            reissue.eq(reissue + 1)
+        ).Else(
+            reissue.eq(0)
+        )
+        reissue_tick = Signal()
+        self.comb += reissue_tick.eq(reissue == (2**13 - 1))
+        self.comb += self.txcominit.eq(cominit_edge | (self.tx_cominit_stb & ~self.oob_ctrl_dis & reissue_tick))
         txcomwake_raw = Signal()
-        self.submodules += _RisingEdge(self.tx_comwake_stb & ~self.oob_ctrl_dis, txcomwake_raw)
+        self.comb += txcomwake_raw.eq(comwake_edge | (self.tx_comwake_stb & ~self.oob_ctrl_dis & reissue_tick))
 
         # Optional COMWAKE launch delay (device-calibration-window experiment).
         self.oob_wake_delay = Signal(20) # sys cycles; 0 = immediate.
@@ -633,13 +649,36 @@ class ECP5LiteSATAPHY(LiteXModule):
         ]
         self.comb += self.ldr_idle.eq(ldr_count >= self.ldr_timeout)
 
+        # Deglitch the OOB idle observation: 1-2 cycle chatter (RX comparator noise on an idle or
+        # driven-constant line) resets COMChecker's consecutive-gap accumulation and blocks
+        # detection. A state change must persist 3 sys cycles (30ns) to propagate; COMWAKE's 55ns
+        # minimum gap window is preserved at 10ns resolution.
+        rx_idle_raw = Signal()
+        rx_idle_flt = Signal()
+        flt_cnt     = Signal(2)
+        self.comb += rx_idle_raw.eq(Mux(self.oob_rx_sel, self.ldr_idle, serdes.rx_idle))
+        self.sync += [
+            If(rx_idle_raw == rx_idle_flt,
+                flt_cnt.eq(0)
+            ).Else(
+                flt_cnt.eq(flt_cnt + 1),
+                If(flt_cnt == 2,
+                    rx_idle_flt.eq(rx_idle_raw),
+                    flt_cnt.eq(0)
+                )
+            )
+        ]
         self.com_check = com_check = COMChecker(clk_freq)
         self.comb += [
-            com_check.rx_idle.eq(Mux(self.oob_rx_sel, self.ldr_idle, serdes.rx_idle)),
+            com_check.rx_idle.eq(rx_idle_flt),
             self.rxcominitdet.eq(com_check.cominit_det),
             self.rxcomwakedet.eq(com_check.comwake_det),
-            self.rx_cominit_stb.eq(self.rxcominitdet),
-            self.rx_comwake_stb.eq(self.rxcomwakedet | force_wake_stb),
+            # echo_mask (loopback self-handshake): hide detections of our own TX echo while the
+            # corresponding request strobe is still high (ctrl's COMINIT exit requires
+            # ack & ~rx_cominit_stb, which an instant echo makes unsatisfiable). The echo outlives
+            # the strobe by the checker quiet window, so the AWAIT states still see it.
+            self.rx_cominit_stb.eq(self.rxcominitdet & ~(self.oob_echo_mask & self.tx_cominit_stb)),
+            self.rx_comwake_stb.eq((self.rxcomwakedet | force_wake_stb) & ~(self.oob_echo_mask & self.tx_comwake_stb)),
         ]
 
     def add_oob_csr(self):
@@ -681,6 +720,8 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Park ctrl: mask its OOB TX requests and force electrical idle."),
             CSRField("pat_force", size=1, offset=27,
                 description="Force continuous raw oob_pattern transmission, EI off (line test)."),
+            CSRField("echo_mask", size=1, offset=28,
+                description="Loopback: mask self-echo OOB detections while our request strobe is high."),
         ])
         self._oob_pattern = CSRStorage(16, reset=0x4A4A,
             description="OOB burst datapath word when d102 is set (0x4A4A=D10.2, 0x3333=Gen1-rate-equivalent).")
@@ -706,6 +747,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_probe.eq(      self._oob_control.fields.probe),
             self.oob_ctrl_dis.eq(   self._oob_control.fields.ctrl_dis),
             self.oob_pat_force.eq(  self._oob_control.fields.pat_force),
+            self.oob_echo_mask.eq(  self._oob_control.fields.echo_mask),
             self.oob_seq_quiet.eq(  self._oob_seq_quiet.storage),
             self.oob_kick.eq(       self._oob_control.fields.kick),
             self.oob_pattern.eq(    self._oob_pattern.storage),
