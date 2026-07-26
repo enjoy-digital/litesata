@@ -804,3 +804,38 @@ electrically; (b) SCI `tx_cm_sel` (CH_11[6:5]) as a gap gate, re-tested with cor
 note CH_11 read 0x13 => tx_cm_sel=00 while the TX works, contradicting the documented
 "00 = power down", so the encoding needs establishing before trusting it; (c) fabric-IO assisted
 shorting of the pair during gaps (small board mod, cheaper than an RF switch).
+
+## Campaign 18: PCIe word-sync EI PROVEN FUNCTIONAL - and quantitatively too slow
+
+Using the scope that was available all along (no hands needed - my mistake to defer this), with
+the `ei_carve` mode so the LDR toggles continuously through bursts AND gaps and the ONLY variable
+is whether EI is requested:
+
+  * CONTROL (ei_carve, trail>=wake_gap so EI is never asserted): continuous carrier,
+    contrast 1.3x, envelope essentially flat.
+  * TEST (ei_carve, EI asserted for the whole gap): carrier visibly chopped into ~1.6us blocks,
+    contrast 2.1x (and up to 27x at other settings).
+  **=> The PCIe word-synchronous EI flags (TX bus bits 11/23 in PCIE_MODE) DO work.** This closes
+  the question left open since campaign 15: the mechanism is real, not misconfigured.
+
+**But the gap width saturates.** Sweeping the requested gap with the burst held at 1.7us:
+    requested 1700ns -> measured 1600ns
+    requested  853ns -> measured 1100ns
+    requested  427ns -> measured  700ns
+    requested  213ns -> measured  625ns
+    requested  160ns -> measured  650ns
+    requested  107ns -> measured  675ns
+  **Floor ~625-700ns, independent of request.** That is above even the COMINIT/COMRESET
+  shall-detect ceiling (336ns) and ~6x the COMWAKE gap (101-112ns). So EI-carved OOB cannot be
+  made spec-compliant on this path, no matter how the request is shaped.
+
+Caveat on scope: this measures EI acting on the **LDR aux buffer** (the only carrier this 100MHz
+probe can see at ~200mV). The documented <20UI figure applies to the **serializer** output, whose
+envelope reads only 14mV here - below the probe's resolution - so the serializer path remains
+unmeasured. However, the drive has already rejected serializer-burst + EI-flag OOB at every
+timing (campaign 15/16), which is consistent with the same floor applying there.
+
+**Net**: every ECP5 TX idle mechanism is now characterized rather than merely suspected -
+async FFC_EI_EN (213-427ns un-mute), PCIe word-sync EI (functional, ~650ns gap floor), TX
+power-down (large transients), SCI TDRV slice gate (fires digitally, analog effect unmeasurable),
+de-emphasis cancellation (disproven by control). None reaches the ~110ns SATA needs.
