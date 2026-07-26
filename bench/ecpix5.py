@@ -267,7 +267,7 @@ def main():
         help="LiteScope Analyzer clock domain/probe set (default: sys).")
     parser.add_argument("--oob-config", default="ei,ldr_tx,ldr_rx",
         help="DCU OOB hookups to enable (comma list of ei/ldr_tx/ldr_rx, empty for none).")
-    parser.add_argument("--pcs-mode",  default="bypass", choices=["bypass", "g8b10b", "pcie", "pcie_bypass"],
+    parser.add_argument("--pcs-mode",  default="bypass", choices=["bypass", "g8b10b", "pcie", "pcie_bypass", "hybrid"],
         help="SerDes PCS mode: bypass (fabric 8b10b) or g8b10b (DCU-internal 8b10b).")
     parser.add_argument("--pcie-mode", action="store_true",
         help="Set CHX_PCIE_MODE (g8b10b mode only).")

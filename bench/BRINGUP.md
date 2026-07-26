@@ -955,3 +955,34 @@ failing to produce a word clock. Leads to pull, in order:
   3. Try pcs_mode=g8b10b for the RX side (DCU-internal decode + aligner) while keeping bypass-only
      raw patterns for TX OOB - currently impossible in one build because tx_produce_pattern forces
      tx_bus=0 in g8b10b; a small RTL change would let the raw-pattern OOB coexist with g8b10b RX.
+
+### Campaign 19 addendum 3: hybrid PCS mode - RX now receives real data, alignment is the last bug
+
+The bypass RX datapath (fabric 8b10b) had NEVER been proven to decode real data - the loopback
+self link-up of campaign 12 used **g8b10b** (DCU-internal decode + aligner). But the data-driven
+OOB gap trick needs RAW TX patterns, which g8b10b cannot produce (tx_produce_pattern forces
+tx_bus=0 there). ENC_BYPASS and DEC_BYPASS are INDEPENDENT parameters, so a hybrid is possible:
+
+**New `pcs_mode="hybrid"`**: PROTOCOL=G8B10B, UC_MODE=0, **ENC_BYPASS=1** (TX raw 10-bit words
+from the fabric encoder, so data-gap OOB works) + **DEC_BYPASS=0** (RX decoded and word-aligned
+by the DCU, the path proven in loopback). Fuses verified in the emitted .config. Bitstream
+`I-gen2-hybrid`. Init clean: tx_ready=1, rx_ready=1, beacon still decoded at ~590/s.
+
+**Result: the RX now receives REAL DATA where bypass gave pure zeros.** In AWAIT-ALIGN the DCU
+decoder emits 92+ non-zero dwords instead of an all-zero stream. The remaining fault is bit
+alignment: every symbol pairs a plausible byte with the DCU's 0xEE invalid marker -
+`78EE78EE/k0101`, `E5EEE5EE/k0101`, `26EE26EE/k0101`, `0000EEEE/k0011` - i.e. one byte of each
+pair decodes and the other does not. That is a half-symbol / gearbox phase offset, not a dead
+receiver. Adding the g8b10b word-aligner re-arm (edge-pulsed FFC_ENABLE_CGALIGN on decode errors,
+which hybrid initially lacked) did not converge it.
+
+So the chain is now: OOB works -> drive answers and transmits continuously -> RX recovers the
+clock and delivers symbols -> **only the word/bit alignment is wrong**. Leads:
+  * RX_GEAR_MODE/RX_SB_BYPASS and the 1:2 gearbox phase: the 0xEE pairing suggests the aligner is
+    locking on the wrong 10-bit boundary of the 20-bit word.
+  * UDF_COMMA_A/B/MASK are configured for K28.5; verify they are honoured with ENC_BYPASS=1 (the
+    TX side being raw may interact with the shared PCS comma configuration).
+  * Try LSM_DISABLE=0 (let the link state machine drive alignment) and/or ENABLE_CG_ALIGN=1
+    static instead of the edge-pulsed re-arm.
+  * Compare the full RX parameter set against the Diamond reference netlist - the same method
+    that found D_SYNC_LOCAL_EN for the TX.

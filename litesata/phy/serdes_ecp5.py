@@ -395,7 +395,7 @@ class SerDesECP5(LiteXModule):
         assert dual       in [0, 1]
         assert channel    in [0, 1]
         assert data_width in [20]
-        assert pcs_mode   in ["bypass", "g8b10b", "pcie", "pcie_bypass"]
+        assert pcs_mode   in ["bypass", "g8b10b", "pcie", "pcie_bypass", "hybrid"]
         self.pcs_mode = pcs_mode
         self.dual       = dual
         self.channel    = channel
@@ -463,7 +463,7 @@ class SerDesECP5(LiteXModule):
 
         self.nwords = nwords = data_width//10
 
-        if pcs_mode in ["bypass", "pcie_bypass"]:
+        if pcs_mode in ["bypass", "pcie_bypass", "hybrid"]:
             self.encoder  = ClockDomainsRenamer("tx")(Encoder(nwords, True))
             self.decoders = [ClockDomainsRenamer("rx")(Decoder(True)) for _ in range(nwords)]
         else:
@@ -822,6 +822,17 @@ class SerDesECP5(LiteXModule):
             self.serdes_params.update(
                 p_CHX_PCIE_EI_EN = "0b1",
             )
+        if pcs_mode == "hybrid":
+            self.serdes_params.update(
+                p_CHX_PROTOCOL           = "G8B10B",
+                p_CHX_UC_MODE            = "0b0",
+                p_CHX_ENC_BYPASS         = "0b1",  # TX: raw 10-bit words from fabric
+                p_CHX_DEC_BYPASS         = "0b0",  # RX: DCU 8b10b decode + aligner
+                p_CHX_LSM_DISABLE        = "0b1",
+                p_CHX_ENABLE_CG_ALIGN    = "0b0",
+                i_CHX_FFC_ENABLE_CGALIGN = cg_align_pulse,
+            )
+            del self.serdes_params["i_CHX_FFC_SIGNAL_DETECT"]
         if pcs_mode in ["g8b10b", "pcie"]:
             self.serdes_params.update(
                 p_CHX_PROTOCOL           = "G8B10B",
@@ -887,7 +898,7 @@ class SerDesECP5(LiteXModule):
         self.comb += sci_reconfig.rx_cdr_hold.eq(self.rx_cdr_hold)
 
         # TX/RX Datapaths (and PRBS in bypass mode) ------------------------------------------------
-        if pcs_mode in ["bypass", "pcie_bypass"]:
+        if pcs_mode in ["bypass", "pcie_bypass", "hybrid"]:
             self.tx_prbs = ClockDomainsRenamer("tx")(PRBSTX(data_width, reverse=True))
             self.comb += self.tx_prbs.config.eq(tx_prbs_config)
             self.comb += [
@@ -906,22 +917,52 @@ class SerDesECP5(LiteXModule):
             ]
             self.sync.tx += pattern_toggle.eq(~pattern_toggle)
 
-            self.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(data_width, reverse=True))
-            self.comb += [
-                self.rx_prbs.config.eq(rx_prbs_config),
-                self.rx_prbs.pause.eq(rx_prbs_pause),
-                rx_prbs_errors.eq(self.rx_prbs.errors),
-                rx_data[ 0:10].eq(rx_bus[ 0:10]),
-                rx_data[10:20].eq(rx_bus[12:22]),
-            ]
+            if pcs_mode == "hybrid":
+                # RX comes from the DCU 8b10b decoder (the path proven to decode real 3Gbps data
+                # during the loopback self link-up); only the TX side is raw.
+                self.rx_word_data = Signal(nwords*8)
+                self.rx_word_ctrl = Signal(nwords)
+                self.rx_errs      = Signal(nwords)
+                self.comb += [
+                    self.rx_word_data[0: 8].eq(rx_bus[ 0: 8]),
+                    self.rx_word_data[8:16].eq(rx_bus[12:20]),
+                    self.rx_word_ctrl[0].eq(rx_bus[ 8]),
+                    self.rx_word_ctrl[1].eq(rx_bus[20]),
+                    self.rx_errs[0].eq(rx_bus[ 8] & (rx_bus[ 0: 8] == 0xEE)),
+                    self.rx_errs[1].eq(rx_bus[20] & (rx_bus[12:20] == 0xEE)),
+                ]
+            else:
+                self.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(data_width, reverse=True))
+                self.comb += [
+                    self.rx_prbs.config.eq(rx_prbs_config),
+                    self.rx_prbs.pause.eq(rx_prbs_pause),
+                    rx_prbs_errors.eq(self.rx_prbs.errors),
+                    rx_data[ 0:10].eq(rx_bus[ 0:10]),
+                    rx_data[10:20].eq(rx_bus[12:22]),
+                ]
+            if pcs_mode == "hybrid":
+                # The DCU word aligner is edge-triggered via FFC_ENABLE_CGALIGN and must be
+                # re-armed on decode errors, exactly as in g8b10b mode - without this the
+                # barrel shifter never finds the comma and every symbol decodes as 0xEE.
+                holdoff_h = Signal(8)
+                self.sync.rx += [
+                    cg_align_pulse.eq(0),
+                    If(holdoff_h != 0,
+                        holdoff_h.eq(holdoff_h - 1)
+                    ).Elif(rx_align & (self.rx_errs != 0),
+                        cg_align_pulse.eq(1),
+                        holdoff_h.eq(255),
+                    )
+                ]
             if pcs_mode == "pcie_bypass":
                 self.comb += [
                     tx_bus[11].eq(ei_en),
                     tx_bus[23].eq(ei_en),
                 ]
-            for i in range(nwords):
-                self.sync.rx += self.decoders[i].input.eq(rx_data[10*i:10*(i+1)])
-            self.sync.rx += self.rx_prbs.i.eq(rx_data)
+            if pcs_mode != "hybrid":
+                for i in range(nwords):
+                    self.sync.rx += self.decoders[i].input.eq(rx_data[10*i:10*(i+1)])
+                self.sync.rx += self.rx_prbs.i.eq(rx_data)
         else:
             # OOB: G8B10B datapaths: 8-bit data + K flag per byte on the DCU bus (disparity bits
             # left at 0 = automatic running disparity).
@@ -972,7 +1013,17 @@ class SerDesECP5(LiteXModule):
 
         self.comb += sink.ready.eq(1)
         self.comb += source.valid.eq(1)
-        if self.pcs_mode in ["bypass", "pcie_bypass"]:
+        if self.pcs_mode == "hybrid":
+            for i in range(self.nwords):
+                self.comb += [
+                    self.encoder.k[i].eq(sink.ctrl[i]),
+                    self.encoder.d[i].eq(sink.data[8*i:8*(i+1)]),
+                ]
+            self.comb += [
+                source.data.eq(self.rx_word_data),
+                source.ctrl.eq(self.rx_word_ctrl),
+            ]
+        elif self.pcs_mode in ["bypass", "pcie_bypass"]:
             for i in range(self.nwords):
                 self.comb += [
                     self.encoder.k[i].eq(sink.ctrl[i]),
