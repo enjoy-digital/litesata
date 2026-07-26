@@ -483,6 +483,7 @@ class ECP5LiteSATAPHY(LiteXModule):
                                      # line for attribution-clean OOB experiments).
         self.oob_align_force = Signal() # Line test: force continuous ALIGN primitive transmission.
         self.oob_burst_len = Signal(8, reset=round(160*tx_clk_freq/1.5e9))
+        self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
         self.oob_sci_gap_val   = Signal(8)
@@ -653,6 +654,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             # FFC_TXPWDNB is a direct fabric port, so this avoids the EI pipeline entirely.
             # SCI slice gate: burst/gap level from the OOB generator (tx domain -> sys via MultiReg
             # below); the gate itself lives in the SCI reconfig FSM.
+            serdes.tx_pattern_alt.eq(self.oob_pat_alt),
             serdes.sci_oob_gate_en.eq(self.oob_sci_gate),
             serdes.sci_oob_burst_val.eq(self.oob_sci_burst_val),
             serdes.sci_oob_gap_val.eq(self.oob_sci_gap_val),
@@ -783,6 +785,9 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Make OOB gaps by powering down the main TX driver (serializer bursts)."),
             CSRField("sci_gate", size=1, offset=4,
                 description="Make OOB gaps by SCI-writing CH_12 TDRV slice select (~20ns/write)."),
+            CSRField("pat_alt", size=1, offset=5,
+                description="Alternate the raw TX pattern with its inverse each word: with "
+                            "0xF0F0F this synthesizes the spec's Gen1-rate (375MHz) OOB carrier."),
         ])
         self._oob_sci_vals = CSRStorage(fields=[
             CSRField("burst", size=8, offset=0, reset=0x55,
@@ -825,6 +830,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_lane_rst_auto.eq(self._oob_txctl.fields.lane_rst_auto),
             self.oob_pwdn_gap.eq(    self._oob_txctl.fields.pwdn_gap),
             self.oob_sci_gate.eq(    self._oob_txctl.fields.sci_gate),
+            self.oob_pat_alt.eq(     self._oob_txctl.fields.pat_alt),
             self.oob_sci_burst_val.eq(self._oob_sci_vals.fields.burst),
             self.oob_sci_gap_val.eq(  self._oob_sci_vals.fields.gap),
             self.oob_seq_quiet.eq(  self._oob_seq_quiet.storage),

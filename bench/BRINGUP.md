@@ -637,3 +637,45 @@ squelch is required to detect - the spec wants a 375MHz Gen1-rate carrier; (2) t
 not differential at the drive (a single-leg probe cannot tell). Both are addressed by the same
 next step: **Gen1-rate D24.3 serializer content + the SCI slice gate**, plus a two-probe
 differential check when hands are available.
+
+### Campaign 16 addendum 3: Gen1-rate D24.3 carrier synthesized; spec-correct OOB still unheard
+
+**Gen1-rate OOB carrier implemented** (`_oob_txctl.pat_alt`). SATA requires the OOB burst content
+to be repeated D24.3 AT THE GEN1 RATE for every generation = a 375MHz square. A period-8 pattern
+does not tile into the 20-bit raw word, so the pattern now alternates with its bitwise inverse
+every tx word: 0xF0F0F / 0x0F0F0 concatenate into a continuous period-8 stream (proved
+arithmetically; run lengths all exactly 4 bits). At 3.0Gb/s that is exactly 375MHz - the first
+spec-correct OOB carrier of the campaign. Scope corroborates indirectly through its own roll-off:
+150MHz=102mV, 375MHz(alt)=38mV, 750MHz(D10.2)=34mV, monotone in frequency as expected.
+
+**Definitive test - spec-correct content AND compliant timing AND three gate mechanisms:**
+  * 375MHz D24.3 + SCI slice gate, COMRESET 312ns gaps: beacon 600/s (no suppression).
+  * 375MHz D24.3 + TX power-down gate: 600/s.
+  * 750MHz D10.2 + SCI gate (content control): 600/s.
+  * Hardware-paced phase test (seq_quiet, immune to the host-aliasing trap): **chi2=1.9, n=300,
+    perfectly uniform** - and the control is equally uniform.
+  => The drive does not react to spec-correct, compliant-timing, full-amplitude OOB.
+
+**SCI slice gate is digitally CONFIRMED FIRING**: SCI interface busy 15.0% of samples during an
+OOB storm with the gate enabled, and 0.0% in all three controls (park/gate-off, storm/gate-off,
+park/gate-on). The RTL sequencer works; only the analog response of the TDRV slices is unproven.
+
+**BLOCKER for the remaining verification: the probe.** C113 contact drifted from 102mV to 6mV
+within minutes during this session (the campaign-long 30-300mV instability, now worse). No TX
+gating mechanism can be electrically verified for serializer content until the probe is re-seated,
+so "are our gaps real gaps at the drive?" remains formally open for every serializer-based mode.
+
+**Where the diagnosis now stands.** Eliminated tonight: EI latching (false), OOB timing windows
+(now compliant), OOB content (now spec-correct 375MHz), burst amplitude (176-408mV), gap presence
+for LDR content (wire-verified), and three instrument artifacts. What remains:
+  1. **Is the TX differential at the drive?** A single-leg probe cannot distinguish a correct
+     differential waveform from a common-mode one that no receiver can hear. NEEDS TWO PROBES.
+  2. **Are serializer-content gaps real?** SCI gate fires digitally but is analog-unverified;
+     EI's minimum gap (~460ns) is ABOVE the 336ns shall-detect ceiling, so EI cannot make a
+     compliant COMRESET gap either - only the SCI slice gate can, in principle.
+  3. Cap swap to 470-680pF remains the fallback.
+
+**Next session, in order**: (a) re-seat the probe, verify the SCI slice gate on a 150MHz carrier
+(bursts 107ns / gaps 312ns at full amplitude = mechanism proven); (b) two-probe differential check
+of both TX legs during an OOB burst; (c) if the gate proves out and the drive still ignores it,
+the fault is differential/physical and the cap swap or an RF switch is the answer.

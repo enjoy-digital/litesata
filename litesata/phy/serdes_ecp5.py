@@ -438,6 +438,12 @@ class SerDesECP5(LiteXModule):
         # OOB: runtime silencing of the MAIN (serializer) TX driver while leaving the LDR aux
         # driver alive - gives EI-free OOB gaps that are releasable for the data phase (unlike
         # p_CHX_PCIE_MODE, which achieves the same silence but is a fuse).
+        # OOB: Gen1-rate carrier synthesis. SATA specifies the OOB burst content as repeated
+        # D24.3 AT THE GEN1 RATE for every generation (1.5Gb/s D24.3 = a 375MHz square). A
+        # period-8 pattern does not tile into the 20-bit raw word, so alternate the word with its
+        # bitwise inverse every tx cycle: 0xF0F0F / 0x0F0F0 concatenate into a continuous period-8
+        # stream (verified). At 3.0Gb/s that is exactly 375MHz.
+        self.tx_pattern_alt         = Signal() # i: alternate tx_pattern with its inverse.
         self.sci_oob_gate_en   = Signal() # i: SCI slice gate enable.
         self.sci_oob_gate_lvl  = Signal() # i: 1 = burst, 0 = gap.
         self.sci_oob_burst_val = Signal(8)
@@ -487,6 +493,8 @@ class SerDesECP5(LiteXModule):
         tx_produce_square_wave = Signal()
         tx_produce_pattern     = Signal()
         tx_pattern             = Signal(20)
+        pattern_alt_tx         = Signal()
+        pattern_toggle         = Signal()
         tx_prbs_config         = Signal(2)
 
         rx_prbs_config         = Signal(2)
@@ -496,6 +504,7 @@ class SerDesECP5(LiteXModule):
         self.specials += [
             MultiReg(self.tx_produce_square_wave, tx_produce_square_wave, "tx"),
             MultiReg(self.tx_produce_pattern, tx_produce_pattern, "tx"),
+            MultiReg(self.tx_pattern_alt,     pattern_alt_tx,     "tx"),
             MultiReg(self.tx_pattern, tx_pattern, "tx"),
             MultiReg(self.tx_prbs_config, tx_prbs_config, "tx"),
         ]
@@ -885,13 +894,14 @@ class SerDesECP5(LiteXModule):
                     # square wave @ linerate/data_width for scope observation
                     tx_data.eq(Signal(data_width, reset=(1<<(data_width//2))-1))
                 ).Elif(tx_produce_pattern,
-                    tx_data.eq(tx_pattern)
+                    tx_data.eq(Mux(pattern_alt_tx & pattern_toggle, ~tx_pattern, tx_pattern))
                 ).Else(
                     tx_data.eq(self.tx_prbs.o)
                 ),
                 tx_bus[ 0:10].eq(tx_data[ 0:10]),
                 tx_bus[12:22].eq(tx_data[10:20]),
             ]
+            self.sync.tx += pattern_toggle.eq(~pattern_toggle)
 
             self.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(data_width, reverse=True))
             self.comb += [
