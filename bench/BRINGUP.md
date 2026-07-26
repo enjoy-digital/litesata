@@ -986,3 +986,37 @@ clock and delivers symbols -> **only the word/bit alignment is wrong**. Leads:
     static instead of the edge-pulsed re-arm.
   * Compare the full RX parameter set against the Diamond reference netlist - the same method
     that found D_SYNC_LOCAL_EN for the TX.
+
+### Campaign 19 addendum 4: alignment attempts, and what the decoded content actually says
+
+Tried in hybrid mode:
+  * Edge-pulsed FFC_ENABLE_CGALIGN re-arm (ported from g8b10b): real symbols, one lane of each
+    word valid, the other 0xEE.
+  * Static `ENABLE_CG_ALIGN=1` (as bypass uses): WORSE - mostly all-zero dwords again and
+    rx_ready drops. Reverted; edge-pulsed is the better config and is what is committed.
+  * ctrl timers checked and are NOT the problem: align_timer = 873us (the SATA host value) and
+    retry_timer = 10ms, so we do hold long enough for several of the device's ~54.6us speed steps.
+
+**What the decoded bytes tell us.** The valid lane decodes as **0x78 = D24.3**, which is the SATA
+OOB BURST character - not ALIGN (K28.5/D10.2/D10.2/D27.3 = 7B4A4ABC). Across every capture we
+have never once decoded an ALIGN primitive. Combined with the burst/gap statistics (gaps
+100-330ns, i.e. COMWAKE- and COMINIT-class), the drive appears to be **cycling OOB retries rather
+than progressing into speed negotiation**. So the outstanding question is not only "why is one
+symbol lane misaligned" but "why does the device restart OOB instead of sending ALIGNs".
+
+Two candidate explanations, both testable:
+  1. The device completes OOB, transmits ALIGNs at a rate we cannot receive (Gen3 6Gbps, or Gen1
+     1.5Gbps), gets no reply inside its window, and falls back to OOB. Our RX is hard-wired to
+     Gen2. A real host tries each rate. Fixing gen1 (currently broken: tx_clk 87MHz instead of
+     75, rx_ready=0, CHx_DCO* tuning unsolved) would let us cover the low step; covering Gen3 is
+     out of reach for ECP5-5G at 6Gbps.
+  2. Our post-COMWAKE behaviour is not what the device expects - e.g. the device requires the host
+     to cease OOB and hold D10.2 with particular timing after ITS COMWAKE completes. Worth
+     capturing the exact TX/RX sequence around AWAIT-NO-COMWAKE -> AWAIT-ALIGN with litescope at
+     full rate and comparing against the SATA state diagram.
+
+**Honest status: the PHY is not yet functional and IDENTIFY is not reachable.** What is solved
+and reproducible: OOB generation the drive genuinely decodes (beacon suppression, gap-width
+selective, controlled), a drive that answers with COMWAKE and then transmits ~17x its idle rate,
+and an RX that recovers clock and delivers real 8b10b symbols. What is missing: symbol alignment
+convergence, and the device progressing to ALIGN/speed negotiation.
