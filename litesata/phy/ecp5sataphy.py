@@ -483,6 +483,8 @@ class ECP5LiteSATAPHY(LiteXModule):
                                      # line for attribution-clean OOB experiments).
         self.oob_align_force = Signal() # Line test: force continuous ALIGN primitive transmission.
         self.oob_burst_len = Signal(8, reset=round(160*tx_clk_freq/1.5e9))
+        self.oob_gap_pattern = Signal(16) # DC pattern transmitted during gaps (de-emphasis idle).
+        self.oob_deemph_gap  = Signal()   # Enable the data-driven (de-emphasis) idle.
         self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
@@ -599,6 +601,7 @@ class ECP5LiteSATAPHY(LiteXModule):
         ei_trail_tx   = Signal(8)
         ei_carve_tx   = Signal()
         pwdn_gap_tx   = Signal()
+        deemph_gap_tx = Signal()
         burst_len_tx  = Signal(8, reset=self.oob_burst_len.reset.value)
         wake_gap_tx   = Signal(8, reset=com_gen.wake_cycles)
         gap_mode_tx   = Signal()
@@ -613,6 +616,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             MultiReg(self.oob_ei_trail,   ei_trail_tx,   "tx"),
             MultiReg(self.oob_ei_carve,   ei_carve_tx,   "tx"),
             MultiReg(self.oob_pwdn_gap,   pwdn_gap_tx,   "tx"),
+            MultiReg(self.oob_deemph_gap, deemph_gap_tx, "tx"),
             MultiReg(self.oob_burst_len,  burst_len_tx,  "tx"),
             MultiReg(self.oob_wake_gap,   wake_gap_tx,   "tx"),
             MultiReg(self.oob_gap_mode,   gap_mode_tx,   "tx"),
@@ -655,6 +659,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             # SCI slice gate: burst/gap level from the OOB generator (tx domain -> sys via MultiReg
             # below); the gate itself lives in the SCI reconfig FSM.
             serdes.tx_pattern_alt.eq(self.oob_pat_alt),
+            serdes.tx_pattern_gap.eq(Cat(self.oob_gap_pattern, self.oob_gap_pattern[0:4])),
+            serdes.tx_oob_gap.eq(com_gen.ei_req & deemph_gap_tx),
             serdes.sci_oob_gate_en.eq(self.oob_sci_gate),
             serdes.sci_oob_burst_val.eq(self.oob_sci_burst_val),
             serdes.sci_oob_gap_val.eq(self.oob_sci_gap_val),
@@ -788,7 +794,12 @@ class ECP5LiteSATAPHY(LiteXModule):
             CSRField("pat_alt", size=1, offset=5,
                 description="Alternate the raw TX pattern with its inverse each word: with "
                             "0xF0F0F this synthesizes the spec's Gen1-rate (375MHz) OOB carrier."),
+            CSRField("deemph_gap", size=1, offset=6,
+                description="OOB gaps = constant pattern; with post-cursor matched to main in "
+                            "SCI CH_12/CH_14 the FIR cancels DC (data-driven electrical idle)."),
         ])
+        self._oob_gap_pattern = CSRStorage(16, reset=0x0000,
+            description="Raw pattern transmitted during OOB gaps (constant = de-emphasis idle).")
         self._oob_sci_vals = CSRStorage(fields=[
             CSRField("burst", size=8, offset=0, reset=0x55,
                 description="CH_12 value during OOB bursts (TDRV slices selecting main data)."),
@@ -831,6 +842,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_pwdn_gap.eq(    self._oob_txctl.fields.pwdn_gap),
             self.oob_sci_gate.eq(    self._oob_txctl.fields.sci_gate),
             self.oob_pat_alt.eq(     self._oob_txctl.fields.pat_alt),
+            self.oob_deemph_gap.eq(  self._oob_txctl.fields.deemph_gap),
+            self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_sci_burst_val.eq(self._oob_sci_vals.fields.burst),
             self.oob_sci_gap_val.eq(  self._oob_sci_vals.fields.gap),
             self.oob_seq_quiet.eq(  self._oob_seq_quiet.storage),

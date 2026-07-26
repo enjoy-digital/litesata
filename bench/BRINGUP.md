@@ -765,3 +765,42 @@ squelch, or an RF switch on the TX pair. That is a board-level fix, not a gatewa
   idle entry 16UI, exit < 20UI). Everything we can reach outside PCIe protocol mode - async
   FFC_EI_EN, SCI tx_cm_sel, SCI TDRV slice select - has **no published register-to-pad latency
   at all**, so our measured 213-427ns is unspecified behaviour rather than a violated spec.
+
+## Campaign 17: de-emphasis "data-driven idle" trick - tested and DISPROVEN (with control)
+
+**The idea**: the one block that could produce a differential zero with zero latency is the TX
+de-emphasis FIR. If the post-cursor tap is set equal to the main tap, a CONSTANT bit pattern
+should cancel to ~0V differential while a TOGGLING pattern adds to full swing. That would give a
+data-driven electrical idle switching in one word (6.7ns), with no EI pipeline and - crucially -
+no dependence on the 100nF caps, because the driver would be actively holding differential zero.
+Implemented as `_oob_txctl.deemph_gap` (bit 6) + `_oob_gap_pattern` CSR: OOB gaps transmit a
+constant pattern, bursts transmit a toggling one. The TDRV taps are RUNTIME-writable via SCI
+(CH_12 slice select, CH_13/CH_14 currents) - no rebuild needed to configure the canceller.
+
+**Result: the post-cursor tap ADDS rather than subtracts.** Measured single-ended DC swing
+between all-zeros and all-ones patterns (DC-coupled - see technique note below):
+  * stock TDRV (slices 0/2/3 = main)                  : 56mV
+  * "canceller" (slice0=main 800uA, slice2=post 800uA): 16mV
+  * CONTROL, main-only at the same 800uA              :  8mV
+The canceller is LARGER than main-only at identical current, so adding the post slice increased
+the output. The 56->16mV reduction is purely less total drive current, exactly as the control
+predicts. **No DC cancellation occurs.** Idea dead.
+
+**METHODOLOGY NOTE - the instrument this campaign has been missing.** A constant differential is
+DC, so an AC-coupled probe cannot see it: every "gap" amplitude measured with AC coupling this
+campaign was blind to precisely the quantity that matters. The correct technique is
+**DC-coupled single-leg probing**: when the driver holds a constant pattern the leg sits at a
+rail; during a TRUE electrical idle both legs are pulled to common mode, so the leg's DC level
+moves by half the swing. That is a low-frequency, easily measurable signature of electrical idle
+on a 100MHz scope, and it works regardless of the 3Gbps content being invisible. **Any future gap
+mechanism (PCIe word-sync EI, SCI slice gate, tx_cm_sel) should be validated this way**: slow the
+burst/gap modulation to ~1.7us (burst_len/wake_gap = 255), DC-couple, and look for a square DC
+wave. First attempt was botched by scope offset/scale handling (trace off-screen, then a failed
+PAVA query) - fix the scope automation, it is a 10-minute test.
+
+**Still untried after this**: (a) validate the PCIe word-sync EI with the DC technique - it is the
+ONE path with a documented fast contract (<20UI entry AND exit) and it has never been verified
+electrically; (b) SCI `tx_cm_sel` (CH_11[6:5]) as a gap gate, re-tested with correct decoding -
+note CH_11 read 0x13 => tx_cm_sel=00 while the TX works, contradicting the documented
+"00 = power down", so the encoding needs establishing before trusting it; (c) fabric-IO assisted
+shorting of the pair during gaps (small board mod, cheaper than an RF switch).

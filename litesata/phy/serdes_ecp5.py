@@ -444,6 +444,8 @@ class SerDesECP5(LiteXModule):
         # bitwise inverse every tx cycle: 0xF0F0F / 0x0F0F0 concatenate into a continuous period-8
         # stream (verified). At 3.0Gb/s that is exactly 375MHz.
         self.tx_pattern_alt         = Signal() # i: alternate tx_pattern with its inverse.
+        self.tx_pattern_gap         = Signal(20) # i: pattern sent during OOB gaps (DC = idle).
+        self.tx_oob_gap             = Signal()   # i (tx domain): 1 = OOB gap in progress.
         self.sci_oob_gate_en   = Signal() # i: SCI slice gate enable.
         self.sci_oob_gate_lvl  = Signal() # i: 1 = burst, 0 = gap.
         self.sci_oob_burst_val = Signal(8)
@@ -894,7 +896,8 @@ class SerDesECP5(LiteXModule):
                     # square wave @ linerate/data_width for scope observation
                     tx_data.eq(Signal(data_width, reset=(1<<(data_width//2))-1))
                 ).Elif(tx_produce_pattern,
-                    tx_data.eq(Mux(pattern_alt_tx & pattern_toggle, ~tx_pattern, tx_pattern))
+                    tx_data.eq(Mux(self.tx_oob_gap, self.tx_pattern_gap,
+                        Mux(pattern_alt_tx & pattern_toggle, ~tx_pattern, tx_pattern)))
                 ).Else(
                     tx_data.eq(self.tx_prbs.o)
                 ),
