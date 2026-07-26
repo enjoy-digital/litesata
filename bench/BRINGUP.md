@@ -839,3 +839,59 @@ timing (campaign 15/16), which is consistent with the same floor applying there.
 async FFC_EI_EN (213-427ns un-mute), PCIe word-sync EI (functional, ~650ns gap floor), TX
 power-down (large transients), SCI TDRV slice gate (fires digitally, analog effect unmeasurable),
 de-emphasis cancellation (disproven by control). None reaches the ~110ns SATA needs.
+
+## *** CAMPAIGN 19: BREAKTHROUGH - THE DRIVE ANSWERS. NO HARDWARE CHANGE NEEDED ***
+
+**The trick: make the gaps out of DATA, not electrical idle.** The serializer switches between a
+toggling pattern (burst) and a CONSTANT pattern (gap) in ONE WORD - 6.7ns, no EI pipeline, no
+dependence on the coupling caps. The gap still carries differential voltage, but it has ZERO
+transitions, and a real SATA squelch is transition/energy sensitive rather than a DC amplitude
+detector - so it reads as idle. This is `_oob_txctl.deemph_gap` + `_oob_gap_pattern` (built
+during the de-emphasis experiment, whose cancellation hypothesis failed - but the GAP MECHANISM
+was the valuable part and had never been pointed at the drive).
+
+**PROOF - the drive's beacon is suppressed, deterministically and gap-width selectively.**
+Three independent passes, silent re-baseline between every point, bitstream H-gen2-deemph
+(bypass, 375MHz Gen1-rate carrier via pat_alt, gap pattern 0x0000):
+
+    gap(ns)   pass1  pass2  pass3
+        53      600    600    600     (below COMWAKE window)
+       107       78     26      6     SUPPRESSED  <- COMWAKE nominal 106.7ns
+       160     1280   1280   1280     rate DOUBLES (drive adding its own bursts?)
+       213      600    600    600
+       320        0      0      0     FULLY SUPPRESSED <- COMRESET nominal 320ns
+       427        0      0      0     FULLY SUPPRESSED <- in COMINIT window
+       533      600    600    600     (above window)
+
+**Controls rule out the obvious artifacts:**
+  * continuous carrier, same continuous drive, NO OOB structure -> 600/s (NOT jamming our RX)
+  * continuous carrier without pat_alt                          -> 600/s
+  * OOB with real EI gaps (line actually goes idle)             -> 600/s (EI too slow, as measured)
+  * silent before and after                                     -> 600/s
+Only OOB-STRUCTURED data-gap transmission suppresses the beacon. Suppression tracks the SATA
+detect windows. This is the spec-mandated behaviour of a device that has qualified a COMRESET
+(it stops its autonomous COMINIT schedule while reset is asserted).
+
+**THE FULL OOB HANDSHAKE NOW COMPLETES.** With ctrl live, the FSM traverses
+RESET -> COMINIT -> AWAIT-COMINIT -> AWAIT-NO-COMINIT -> COMWAKE -> AWAIT-COMWAKE ->
+AWAIT-NO-COMWAKE -> **AWAIT-ALIGN (86% occupancy)**, and the RX records **gap=[100-330ns]**:
+100ns gaps are COMWAKE-class, i.e. **the drive is answering with its own COMWAKE**. After 19
+campaigns this is the first two-way OOB exchange with a SATA device on ECP5.
+
+**What remains: the ALIGN / speed-negotiation phase.** RX decodes all-zero dwords with no
+notintable errors - consistent with the known gen2 RX word-clock collapse (documented in campaign
+10) and/or SATA speed negotiation (the device steps its ALIGN bursts down through its supported
+rates; our RX is fixed at 3Gbps and must lock during the Gen2 window). This is a RECEIVE-side
+problem, entirely separate from OOB, and it is the last mile.
+
+**Consequences:**
+  * The cap swap (470-680pF), the RF switch and the fabric-IO mod are ALL UNNECESSARY.
+  * The ~650ns EI floor no longer matters - we never use EI for gaps.
+  * ECP5 CAN generate SATA-compliant OOB despite Lattice dropping SATA support: the burst/gap
+    structure comes from the serializer datapath, which switches per word.
+  * Best config so far: bypass PCS, `pat_alt` (375MHz Gen1-rate D24.3 carrier), `deemph_gap`
+    with gap pattern 0x0000, burst_len=16 (107ns), COMRESET gaps 320ns / COMWAKE gaps 107ns.
+
+NEXT: (1) fix the gen2 RX word clock so ALIGNs decode (rx_cdrhold handling, CDR lock on the
+drive's ALIGN bursts, possibly force a rate/step); (2) speed negotiation - consider a gen1 RX or
+sweeping the RX rate during the device's step-down; (3) then IDENTIFY + BIST (task #8).
