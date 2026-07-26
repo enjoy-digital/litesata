@@ -1110,3 +1110,35 @@ Raising the ALIGN window 873us -> 3ms did not help. Hypotheses, in order:
 Config that gets here: bitstream `J-gen2-hybrid-los2` (pcs_mode=hybrid, rx_los_lvl=2),
 txctl=pat_alt|deemph_gap, gap_pattern=0x0000, pattern=0xF0F0, wake_gap=16, burst_len=16,
 _oob_quiet=50, control=ei_mode|ldr_timeout|burst_mode|zero_bus|cdrhold_dis.
+
+### Campaign 21 addendum: SEND-ALIGN diagnosed - persistent word misalignment
+
+Full-rate capture triggered on SEND-ALIGN (the state we now occupy 63% of the time):
+  * The RX **is** alive there: 1438 of 1916 samples carry valid dwords (the earlier "no valid
+    dwords" reading was a mistriggered capture).
+  * The dominant dword is **`F0B5A487/k0000` (1434x)** - note the `B5` bytes: this is SYNC-like
+    content (SYNC = K28.3 D21.5 D21.5 D21.5 = B5B5B57C) but with **no K flag set**, i.e. the comma
+    is not being recognised and the stream is decoded at the wrong 10-bit boundary.
+  * A correctly aligned `7B4A4ABC/k0001` (ALIGN) slips through only twice in the window.
+  * rx_lol=0 throughout (CDR locked); misalign fires 36/2040.
+  => The device IS transmitting continuous primitives at Gen2 and our receiver IS recovering
+  them; the sole remaining fault is that the DCU word aligner sits on the wrong boundary.
+
+Fixes attempted for this (committed, none sufficient yet):
+  * SEND-ALIGN now accepts SYNC (0x7C) **or** ALIGN (0xBC) as the qualifying dword - some devices
+    linger on ALIGN after negotiation, and waiting only for SYNC is over-strict.
+  * Aligner re-arm no longer keyed solely on 0xEE decode errors: mis-aligned data often decodes to
+    plausible symbols with no error marker (exactly the F0B5A487/k0000 case), so the re-arm never
+    fired. It now also pulses FFC_ENABLE_CGALIGN when no K character has been decoded for 4096 rx
+    cycles.
+
+**Still to try (in order):**
+  1. The re-arm holdoff is 255 rx cycles and the no-comma window 4096; sweep both - the aligner may
+     need many more attempts, or a much shorter holdoff, to walk onto the right boundary.
+  2. Make the re-arm a CSR-driven manual pulse so the boundary search can be driven from software
+     and observed dword-by-dword, instead of guessing constants in RTL.
+  3. Compare the full RX PCS parameter set against a Diamond-generated G8B10B design
+     (WA_MODE, RX_SB_BYPASS, UDF_COMMA_A/B/MASK, LSM_DISABLE, ENABLE_CG_ALIGN) - the TX side had an
+     identical class of bug (dead word clock) fixed by one parameter, D_SYNC_LOCAL_EN.
+  4. As a fallback, do the 8b10b decode and comma alignment in fabric (bypass RX) with a soft
+     barrel shifter we control, rather than relying on the DCU aligner.

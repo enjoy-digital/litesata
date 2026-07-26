@@ -941,15 +941,24 @@ class SerDesECP5(LiteXModule):
                     rx_data[10:20].eq(rx_bus[12:22]),
                 ]
             if pcs_mode == "hybrid":
-                # The DCU word aligner is edge-triggered via FFC_ENABLE_CGALIGN and must be
-                # re-armed on decode errors, exactly as in g8b10b mode - without this the
-                # barrel shifter never finds the comma and every symbol decodes as 0xEE.
-                holdoff_h = Signal(8)
+                # The DCU word aligner is edge-triggered via FFC_ENABLE_CGALIGN. Re-arming only on
+                # 0xEE decode errors is not enough: mis-aligned data frequently decodes to
+                # plausible symbols with no error marker (observed: a continuous stream of
+                # F0B5A487/k0000, i.e. SYNC content with the comma never flagged), so the aligner
+                # never gets re-armed and stays locked to the wrong boundary. Also re-arm
+                # periodically until a real comma (K character) is actually being decoded.
+                holdoff_h  = Signal(8)
+                nocomma    = Signal(12)
                 self.sync.rx += [
                     cg_align_pulse.eq(0),
+                    If(self.rx_word_ctrl != 0,
+                        nocomma.eq(0)
+                    ).Else(
+                        nocomma.eq(nocomma + 1)
+                    ),
                     If(holdoff_h != 0,
                         holdoff_h.eq(holdoff_h - 1)
-                    ).Elif(rx_align & (self.rx_errs != 0),
+                    ).Elif(rx_align & ((self.rx_errs != 0) | (nocomma == 2**12 - 1)),
                         cg_align_pulse.eq(1),
                         holdoff_h.eq(255),
                     )

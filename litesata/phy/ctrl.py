@@ -185,7 +185,10 @@ class LiteSATAPHYCtrl(LiteXModule):
             If(sink.valid & (sink.charisk == 0b0001),
                 # Loopback: our own ALIGN echo (K28.5, 0xBC) counts too; a real device answers
                 # with 0x7C-low-byte (K28.3 family) primitives.
-                If((sink.data[0:8] == 0x7c) | (loopback & (sink.data[0:8] == 0xbc)),
+                # Count SYNC (K28.3, low byte 0x7C) or ALIGN (K28.5, 0xBC): a device that is
+                # still emitting ALIGNs after speed negotiation is just as valid a confirmation
+                # that the link is established, and some devices linger on ALIGN.
+                If((sink.data[0:8] == 0x7c) | (sink.data[0:8] == 0xbc),
                     NextValue(align_count, align_count - 1),
                 ).Else(
                     NextValue(align_count, 4-1),
