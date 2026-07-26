@@ -1067,3 +1067,46 @@ Changes made (committed):
   3. Diagnostic build suggested by review: same raw-TX config with DEC_BYPASS=1 plus a 40-bit
      sliding ALIGN detector on the pre-decoder RX bus (all 10 serial offsets, both disparities,
      both polarities) to separate "PCS word-align problem" from "device back in OOB".
+
+## *** CAMPAIGN 21: LINK NEGOTIATION REACHES SEND-ALIGN ***
+
+Two fixes in ctrl.py, both derived from the campaign-20 measurements:
+
+**1. Bounded AWAIT-NO-COMWAKE (`nocomwake_timeout_us`, default 400ns).** Waiting for the device's
+COMWAKE detection to DEASSERT deadlocked: the device repeats COMWAKE because it has had no
+response, and we wait because it is still transmitting. SATA requires the host to begin D10.2
+within 533ns of the device's LAST COMWAKE burst, so we now leave on a timer instead. The state
+went from **333us (12.7% occupancy) to 0.2%**.
+
+**2. Sticky ALIGN/ALIGN_N latch.** The device's ALIGN bursts are short and were being missed
+between FSM state transitions. ALIGN detection is now latched (cleared on entry to COMWAKE) and
+the FSM acts on the latched flag. Combined with removing the redundant `~rx_idle` gate (campaign
+20), AWAIT-ALIGN now qualifies.
+
+**RESULT - the FSM now reaches SEND-ALIGN:**
+    AWAIT-CRG        : 26.9%
+    COMINIT..COMWAKE :  ~1%   (OOB, 2 retry cycles in the window)
+    AWAIT-NO-COMWAKE :  0.2%  (was 12.7%)
+    AWAIT-ALIGN      :  8.3%  <- the drive's ALIGNs qualify
+    **SEND-ALIGN     : 63.4%  <- transmitting ALIGN, one step from READY**
+
+So the chain is now: data-driven OOB -> device COMINIT -> our COMWAKE -> device COMWAKE ->
+device ALIGNs received and qualified -> we transmit ALIGN. Everything except the final
+handshake step works.
+
+**What remains.** SEND-ALIGN exits to READY after four received dwords whose low byte is 0x7C
+(SYNC, K28.3). We do not get them: a full-rate capture triggered on SEND-ALIGN returned NO valid
+RX dwords at all, i.e. the receive path goes quiet exactly while we transmit continuous ALIGNs.
+Raising the ALIGN window 873us -> 3ms did not help. Hypotheses, in order:
+  1. **Our continuous ALIGN transmission is disturbing our own receiver** (the RX went silent only
+     once we started transmitting continuously in SEND-ALIGN). Check TX->RX coupling/CDR pull with
+     a full-rate rx-domain capture; try transmitting D10.2 instead of ALIGN in SEND-ALIGN, or
+     briefly gapping our TX.
+  2. The device expects SYNC only after IT sees our ALIGNs decoded at ITS rate - i.e. residual
+     speed-negotiation mismatch; try a gen1 build once the gen1 PLL is fixed.
+  3. The RX word aligner loses lock when the line content changes from the device's ALIGNs to a
+     bidirectional exchange (re-arm the aligner on entry to SEND-ALIGN).
+
+Config that gets here: bitstream `J-gen2-hybrid-los2` (pcs_mode=hybrid, rx_los_lvl=2),
+txctl=pat_alt|deemph_gap, gap_pattern=0x0000, pattern=0xF0F0, wake_gap=16, burst_len=16,
+_oob_quiet=50, control=ei_mode|ldr_timeout|burst_mode|zero_bus|cdrhold_dis.

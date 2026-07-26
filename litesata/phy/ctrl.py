@@ -29,7 +29,7 @@ class LiteSATAPHYCtrl(LiteXModule):
     # without reseting the FPGA core.
     """
     def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1,
-                 align_timeout_us=873):
+                 align_timeout_us=3000, nocomwake_timeout_us=0.4):
         self.clk_freq = clk_freq
         self.ready    = Signal()
         self.sink     = sink   = stream.Endpoint(phy_description(32))
@@ -51,6 +51,9 @@ class LiteSATAPHYCtrl(LiteXModule):
         # negotiation at a rate we cannot receive (Gen3) may only reach our Gen2 window after
         # several ~54.6us step-downs plus its own retry delays. Waiting longer costs nothing and
         # lets us catch the ALIGN burst instead of resetting OOB just before it arrives.
+        # Bounded wait for the device's COMWAKE to clear (see AWAIT-NO-COMWAKE).
+        nocomwake_timer = WaitTimer(self.us(nocomwake_timeout_us))
+        self.submodules += nocomwake_timer
         retry_timer = WaitTimer(self.us(50000))
         align_timer = WaitTimer(self.us(align_timeout_us))
         align_count = Signal(4)
@@ -68,6 +71,23 @@ class LiteSATAPHYCtrl(LiteXModule):
         loopback = getattr(trx, "oob_echo_mask", None)
         if loopback is None:
             loopback = Signal()
+
+        # Sticky ALIGN/ALIGN_N detection (cleared with the FSM): the device's ALIGN bursts are
+        # short and must not be missed while the FSM is between states.
+        align_seen   = Signal()
+        align_n_seen = Signal()
+        align_rst    = Signal()
+        self.sync += [
+            If(align_rst,
+                align_seen.eq(0),
+                align_n_seen.eq(0),
+            ).Else(
+                If(sink.valid & (sink.charisk == 0b0001) & (sink.data == primitives["ALIGN"]),
+                    align_seen.eq(1)),
+                If(sink.valid & (sink.charisk == 0b0001) & (sink.data == primitives["ALIGN_N"]),
+                    align_n_seen.eq(1)),
+            )
+        ]
 
         self.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
@@ -120,6 +140,7 @@ class LiteSATAPHYCtrl(LiteXModule):
             NextState("COMWAKE"),
         )
         fsm.act("COMWAKE",
+            align_rst.eq(1),
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             trx.tx_comwake_stb.eq(1),
@@ -138,7 +159,8 @@ class LiteSATAPHYCtrl(LiteXModule):
         fsm.act("AWAIT-NO-COMWAKE",
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
-            If(~trx.rx_comwake_stb,
+            nocomwake_timer.wait.eq(1),
+            If(~trx.rx_comwake_stb | nocomwake_timer.done,
                 NextState("AWAIT-ALIGN")
             )
         )
@@ -147,11 +169,11 @@ class LiteSATAPHYCtrl(LiteXModule):
             source.data.eq(Mux(loopback, primitives["ALIGN"], 0x4a4a4a4a)),  # D10.2 (ALIGN in loopback)
             source.charisk.eq(Mux(loopback, 0b0001, 0b0000)),
             align_timer.wait.eq(1),
-            If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN"]),
+            If(align_seen,
                 NextValue(trx.rx_polarity, 0),
                 NextState("SEND-ALIGN")
             ),
-            If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN_N"]),
+            If(align_n_seen,
                 NextValue(trx.rx_polarity, 1),
                 NextState("SEND-ALIGN")
             )
