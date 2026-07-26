@@ -921,3 +921,37 @@ Next session plan for the last mile:
      tx_clk 87MHz instead of 75, rx_ready=0 - the CHx_DCO* tuning noted as unsolved).
   4. Note the data-gap OOB trick REQUIRES bypass PCS (raw patterns); in g8b10b `tx_produce_pattern`
      forces tx_bus=0, not our pattern. So 8b10b decode stays in fabric for now.
+
+### Campaign 19 addendum 2: the drive is fully engaged - the blocker is our RX word clock
+
+Corrected diagnosis (supersedes addendum 1's "speed negotiation / CDR can't lock" guess):
+
+**The drive is now an active participant.** While ctrl sits in AWAIT-ALIGN transmitting D10.2, the
+drive transmits **~10,400 bursts/s - 17x its 600/s idle beacon rate** - stable over six 1s windows,
+with gap=[100-330ns] (COMWAKE-class 100ns gaps present) and burst=[100-655350ns], the max being
+the recorder's saturation value i.e. **continuous transmission**. That is a device doing OOB
+dialogue AND sending ALIGN-like continuous data, not a device ignoring us.
+
+**Our RX rx-domain logic is frozen.** In AWAIT-ALIGN:
+  * `rx_lol = 0` for 100% of samples - the DCU reports the **CDR IS LOCKED**.
+  * `rx_los`/`phy_rx_idle` = 0 for ~2% of samples - RLOS does see the drive's activity.
+  * `rx_comwake_stb` fires (62/2040) - our COMChecker classifies the drive's bursts as COMWAKE.
+  * But the datapath delivers **all-zero dwords with notintable = 00**. All-zeros AND no error
+    flags is the signature of frozen rx-domain registers: real garbage would raise notintable,
+    and a stuck-zero 10-bit code is not valid 8b10b. Everything in the rx clock domain is holding
+    its reset value.
+  => **FF_RX_PCLK is not running even though the CDR is locked.** The rx-domain cycle counter
+  agrees (wraps/nonsense). This is the campaign-10 gen2 collapse, and it is now the ONLY thing
+  between us and link-up.
+
+So the last mile is not OOB, not the drive, and not CDR acquisition - it is the RX PCS/gearbox
+failing to produce a word clock. Leads to pull, in order:
+  1. RX gearbox/PCS config in bypass mode: CHx_RX_GEAR_MODE / RX_GEAR_BYPASS / RX_SB_BYPASS and
+     the D_RX/word-alignment settings vs the Diamond reference netlist (the same full-param-diff
+     method that found D_SYNC_LOCAL_EN for the TX side - and note the TX had EXACTLY this failure
+     mode: PLL locked, word clock dead, fixed by one parameter).
+  2. `rx_ready` gating in our split SerdesInit: it toggles 0/1 between runs; the RX branch may be
+     releasing the PCS reset before the CDR/gearbox is ready, or holding it after.
+  3. Try pcs_mode=g8b10b for the RX side (DCU-internal decode + aligner) while keeping bypass-only
+     raw patterns for TX OOB - currently impossible in one build because tx_produce_pattern forces
+     tx_bus=0 in g8b10b; a small RTL change would let the raw-pattern OOB coexist with g8b10b RX.
