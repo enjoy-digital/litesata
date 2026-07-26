@@ -28,7 +28,8 @@ class LiteSATAPHYCtrl(LiteXModule):
     The state machine is robust enough to handle hot plug/ power off/on sequences of the device
     # without reseting the FPGA core.
     """
-    def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1):
+    def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1,
+                 align_timeout_us=873):
         self.clk_freq = clk_freq
         self.ready    = Signal()
         self.sink     = sink   = stream.Endpoint(phy_description(32))
@@ -46,8 +47,12 @@ class LiteSATAPHYCtrl(LiteXModule):
         self.comb += sink.ready.eq(1)
 
         # Retry / Align count/timers.
-        retry_timer = WaitTimer(self.us(10000))
-        align_timer = WaitTimer(self.us(873))
+        # The SATA host value for the ALIGN wait is 873.8us, but a device that starts speed
+        # negotiation at a rate we cannot receive (Gen3) may only reach our Gen2 window after
+        # several ~54.6us step-downs plus its own retry delays. Waiting longer costs nothing and
+        # lets us catch the ALIGN burst instead of resetting OOB just before it arrives.
+        retry_timer = WaitTimer(self.us(50000))
+        align_timer = WaitTimer(self.us(align_timeout_us))
         align_count = Signal(4)
         self.submodules += align_timer, retry_timer
 
@@ -142,15 +147,13 @@ class LiteSATAPHYCtrl(LiteXModule):
             source.data.eq(Mux(loopback, primitives["ALIGN"], 0x4a4a4a4a)),  # D10.2 (ALIGN in loopback)
             source.charisk.eq(Mux(loopback, 0b0001, 0b0000)),
             align_timer.wait.eq(1),
-            If(~trx.rx_idle,
-                If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN"]),
-                    NextValue(trx.rx_polarity, 0),
-                    NextState("SEND-ALIGN")
-                ),
-                If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN_N"]),
-                    NextValue(trx.rx_polarity, 1),
-                    NextState("SEND-ALIGN")
-                ),
+            If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN"]),
+                NextValue(trx.rx_polarity, 0),
+                NextState("SEND-ALIGN")
+            ),
+            If(sink.valid & (self.sink.charisk == 0b0001) & (self.sink.data == primitives["ALIGN_N"]),
+                NextValue(trx.rx_polarity, 1),
+                NextState("SEND-ALIGN")
             )
         )
         fsm.act("SEND-ALIGN",

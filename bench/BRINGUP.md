@@ -1020,3 +1020,50 @@ and reproducible: OOB generation the drive genuinely decodes (beacon suppression
 selective, controlled), a drive that answers with COMWAKE and then transmits ~17x its idle rate,
 and an RX that recovers clock and delivers real 8b10b symbols. What is missing: symbol alignment
 convergence, and the device progressing to ALIGN/speed negotiation.
+
+## Campaign 20: the OOB dialogue is textbook, ALIGNs ARE received - the deadlock is post-COMWAKE
+
+**Litescope timeline of the full handshake** (trigger = our COMWAKE, 64x subsampling), which
+confirms the OOB exchange end to end:
+    +105us  COMINIT          (we transmit COMRESET)
+    +115us  AWAIT-NO-COMINIT  COMINIT-det   <- the drive's COMINIT received
+    +120us  COMWAKE          (we transmit COMWAKE)
+    +125us  AWAIT-NO-COMWAKE  COMWAKE-det   <- the drive's COMWAKE received
+    +458us  AWAIT-ALIGN
+Every OOB step works in both directions.
+
+**WE RECEIVE AND CORRECTLY DECODE THE DRIVE'S ALIGN PRIMITIVES.** Triggering litescope on a
+K-character yields `7B4A4ABC/k0001` - K28.5 + D10.2 + D10.2 + D27.3, the SATA ALIGN primitive -
+**94 occurrences in a single capture**, alongside the DCU 0xEE invalid markers. So: the drive
+reaches speed negotiation, transmits ALIGNs at Gen2, and our hybrid RX decodes them. Earlier
+readings of only D24.3 were sampling windows where the device was still in OOB.
+
+**The remaining fault is a post-COMWAKE deadlock.** AWAIT-NO-COMWAKE occupies 333us of the
+timeline because ctrl waits for the device's COMWAKE detection to CLEAR, while the device keeps
+repeating COMWAKE precisely because it has had no response. SATA requires the host to begin
+transmitting D10.2 **within 533ns of the device's last COMWAKE burst**; we are three orders of
+magnitude late, so the device times out and restarts OOB. Chicken-and-egg.
+
+Changes made (committed):
+  * ALIGN detection in AWAIT-ALIGN no longer gated on `~trx.rx_idle`: on ECP5 the RLOS-derived
+    rx_idle stays asserted throughout the device's ALIGN bursts (verified: rx_idle=1 for 100% of
+    samples while rx_lol=0, i.e. CDR locked), so the ALIGN comparison was never evaluated.
+    Decoding a valid ALIGN primitive is itself proof of signal, so the gate was redundant.
+  * `retry_timer` 10ms -> 50ms; `align_timeout_us` made a parameter (kept at the spec 873us -
+    raising it to 5ms is counterproductive: ctrl then camps in AWAIT-ALIGN, stops retrying OOB,
+    and the device gives up entirely).
+  * `_oob_quiet` swept at runtime 360ns..2us to clear COMWAKE detection faster. No link yet -
+    so the 533ns budget is not met by shortening the quiet threshold alone; AWAIT-NO-COMWAKE
+    itself must be bounded (e.g. proceed on a timer after the first COMWAKE detection rather than
+    waiting for it to stop).
+
+**Next (highest value first):**
+  1. Bound AWAIT-NO-COMWAKE: leave for AWAIT-ALIGN a fixed ~300-500ns after the FIRST COMWAKE
+     detection instead of waiting for deassertion. This directly targets the 533ns budget and is
+     a few lines in ctrl.py.
+  2. Then the ALIGN qualification: we receive valid ALIGNs but must catch >=1 while in
+     AWAIT-ALIGN. Consider latching "ALIGN seen" in the PHY (sticky, cleared on FSM reset) so a
+     single correctly-decoded ALIGN cannot be missed between state transitions.
+  3. Diagnostic build suggested by review: same raw-TX config with DEC_BYPASS=1 plus a 40-bit
+     sliding ALIGN detector on the pre-decoder RX bus (all 10 serial offsets, both disparities,
+     both polarities) to separate "PCS word-align problem" from "device back in OOB".
