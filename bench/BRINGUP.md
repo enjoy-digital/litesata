@@ -1181,3 +1181,35 @@ latches.
 
 **Status: the PHY completes OOB, receives and decodes the device's ALIGNs, and reaches READY -
 but does not yet hold it long enough to declare ready, so IDENTIFY is still not reachable.**
+
+## ***** CAMPAIGN 23: PHY READY - FIRST SATA LINK-UP ON ECP5 *****
+
+**The last bug: the ALIGN timer only reset on ALIGN primitives.** `LiteSATAPHYAlignTimer` keyed
+`rx_idle` solely on receiving ALIGN. But once a link is established both ends switch from ALIGN to
+**SYNC**, so ALIGNs stop, the 41us timer expires, `rx_idle` asserts, and READY is torn straight
+back down to RESET. Fixed: any K-led primitive (`charisk == 0b0001`) now holds the timer, which is
+what the signal actually means - "the far end is still transmitting".
+
+**RESULT: `sata_phy_status = 0xf`** - ready, tx_ready, rx_ready and ctrl_ready all asserted.
+**The complete SATA link comes up on ECP5 for the first time**, and reliably: across six
+consecutive trials it reached READY after 0.2s, 1.5s, 1.7s, 2.2s, 3.5s and 8.8s.
+
+Full working chain: data-driven OOB (no electrical idle anywhere) -> device COMINIT -> our COMWAKE
+-> device COMWAKE -> device ALIGNs -> LSM word alignment -> ALIGN exchange -> READY.
+
+**Remaining: the link does not HOLD.** It collapses within milliseconds of asserting, so
+IDENTIFY (issued immediately on the ready edge, six attempts) always finds the link already gone -
+`identify_done` stays 0 and status has fallen back to 0x2/0x6. Next session:
+  1. Capture with litescope triggered on the FALLING edge of `ctrl_ready` to see exactly what
+     evicts READY (rx_idle again? misalign? the retry/stability timers?).
+  2. Suspect the link-layer side: once READY latches, the datapath demux switches from ctrl to the
+     core, and the device may be sending link-layer traffic (SYNC/ALIGN/R_RDY) that our core must
+     answer - if it does not, the device drops the link. Check the core is actually being fed and
+     is emitting SYNC continuously.
+  3. Only then retry IDENTIFY; the `K-gen2-link` bitstream is already built --with-bist and the
+     identify CSRs are present (`sata_bist_identify_start/done/source_*`).
+
+**Working configuration (bitstream `K-gen2-link`)**: pcs_mode=hybrid (ENC_BYPASS=1 raw TX +
+DEC_BYPASS=0 DCU RX decode, LSM_DISABLE=0, ENABLE_CG_ALIGN=1), rx_los_lvl=2, --with-bist;
+txctl = pat_alt|deemph_gap; pattern=0xF0F0, gap_pattern=0x0000, wake_gap=16, burst_len=16,
+_oob_quiet=50; control = ei_mode|ldr_timeout(4)|burst_mode|zero_bus|cdrhold_dis.

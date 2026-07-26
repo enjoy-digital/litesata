@@ -161,10 +161,12 @@ class LiteSATAPHYAlignTimer(Module):
         charisk_match = sink.charisk == 0b0001
         data_match    = sink.data == primitives["ALIGN"]
 
+        # Any K-led primitive proves the far end is still transmitting - not just ALIGN. Once a
+        # link is established both ends switch from ALIGN to SYNC, so keying this timer solely on
+        # ALIGN makes rx_idle assert ~41us after link-up and tears READY straight back down to
+        # RESET, which is exactly what was observed on ECP5.
         self.comb += \
-            If(sink.valid &
-              (sink.charisk == 0b0001) &
-              (sink.data == primitives["ALIGN"]),
+            If(sink.valid & (sink.charisk == 0b0001),
                 self.timer.wait.eq(0)
             ).Else(
                 self.timer.wait.eq(1),
