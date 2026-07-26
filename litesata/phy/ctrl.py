@@ -29,7 +29,7 @@ class LiteSATAPHYCtrl(LiteXModule):
     # without reseting the FPGA core.
     """
     def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1,
-                 align_timeout_us=3000, nocomwake_timeout_us=0.4):
+                 align_timeout_us=3000, nocomwake_timeout_us=0.4, stability_us=50):
         self.clk_freq = clk_freq
         self.ready    = Signal()
         self.sink     = sink   = stream.Endpoint(phy_description(32))
@@ -88,6 +88,21 @@ class LiteSATAPHYCtrl(LiteXModule):
                     align_n_seen.eq(1)),
             )
         ]
+
+        # Misalignment debounce (leaky bucket). A dword whose K character lands outside byte 0
+        # is normal during resynchronisation - the RX converter self-resets and recovers within a
+        # few words. Tearing the link down on a single event prevents READY from ever completing
+        # its stability timer. Only sustained misalignment should reset the RX.
+        mis_score    = Signal(8)
+        misalign_flt = Signal()
+        self.sync += [
+            If(self.misalign,
+                If(mis_score < 248, mis_score.eq(mis_score + 8))
+            ).Elif(mis_score != 0,
+                mis_score.eq(mis_score - 1)
+            )
+        ]
+        self.comb += misalign_flt.eq(mis_score > 128)
 
         self.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
@@ -201,7 +216,7 @@ class LiteSATAPHYCtrl(LiteXModule):
 
         # Wait alignment stability for 5ms before declaring ctrl is ready, reset the RX part of
         # the transceiver when misalignment is detected.
-        stability_timer = WaitTimer(5e-3*clk_freq)
+        stability_timer = WaitTimer(int(stability_us*1e-6*clk_freq))
         self.submodules += stability_timer
 
         fsm.act("READY",
@@ -213,7 +228,7 @@ class LiteSATAPHYCtrl(LiteXModule):
             # (a real link drop is caught by misalign and upper layers).
             If(self.rx_idle & ~loopback,
                 NextState("RESET"),
-            ).Elif(self.misalign,
+            ).Elif(misalign_flt,
                 self.rx_reset.eq(1),
                 NextState("RESET_RX")
             )

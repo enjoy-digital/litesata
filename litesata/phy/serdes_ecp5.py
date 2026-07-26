@@ -495,6 +495,10 @@ class SerDesECP5(LiteXModule):
         tx_produce_square_wave = Signal()
         tx_produce_pattern     = Signal()
         tx_pattern             = Signal(20)
+        self.align_holdoff     = Signal(16, reset=64)   # rx cycles to wait after a re-arm pulse
+        self.align_nocomma     = Signal(16, reset=64)   # re-arm after this many cycles with no K
+        align_holdoff_rx       = Signal(16, reset=64)
+        align_nocomma_rx       = Signal(16, reset=64)
         pattern_alt_tx         = Signal()
         pattern_toggle         = Signal()
         tx_prbs_config         = Signal(2)
@@ -507,6 +511,8 @@ class SerDesECP5(LiteXModule):
             MultiReg(self.tx_produce_square_wave, tx_produce_square_wave, "tx"),
             MultiReg(self.tx_produce_pattern, tx_produce_pattern, "tx"),
             MultiReg(self.tx_pattern_alt,     pattern_alt_tx,     "tx"),
+            MultiReg(self.align_holdoff, align_holdoff_rx, "rx"),
+            MultiReg(self.align_nocomma, align_nocomma_rx, "rx"),
             MultiReg(self.tx_pattern, tx_pattern, "tx"),
             MultiReg(self.tx_prbs_config, tx_prbs_config, "tx"),
         ]
@@ -828,11 +834,12 @@ class SerDesECP5(LiteXModule):
                 p_CHX_UC_MODE            = "0b0",
                 p_CHX_ENC_BYPASS         = "0b1",  # TX: raw 10-bit words from fabric
                 p_CHX_DEC_BYPASS         = "0b0",  # RX: DCU 8b10b decode + aligner
-                p_CHX_LSM_DISABLE        = "0b1",
-                p_CHX_ENABLE_CG_ALIGN    = "0b0",
-                i_CHX_FFC_ENABLE_CGALIGN = cg_align_pulse,
+                # Let the DCU link state machine drive word alignment (LSM_DISABLE=0) with
+                # continuous CG align: the edge-pulsed re-arm never converges on the comma
+                # against a real device (swept exhaustively at runtime).
+                p_CHX_LSM_DISABLE        = "0b0",
+                p_CHX_ENABLE_CG_ALIGN    = "0b1",
             )
-            del self.serdes_params["i_CHX_FFC_SIGNAL_DETECT"]
         if pcs_mode in ["g8b10b", "pcie"]:
             self.serdes_params.update(
                 p_CHX_PROTOCOL           = "G8B10B",
@@ -947,8 +954,8 @@ class SerDesECP5(LiteXModule):
                 # F0B5A487/k0000, i.e. SYNC content with the comma never flagged), so the aligner
                 # never gets re-armed and stays locked to the wrong boundary. Also re-arm
                 # periodically until a real comma (K character) is actually being decoded.
-                holdoff_h  = Signal(8)
-                nocomma    = Signal(12)
+                holdoff_h  = Signal(16)
+                nocomma    = Signal(16)
                 self.sync.rx += [
                     cg_align_pulse.eq(0),
                     If(self.rx_word_ctrl != 0,
@@ -958,9 +965,9 @@ class SerDesECP5(LiteXModule):
                     ),
                     If(holdoff_h != 0,
                         holdoff_h.eq(holdoff_h - 1)
-                    ).Elif(rx_align & ((self.rx_errs != 0) | (nocomma == 2**12 - 1)),
+                    ).Elif(rx_align & ((self.rx_errs != 0) | (nocomma >= align_nocomma_rx)),
                         cg_align_pulse.eq(1),
-                        holdoff_h.eq(255),
+                        holdoff_h.eq(align_holdoff_rx),
                     )
                 ]
             if pcs_mode == "pcie_bypass":

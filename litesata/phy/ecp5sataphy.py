@@ -483,6 +483,8 @@ class ECP5LiteSATAPHY(LiteXModule):
                                      # line for attribution-clean OOB experiments).
         self.oob_align_force = Signal() # Line test: force continuous ALIGN primitive transmission.
         self.oob_burst_len = Signal(8, reset=round(160*tx_clk_freq/1.5e9))
+        self.oob_align_holdoff = Signal(16, reset=64)
+        self.oob_align_nocomma = Signal(16, reset=64)
         self.oob_gap_pattern = Signal(16) # DC pattern transmitted during gaps (de-emphasis idle).
         self.oob_deemph_gap  = Signal()   # Enable the data-driven (de-emphasis) idle.
         self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
@@ -659,6 +661,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             # SCI slice gate: burst/gap level from the OOB generator (tx domain -> sys via MultiReg
             # below); the gate itself lives in the SCI reconfig FSM.
             serdes.tx_pattern_alt.eq(self.oob_pat_alt),
+            serdes.align_holdoff.eq(self.oob_align_holdoff),
+            serdes.align_nocomma.eq(self.oob_align_nocomma),
             serdes.tx_pattern_gap.eq(Cat(self.oob_gap_pattern, self.oob_gap_pattern[0:4])),
             serdes.tx_oob_gap.eq(com_gen.ei_req & deemph_gap_tx),
             serdes.sci_oob_gate_en.eq(self.oob_sci_gate),
@@ -798,6 +802,12 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="OOB gaps = constant pattern; with post-cursor matched to main in "
                             "SCI CH_12/CH_14 the FIR cancels DC (data-driven electrical idle)."),
         ])
+        self._oob_align = CSRStorage(fields=[
+            CSRField("holdoff", size=16, offset=0,  reset=64,
+                description="RX cycles to wait after a word-aligner re-arm pulse."),
+            CSRField("nocomma", size=16, offset=16, reset=64,
+                description="Re-arm the word aligner after this many RX cycles with no K char."),
+        ])
         self._oob_gap_pattern = CSRStorage(16, reset=0x0000,
             description="Raw pattern transmitted during OOB gaps (constant = de-emphasis idle).")
         self._oob_sci_vals = CSRStorage(fields=[
@@ -844,6 +854,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_pat_alt.eq(     self._oob_txctl.fields.pat_alt),
             self.oob_deemph_gap.eq(  self._oob_txctl.fields.deemph_gap),
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
+            self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
+            self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),
             self.oob_sci_burst_val.eq(self._oob_sci_vals.fields.burst),
             self.oob_sci_gap_val.eq(  self._oob_sci_vals.fields.gap),
             self.oob_seq_quiet.eq(  self._oob_seq_quiet.storage),

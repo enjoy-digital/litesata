@@ -1142,3 +1142,42 @@ Fixes attempted for this (committed, none sufficient yet):
      identical class of bug (dead word clock) fixed by one parameter, D_SYNC_LOCAL_EN.
   4. As a fallback, do the 8b10b decode and comma alignment in fabric (bypass RX) with a soft
      barrel shifter we control, rather than relying on the DCU aligner.
+
+## *** CAMPAIGN 22: WORD ALIGNMENT FIXED - ctrl REACHES READY ***
+
+**The alignment fix: let the DCU link state machine do it.** Every attempt to drive alignment via
+the edge-pulsed `FFC_ENABLE_CGALIGN` re-arm failed, including an exhaustive runtime sweep of the
+re-arm holdoff and no-comma window (12 combinations from 1 to 128 rx cycles, exposed as the new
+`_oob_align` CSR). Setting **`LSM_DISABLE=0` + `ENABLE_CG_ALIGN=1`** in hybrid mode fixed it
+outright:
+
+    before (edge-pulsed re-arm): F0B5A487/k0000 x1434  (SYNC content, comma never flagged)
+    after  (LSM + static align): **7B4A4ABC/k0001 x1488**  (clean ALIGN primitives)
+    1526 valid dwords, 1498 carrying a K character.
+
+So the receive chain is now fully working: CDR locks, word aligner finds the comma, and we decode
+the device's ALIGN primitives cleanly and continuously.
+
+**ctrl now reaches READY.** With alignment fixed plus a leaky-bucket debounce on `misalign` (a
+single mis-aligned dword during resync must not tear the link down - the RX converter self-resets
+and recovers within a few words), the FSM reached **READY at 15.3% occupancy**, with READY dwell
+times up to 123us.
+
+**What still blocks `ready`:** READY must survive the stability timer before asserting. We are
+evicted by `rx_idle`, which the datapath's ALIGN timer raises after 41us without an ALIGN - the
+device's ALIGN bursts are not continuous during bring-up, so READY is repeatedly torn down.
+Attempts to tune this did NOT converge and one regressed:
+  * datapath ALIGN window 41us -> 327us: **worse** - ctrl then sits in AWAIT-ALIGN 99.6% with
+    rx_idle permanently asserted and never enters READY. REVERTED.
+  * stability timer 5ms -> 1ms -> 50us (now the `stability_us` parameter): still not asserting.
+Something in the rx_idle/align-timer interaction is not yet understood; it needs a full-rate
+capture of `align_timer`, `rx.source.valid/charisk` and the FSM together, which is the first job
+next session.
+
+**Parameters now exposed for tuning** (all in ctrl.py / CSR): `align_timeout_us` (3ms),
+`nocomwake_timeout_us` (400ns), `stability_us` (50us), `_oob_align.holdoff/nocomma`.
+Bitstream `K-gen2-link` is built **--with-bist** so IDENTIFY can be issued the moment `ready`
+latches.
+
+**Status: the PHY completes OOB, receives and decodes the device's ALIGNs, and reaches READY -
+but does not yet hold it long enough to declare ready, so IDENTIFY is still not reachable.**
