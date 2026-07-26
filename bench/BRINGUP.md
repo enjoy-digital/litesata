@@ -738,3 +738,30 @@ where it was only ever a PCS preset (never an OOB engine), and the ECP5 DCU lack
 mechanism fast enough for SATA OOB gap timing. A working ECP5 SATA host therefore needs the gap
 made OUTSIDE the DCU: small AC-coupling caps (470-680pF) so a driven-constant gap decays below
 squelch, or an RF switch on the TX pair. That is a board-level fix, not a gateware one.
+
+### Research addendum: ECP2M was the most SATA-aware generation; CertusPro-NX is the modern answer
+
+- **ECP2M went furthest.** `/opt/diamond/3.12/ispfpga/maco/data/pcs/PCSC.v` has protocol values
+  `SATA_I` and `SATA_II`, wires `FFC_EI_EN` for SATA_I alongside PCIE (line 164), and even emits
+  a port literally named **`ffs_sata_oob_rx_chX`** (line 172) - emitted adjacent to
+  `ffs_rlos_lo_chX`, i.e. the "SATA OOB receive detect" was simply the loss-of-signal detector
+  brought out under a SATA name. So even the most SATA-aware Lattice generation offered
+  {fabric-generated bursts + generic TX electrical idle + RX activity detector} - precisely the
+  architecture we built on ECP5, minus a supported/characterized EI timing contract.
+- **The lineage**: ECP2M (SATA_I/SATA_II + ffs_sata_oob_rx) -> ECP3 (SATA protocol retained in
+  PCSD.vhd, EI port only) -> ECP5 (**removed entirely**). Diamond 3.12 even shows the withdrawal
+  in progress: the ECP2M wizard's SATA entries are commented out behind
+  `#ISPL_CR_32029 - only support pcie & pipe`.
+- **CertusPro-NX is the family to use if this must work on Lattice.** Its PCS guide documents
+  that deasserting `mpcs_txval_i` / `epcs_txval_i` produces Electrical Idle with **entry AND exit
+  at 22 tx_pcs_clk cycles** (a real, specified timing contract - the thing ECP5 lacks), and
+  `mpcs_rxoob_i` configures the activity detector specifically to detect OOB. The guide mentions
+  SATA explicitly. Still no hard COMINIT/COMWAKE classifier, but a fabric OOB engine like ours
+  would have a specified fast gate to drive.
+- **No public end-to-end SATA link on ECP3 or ECP5 exists** (GitHub, Lattice community, EEVblog,
+  Hackaday all searched): only unfinished branches and experiments - including this project's own
+  2020-2022 history. LiteSATA's README still lists Lattice PHY support as a possible improvement.
+- ECP5's only fast, *specified* idle path remains the PCIe per-word one (TN1261 Fig.16:
+  idle entry 16UI, exit < 20UI). Everything we can reach outside PCIe protocol mode - async
+  FFC_EI_EN, SCI tx_cm_sel, SCI TDRV slice select - has **no published register-to-pad latency
+  at all**, so our measured 213-427ns is unspecified behaviour rather than a violated spec.
