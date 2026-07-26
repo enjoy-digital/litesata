@@ -679,3 +679,62 @@ for LDR content (wire-verified), and three instrument artifacts. What remains:
 (bursts 107ns / gaps 312ns at full amplitude = mechanism proven); (b) two-probe differential check
 of both TX legs during an OOB burst; (c) if the gate proves out and the drive still ignores it,
 the fault is differential/physical and the cap swap or an RF switch is the answer.
+
+## Research: was SATA ever officially supported on Lattice SERDES? (ECP2M / ECP3 / ECP5)
+
+Primary-source evidence, all found in the LOCAL Diamond 3.12 install and the Lattice usage guides
+(no license needed - the template/model files are readable):
+
+**ECP2M - SATA WAS offered in the tools.**
+  * `/opt/diamond/3.12/module/pcs/latticeecp2m/gui/core_template.tcl` contains protocol entries
+    `"SATA I"`, and in the (now commented-out) full protocol list `"SATA Type1"`, `"SATA Type2"`
+    with mode codes `SATAT1`, `SATAT2`.
+  * A dedicated `proc SATAISetting {}` exists, and the "SATA I" case sets the clock-tolerance
+    compensation matcher to CC_MATCH1..4 = 0110111100 / 0001001010 / 0001001010 / 0001111011 -
+    i.e. **K28.5, D10.2, D10.2, D27.3 = the SATA ALIGN primitive**.
+  * IPexpress PCS changelog (docs/webhelp .../ipexpress/pcs_tab.htm): "**5.0: Added CPRI and
+    SATA.**"
+  * BUT the active list in the shipped 3.12 wizard is
+    `{PCI-Express "Gigabit Ethernet" "Generic 8B10B" "10-bit SERDES Only" "8-bit SERDES Only"
+    SD-SDI HD-SDI CPRI}` with the SATA-bearing list commented out next to
+    `#ISPL_CR_32029 - only support pcie & pipe`. Lattice progressively WITHDREW the option.
+
+**ECP3 - SATA is still a protocol in the PCS templates.**
+  * `/opt/diamond/3.12/ispfpga/maco/data/pcs/PCSD.vhd` (`library ECP3;`) has **68** `"SATA"`
+    conditionals. What SATA mode actually does:
+      - `#if (_chX_protocol_new == "SATA" || _chX_protocol_new == "PCIE") && mode != "DISABLED"`
+        -> `FFC_EI_EN_X => tx_idle_chX_c` : **it exposes the TX electrical-idle port** - exactly
+        the same mechanism we drive on ECP5. SATA is grouped with PCIe for this and only this.
+      - requires `_datarange == "HIGH"` (1.5/3.0Gbps range), plus the usual comma/CTC settings.
+
+**ECP5 - SATA is GONE.**
+  * `/opt/diamond/3.12/ispfpga/sa5p00/data/DCUA.v`: **zero** "SATA" occurrences. Its protocol
+    enum is `10BSER, 8BSER, CPRI, EDP, G8B10B, JESD204, PCIE, SDI, SGMII, XAUI`. prjtrellis'
+    fuzzer enum agrees exactly (and adds GBE/XAUI naming) - no SATA.
+  * The string "SATA" appears **zero** times in the ECP2M, ECP3 (TN1176) and ECP5 (TN1261)
+    SERDES/PCS usage guides. Their "OOB" feature is explicitly "Out-of-band (OOB) signal
+    interface for low-speed inputs (**video application**)" - a <250Mbps LDR bypass path for
+    SD-SDI / 100Mbps Ethernet. It is NOT SATA OOB signalling; the naming collision misled this
+    campaign for a long time.
+
+**NO Lattice family ever had a hardware SATA OOB engine.** `cominit|comwake|comreset|comsas`
+appears **0 times** in the ECP3 PCS templates (and nowhere in ECP5). Even in the era when the
+wizard said "SATA", the silicon contribution was only: ALIGN-matching CTC + a TX electrical-idle
+port. The COM burst/gap sequencing was always expected to be soft logic in the FPGA fabric -
+which is exactly what our COMGenerator does.
+
+**Why it nevertheless works on Xilinx and not here.** Xilinx 7-series GTP/GTX implement OOB in
+the transceiver: TXCOMINIT / TXCOMWAKE / TXCOMSAS / TXCOMFINISH generate spec-timed burst/gap
+sequences in hardware, and RXCOMINITDET / RXCOMWAKEDET / RXELECIDLE detect them. LiteSATA's
+Xilinx PHYs simply strobe those ports. On ECP5 the one primitive the fabric approach still needs
+from the PCS - a TX electrical idle fast enough to carve a 106.7ns COMWAKE gap - is the thing
+that does not exist: measured un-mute 213-427ns (2026, ECPIX-5), and a ~220ns minimum EI pulse
+measured independently in **March 2022 on a Versa-ECP5** (commit 13dbd2a, "wip hacky code to
+mesure minimal tx_elec_idle generated pulse (220ns...)"). Same wall, twice, four years apart,
+two different boards.
+
+**Conclusion.** SATA on ECP5 is unsupported by Lattice, was quietly dropped after ECP2M/ECP3
+where it was only ever a PCS preset (never an OOB engine), and the ECP5 DCU lacks any TX idle
+mechanism fast enough for SATA OOB gap timing. A working ECP5 SATA host therefore needs the gap
+made OUTSIDE the DCU: small AC-coupling caps (470-680pF) so a driven-constant gap decays below
+squelch, or an RF switch on the TX pair. That is a board-level fix, not a gateware one.
