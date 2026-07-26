@@ -1213,3 +1213,35 @@ IDENTIFY (issued immediately on the ready edge, six attempts) always finds the l
 DEC_BYPASS=0 DCU RX decode, LSM_DISABLE=0, ENABLE_CG_ALIGN=1), rx_los_lvl=2, --with-bist;
 txctl = pat_alt|deemph_gap; pattern=0xF0F0, gap_pattern=0x0000, wake_gap=16, burst_len=16,
 _oob_quiet=50; control = ei_mode|ldr_timeout(4)|burst_mode|zero_bus|cdrhold_dis.
+
+### Campaign 23 addendum: why the link does not hold - the TX handover at ctrl.ready
+
+Litescope triggered on the FALLING edge of `ctrl_ready`, full rate, 996 samples of READY captured:
+
+     off   state            rx_idle mis  rx_dword
+      -10  READY           0     0   00000000/k0000
+       ...                                (all zeros throughout READY)
+       -2  READY           1     0   00000000/k0000   <- align timer expires
+       +0  RESET           1     0   00000000/k0000
+       +4  COMINIT
+
+**Throughout the whole READY period we receive nothing but all-zero dwords - not a single
+primitive.** `rx_idle` then expires (41us with no K-led primitive) and READY drops to RESET.
+
+Prime suspect: **the TX handover.** `LiteSATAPHYDatapath` switches both directions on
+`ctrl.ready` - `mux.sel.eq(ctrl.ready)` hands TX from ctrl to the core, and
+`demux.sel.eq(ctrl.ready)` routes RX to the core. The instant we declare ready we therefore STOP
+sending ctrl's SYNC and hand the transmitter to `LiteSATACore`. If the core does not immediately
+emit continuous SYNC (link-layer idle), the device sees the host go silent and stops transmitting -
+which is exactly the all-zero RX we observe, and the link tears down ~41us later.
+
+Next session, in order:
+  1. Check what `LiteSATACore`'s link layer emits immediately after ready with a TX-side capture
+     (`datapath.sink`/`trx.sink` data+charisk). If it is not SYNC, that is the bug.
+  2. Simplest experiment: keep ctrl driving TX (force `mux.sel = 0`) even in READY and see whether
+     the link then holds. If it does, the fault is entirely in the core handover and IDENTIFY can
+     be attempted with a small mux change.
+  3. Also verify the core is out of reset and its crossbar/BIST user port is idle-but-valid.
+
+The PHY itself is now proven: OOB, alignment and the ALIGN exchange all work, and READY is
+reached reliably (0.2-8.8s over six trials).
