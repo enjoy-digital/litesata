@@ -895,3 +895,29 @@ problem, entirely separate from OOB, and it is the last mile.
 NEXT: (1) fix the gen2 RX word clock so ALIGNs decode (rx_cdrhold handling, CDR lock on the
 drive's ALIGN bursts, possibly force a rate/step); (2) speed negotiation - consider a gen1 RX or
 sweeping the RX rate during the device's step-down; (3) then IDENTIFY + BIST (task #8).
+
+### Campaign 19 addendum: the RX blocker, precisely located
+
+With OOB now working, the remaining failure is fully characterized as a RECEIVE-side problem:
+  * In AWAIT-ALIGN the datapath delivers valid dwords that are ALL ZERO, with zero notintable
+    errors, and `ctrl_rx_idle` is stuck at 1 - so ctrl's `If(~trx.rx_idle, ...)` can never fire
+    and the FSM cannot leave AWAIT-ALIGN regardless of what the drive sends.
+  * The RX word-clock counter reads nonsense (full 32-bit wrap: "35724MHz", or 0.7/14.9MHz) =>
+    the recovered clock is not running at 150MHz. This is the gen2 RX word-clock collapse first
+    noted in campaign 10, now confirmed as THE blocker.
+  * The CDR has nothing to lock to on an idle line, and the drive only transmits in short windows
+    (beacon = 6x100ns every 10ms; ALIGN = ~54.6us per speed step during negotiation). The CDR must
+    acquire inside one of those windows.
+  * `rx_ready` does assert in the `align_force` configuration - worth pulling on.
+
+Next session plan for the last mile:
+  1. Instrument properly: the rx-domain cycle counter is unreliable when the recovered clock is
+     unstable (counter wraps). Add a sys-domain edge-count/toggle-detect on FF_RX_PCLK instead.
+  2. CDR acquisition: sweep CHx_RX_LOS_LVL (2 was clean), check FFC_SIGNAL_DETECT/rx_align gating,
+     and try forcing an RX reset (ctrl.rx_reset / init restart) at the moment OOB completes, so the
+     CDR re-acquires on a now-active line rather than a stale idle one.
+  3. Speed negotiation: the device steps ALIGN bursts through its supported rates. Our RX is fixed
+     at 3Gbps. Either lock fast enough to catch the Gen2 step, or fix gen1 (currently broken:
+     tx_clk 87MHz instead of 75, rx_ready=0 - the CHx_DCO* tuning noted as unsolved).
+  4. Note the data-gap OOB trick REQUIRES bypass PCS (raw patterns); in g8b10b `tx_produce_pattern`
+     forces tx_bus=0, not our pattern. So 8b10b decode stays in fabric for now.
