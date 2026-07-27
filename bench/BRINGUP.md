@@ -2283,3 +2283,43 @@ causes are on OUR transmit side in the window straight after the device's COMWAK
      path; confirm it is not still being overridden by the OOB pattern path (`tx_produce_pattern` is
      gated on `zero_bus & tx_idle`, and `tx_idle` should be low in AWAIT-ALIGN - check it).
   3. If the timing is right and the content is right, sweep `nocomwake_timeout_us` (currently 0.4).
+
+## *** CAMPAIGN 37: WE TRANSMIT ALIGN WHERE THE SPEC REQUIRES D10.2 - MEASURED ON THE WIRE ***
+
+Measured what our transmitter actually emits in AWAIT-ALIGN - never done before, only reasoned about.
+Captured `datapath.sink` (the PHY's TX input; with `ctrl.ready=0` the datapath mux feeds it from
+ctrl's source) in analyzer groups 1 and 2, and `fsm2_state` in group 0, same config, same session:
+
+    group 1 / group 2:
+      datapath_sink_sink_valid          1  (100%)
+      datapath_sink_sink_payload_data   7B4A4ABC  (100%)   <== ALIGN
+      datapath_sink_sink_payload_charisk       1  (100%)
+      datapath_sink_sink_ready          0  (100%)
+    group 0:
+      fsm2_state  AWAIT-ALIGN  1016/1016 (100%)
+    control = 0x000c0402  =>  echo_mask (bit 28) = 0
+
+**In AWAIT-ALIGN, with `echo_mask` clear, we transmit ALIGN primitives. The SATA host is required to
+transmit continuous D10.2 there.** `litesata/phy/ctrl.py` AWAIT-ALIGN reads
+
+    source.data.eq(Mux(loopback, primitives["ALIGN"], 0x4a4a4a4a)),
+    source.charisk.eq(Mux(loopback, 0b0001, 0b0000)),
+
+with `loopback = trx.oob_echo_mask`, so with echo_mask=0 this should emit `0x4a4a4a4a`/charisk=0.
+It does not. **The measurement and the source disagree, and the measurement is what the drive sees.**
+
+This is a strong candidate for the whole remaining blocker, and it fits every observation: the device
+completes OOB, waits for the host's D10.2 speed-negotiation stream, receives ALIGN primitives
+instead, does not accept the handshake as complete, and returns to emitting OOB bursts - which is
+exactly the D24.3 content campaign 36 decoded off the wire.
+
+**Immediate next steps:**
+  1. Find why the Mux does not take effect. Candidates, in order: another comb driver on
+     `ctrl.source` winning later in the module (migen resolves multiple `self.comb +=` drivers by
+     source order, and `align_force`'s `If(...)` block is added AFTER the FSM); `oob_align_force`
+     stuck; or `oob_echo_mask` not actually reading the CSR field it should. Probe `ctrl.align_force`
+     and `phy.oob_echo_mask` on the analyzer to settle it in one capture.
+  2. Note `datapath_sink_sink_ready = 0` for the whole capture as well - the PHY is not asserting
+     ready on its sink. Worth understanding; the ECP5 PHY is supposed to hold `sink.ready=1`.
+  3. Once D10.2 is genuinely on the wire in AWAIT-ALIGN, re-run the drive handshake. If the device
+     then proceeds to ALIGN, the link should come up and IDENTIFY becomes reachable.
