@@ -2243,3 +2243,43 @@ it. That is our gateware, on the sys side, and it is directly debuggable.
   3. Only then revisit alignment/polarity - and note 8b10b IS closed under bit inversion, so an
      inverted pair yields *valid* symbols with no not-in-table errors, which fits our
      "zero code violations" observation and makes `rx_polarity` a live suspect again.
+
+### Campaign 36 addendum: the captured content is D24.3 - i.e. the device's OOB bursts, not a data stream
+
+Decoded the captured raw bus offline against a software 8b10b table built from the same litex
+Encoder (method from `bench/captures/solve_map.py`), over both bus layouts x inversion x bit-reversal:
+
+    [0:10]+[12:22] (10BSER)  inv=0 rev=0   valid 24.3%   top = 0x78 (x170), 0xd9, 0x26
+    [0:10]+[12:22]           inv=1 rev=1   valid 24.7%   top = 0x78 (x170), 0xd9, 0x26
+    [0:10]+[10:20]           inv=0 rev=0   valid 20.6%   top = 0x78 (x114), 0x3b, 0xc8
+    (all eight combinations 16.9-24.7%, 0x78 dominant in every one)
+
+**The dominant symbol is `0x78` = D24.3 - which is exactly the SATA OOB burst content.** Only ~24%
+of symbols decode validly, and no layout/inversion/reversal is clearly better than another, which is
+the signature of an oversampled OOB burst (the OOB carrier is Gen1-rate D24.3 whatever the
+generation, so sampling it at Gen2 gives partially-valid garbage) rather than a mis-mapped data
+stream.
+
+**So the qualification on campaign 36 is: the raw bus really does carry the device's transmission and
+the CDR really is locked (`rx_lol = 0/2040`) - those stand - but what we captured is the device still
+emitting OOB bursts, NOT a post-OOB speed-negotiation stream.** The device is not progressing past
+OOB either; it keeps re-issuing COMINIT/COMWAKE.
+
+This reframes the blocker once more, and more accurately than campaign 32 or 36 alone:
+
+    our COMRESET      heard, device answers COMINIT          OK
+    our COMWAKE       heard, device answers COMWAKE          OK
+    after that        the device returns to emitting OOB bursts rather than
+                      starting the D10.2/ALIGN speed negotiation
+
+i.e. the device completes the OOB handshake but does not accept it as finished. The most likely
+causes are on OUR transmit side in the window straight after the device's COMWAKE:
+  1. **We must transmit D10.2 continuously within 533ns of the device's last COMWAKE burst.** The
+     `_oob_quiet` sweep showed our reaction is 356-556ns, i.e. right at the limit; and `quiet=32`
+     (356ns) is the only in-budget setting that still detects COMWAKE. Verify with litescope what
+     our TX actually emits in AWAIT-ALIGN and exactly when it starts relative to the device's last
+     burst - that has never been measured, only reasoned about.
+  2. AWAIT-ALIGN currently transmits `0x4a4a4a4a` (D10.2) as raw dwords through the normal encoder
+     path; confirm it is not still being overridden by the OOB pattern path (`tx_produce_pattern` is
+     gated on `zero_bus & tx_idle`, and `tx_idle` should be low in AWAIT-ALIGN - check it).
+  3. If the timing is right and the content is right, sweep `nocomwake_timeout_us` (currently 0.4).
