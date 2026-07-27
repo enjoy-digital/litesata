@@ -1618,3 +1618,63 @@ place our own RX recorders capture *our own* OOB bursts, giving the measured bur
 of what we are actually emitting. Expect burst ~107ns and COMWAKE gap ~107ns / COMRESET gap ~320ns.
 If those are right, the gateware OOB is proven correct and the fault is in the drive-side cable; if
 they are wrong, it is a gateware regression that the drive-based tests cannot localise.
+
+## *** CAMPAIGN 28: THE OOB GAPS ARE OUT OF SPEC - MEASURED, NOT INFERRED ***
+
+**Correction to campaign 27: the fault is NOT the drive-side cable.** With the loopback re-fitted it
+became possible to measure our *own* emitted OOB envelope, and it is wrong.
+
+**Instrument.** `phy_ldr_idle` (the transition-sensitive LDR RX2CORE line observation) captured with
+litescope triggered on `phy_tx_cominit_stb`, run-length-decoded at the 90MHz sys clock. Two things
+make this trustworthy:
+  * **Clean control**: with ctrl parked the capture is a single 22.7us idle run - nothing emitted.
+    Active captures show structure. So the instrument sees our transmitter and only our transmitter.
+  * **Self-validation**: in the baseline config the burst measures **111ns against a 107ns nominal**.
+
+Note `rx_sel` matters: RLOS (`rx_sel=0`) is *amplitude* based and never sees our bursts through the
+DC-floating loopback island (`phy_rx_idle0` idle for the whole capture, every config). The LDR
+observation (`rx_sel=1`) is transition based and does. Also note the OOB recorders' min/max
+registers are useless here - they saturate on chatter and the parked control looks identical; only
+the litescope run-length decode separates signal from noise.
+
+**Result, baseline config** (ei_mode, deemph_gap, pat_alt, burst_mode, zero_bus, lead=trail=0):
+
+    burst  111 ns   (nominal 107 ns)                                    OK
+    gap    633-822 ns  (COMRESET/COMINIT shall-detect is 304-336 ns)    2x TOO LONG
+
+The gap is not merely outside the shall-detect window, it is outside the looser 175-525ns may-detect
+window as well. **No drive can recognise this as a COMRESET**, which fully explains why two
+different drives, both freshly powered, ignore us.
+
+**Mechanism: the gaps are being made by electrical idle, not by the data-driven constant pattern.**
+The measured 633-822ns sits right on the documented ~650-700ns EI floor (campaigns 15-16). The whole
+point of `deemph_gap` was that a constant, transition-free serializer pattern makes the gap with no
+EI involved - but with `ei_mode=1` and `ei_lead`/`ei_trail` at 0, EI is asserted for the nominal gap
+*plus* its 213-427ns un-mute latency, and that is what the envelope shows.
+
+**Configurations swept (17 total), none reaching the spec pair (107ns burst + 304-336ns gap):**
+
+    ei_trail sweep (ei_mode on):  trail  0 -> burst 111 gap 633
+                                  trail 16 -> burst 244 gap 422
+                                  trail 32 -> burst 400 gap 400
+                                  trail 40 -> burst 511 gap 333   <- gap in window, burst 5x too long
+                                  trail 48 -> burst 556 gap  22
+    gap mechanism:  ei_mode off            -> gap collapses to 22-89ns or vanishes
+                    gap_mode (LDR const)   -> gap 44-89ns
+                    pwdn_gap               -> 89ns (no EI) / 644ns (EI)
+                    pwdn held + LDR bursts -> 744ns (EI) / 578ns (no EI) / 133ns (trail=32)
+
+Releasing EI early to shorten the gap simply lengthens the preceding burst - the trade is inherent
+to shaping EI, and confirms EI is the thing defining the envelope. There is no setting of the
+existing knobs that yields a compliant COMRESET.
+
+**Where this leaves the diagnosis.** The data-driven gap that campaign 19 proved (deterministic,
+gap-width-selective beacon suppression over three passes) is not being produced by the current
+gateware in any reachable configuration. Either that path regressed between campaign 19 and now, or
+it always depended on a knob combination not captured in the journal's "working configuration"
+line. The next session should bisect `litesata/phy/ecp5sataphy.py` against campaign 19's tip
+(`23e2efc`, bitstream `H-gen2-deemph`) using the loopback instrument above - it gives a quantitative
+verdict per build in about a minute, with no drive and no scope required.
+
+Unchanged and still good: the word aligner fix (campaign 26) and the TX timing fix. Those are
+verified independently and are not implicated here.
