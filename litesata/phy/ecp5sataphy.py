@@ -519,6 +519,7 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_deemph_gap  = Signal()   # Enable the data-driven (de-emphasis) idle.
         self.oob_rate_tx     = Signal()   # DCU half-rate divider: transmit Gen1 from a Gen2 PLL.
         self.oob_rate_rx     = Signal()   # DCU half-rate divider: receive  Gen1 from a Gen2 PLL.
+        self.oob_early_d102  = Signal()   # Start continuous D10.2 on COMWAKE detection (see ctrl).
         self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
@@ -862,6 +863,11 @@ class ECP5LiteSATAPHY(LiteXModule):
             CSRField("rate_rx", size=1, offset=8,
                 description="DCU half-rate divider on RX (PLL at Gen2 -> receive Gen1). Lets the "
                             "host hunt the device's speed-negotiation rate at runtime."),
+            CSRField("early_d102", size=1, offset=9,
+                description="Transmit continuous D10.2 already in AWAIT-NO-COMWAKE (i.e. from the "
+                            "moment the device's COMWAKE is detected, while it is still being "
+                            "received) instead of holding electrical idle. Takes the 213-427ns EI "
+                            "un-mute latency out of the 533ns post-COMWAKE D10.2 budget."),
         ])
         self._oob_align = CSRStorage(fields=[
             CSRField("holdoff", size=16, offset=0,  reset=64,
@@ -921,6 +927,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_deemph_gap.eq(  self._oob_txctl.fields.deemph_gap),
             self.oob_rate_tx.eq(     self._oob_txctl.fields.rate_tx),
             self.oob_rate_rx.eq(     self._oob_txctl.fields.rate_rx),
+            self.oob_early_d102.eq(  self._oob_txctl.fields.early_d102),
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
             self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),

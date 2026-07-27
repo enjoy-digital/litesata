@@ -226,6 +226,13 @@ class SATATestSoC(SoCMini):
                         self.sata_phy.datapath.rx.source.valid,
                         self.sata_phy.datapath.rx.source.data,
                         self.sata_phy.datapath.rx.source.charisk,
+                        # The ACTUAL transceiver TX input (mux.source -> tx -> trx.sink). The
+                        # datapath.sink probes in groups 1/2 are the CORE-facing stream, which is
+                        # STALLED while ctrl owns the TX (ctrl.ready=0) - campaign 37 mistook that
+                        # frozen ALIGNInserter output for the wire content.
+                        phy.sink.valid,
+                        phy.sink.data,
+                        phy.sink.charisk,
                         self.sata_phy.ctrl.rx_idle,
                         self.sata_phy.ctrl.misalign,
                         phy.rxnotintable,

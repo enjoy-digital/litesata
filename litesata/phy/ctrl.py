@@ -86,6 +86,18 @@ class LiteSATAPHYCtrl(LiteXModule):
         if oob_bypass is None:
             oob_bypass = Signal()
 
+        # Early D10.2 (ECP5): the spec expects the host's continuous D10.2 within 533ns of the
+        # device's last COMWAKE burst, and real hosts start it as soon as COMWAKE is DETECTED,
+        # i.e. while it is still being received. On ECP5 the COMWAKE-end detection alone takes the
+        # quiet threshold (~356ns) and releasing electrical idle another 213-427ns, so a host that
+        # waits for AWAIT-ALIGN to un-mute cannot meet the budget. With this set, AWAIT-NO-COMWAKE
+        # transmits D10.2 instead of holding EI, so the driver is live and the D10.2 stream already
+        # flowing when the device finishes its COMWAKE. Zero when the PHY doesn't expose the knob,
+        # which keeps the original (Xilinx) behaviour.
+        early_d102 = getattr(trx, "oob_early_d102", None)
+        if early_d102 is None:
+            early_d102 = Signal()
+
         # Sticky ALIGN/ALIGN_N detection (cleared with the FSM): the device's ALIGN bursts are
         # short and must not be missed while the FSM is between states.
         align_seen   = Signal()
@@ -196,7 +208,13 @@ class LiteSATAPHYCtrl(LiteXModule):
             )
         )
         fsm.act("AWAIT-NO-COMWAKE",
-            self.tx_idle.eq(1),
+            If(early_d102,
+                # COMWAKE is detected: start the continuous D10.2 stream now (see above).
+                source.data.eq(0x4a4a4a4a),
+                source.charisk.eq(0b0000),
+            ).Else(
+                self.tx_idle.eq(1),
+            ),
             trx.rx_cdrhold.eq(1),
             nocomwake_timer.wait.eq(1),
             If(~trx.rx_comwake_stb | (nocomwake_timer.done if nocomwake_timeout_us else 0),

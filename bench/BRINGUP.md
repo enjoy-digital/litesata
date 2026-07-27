@@ -2323,3 +2323,31 @@ exactly the D24.3 content campaign 36 decoded off the wire.
      ready on its sink. Worth understanding; the ECP5 PHY is supposed to hold `sink.ready=1`.
   3. Once D10.2 is genuinely on the wire in AWAIT-ALIGN, re-run the drive handshake. If the device
      then proceeds to ALIGN, the link should come up and IDENTIFY becomes reachable.
+
+## *** CAMPAIGN 38: CAMPAIGN 37 CORRECTED - THE WRONG NODE WAS PROBED ***
+
+Campaign 37's headline ("we transmit ALIGN where the spec requires D10.2") was drawn from the wrong
+signal. `datapath_sink_sink_*` in analyzer groups 1/2 is `LiteSATAPHY.sink` = `datapath.sink` = the
+**core-facing** stream into `mux.sink1` (`litesata/phy/datapath.py`), which the TX mux only selects
+when `ctrl.ready=1`. With ctrl not ready that stream is STALLED - and the capture said so itself:
+`datapath_sink_sink_ready = 0` for the whole window. What was measured is therefore the core's
+ALIGNInserter frozen mid-insertion on an ALIGN dword (valid=1, ready=0, data=ALIGN forever), not the
+wire. The "puzzling" ready=0 was in fact the explanation.
+
+What actually reaches the transceiver is `mux.source -> LiteSATAPHYDatapathTX -> trx.sink`
+(`phy.sink` on the ECP5 PHY), and it has never been probed. Group 0 now carries
+`phy.sink.valid/data/charisk` with a comment marking the distinction.
+
+Whether AWAIT-ALIGN's TX content is right is therefore OPEN again, not settled. The ctrl source code
+says D10.2; the new probe will say what the wire gets.
+
+**Independent of that, a real timing hole is closed: `early_d102` (`_oob_txctl` bit 9).** The spec
+budget for the host's continuous D10.2 is 533ns from the device's last COMWAKE burst, and real hosts
+start D10.2 as soon as COMWAKE is *detected*, while it is still being received. Our ctrl instead
+held electrical idle until AWAIT-ALIGN, so the critical path was: COMWAKE-end detection (= the quiet
+threshold, ~356ns at quiet=32, and quiet<32 loses COMWAKE detection entirely - campaign 32) + FSM
+transition + sys->tx CDC + **EI un-mute 213-427ns** = ~700-900ns, structurally over budget. With
+`early_d102`, AWAIT-NO-COMWAKE transmits D10.2 instead of holding EI: the driver un-mutes and the
+stream is already flowing while the device finishes its COMWAKE, taking both the detection latency
+and the EI release out of the loop. Runtime-selectable; off = original Xilinx behaviour
+(`ctrl.py` takes the knob via `getattr(trx, "oob_early_d102")`, absent on Xilinx PHYs).
