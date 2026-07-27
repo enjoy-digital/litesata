@@ -1380,3 +1380,39 @@ constructor parameters whose defaults reproduce the original Xilinx semantics ex
 stability_us=5000, misalign_tolerance=0, align_needs_signal=True, align_accept_align=False)` and
 `LiteSATAPHYDatapath(align_timeout=256*16)`. The ECP5 arm of `litesata/phy/__init__.py` selects the
 ECP5 values. Regression `test_phy test_bist test_ecp5_oob` green (EXIT=0) before and after.
+
+## *** CAMPAIGN 25: HYBRID TX ENCODING PROVEN BROKEN (loopback verdict) ***
+
+The loopback cable settles the campaign-24 hypothesis outright. With the loopback fitted and ctrl
+transmitting continuous ALIGN (`align_force`), **our own RX - the very decoder that reads the
+drive's ALIGNs perfectly - decodes our own transmission as `FC35B5EE/k0001` (1530 samples),
+complete with an 0xEE invalid marker, instead of `7B4A4ABC/k0001`.**
+
+**=> The `pcs_mode="hybrid"` TX path (ENC_BYPASS=1 with UC_MODE=0) does NOT put valid 8b10b on the
+wire.** That fully explains the drive's behaviour: it decodes our OOB (envelope/squelch-based, so
+bit mapping is irrelevant there), answers, sends ALIGNs, waits for a valid host ALIGN it never
+receives, times out and restarts OOB - which is exactly the measured 20-29% flapping link.
+
+Mappings tried for the raw 10-bit words on the TX bus, both wrong:
+  * `tx_bus[0:10] + tx_bus[12:22]` (the 10BSER/UC_MODE=1 layout, currently in tree):
+    decodes as FC35B5EE/k0001.
+  * `tx_bus[0:10] + tx_bus[10:20]` (contiguous): decodes as all-zero dwords - worse.
+So `ENC_BYPASS=1` under `UC_MODE=0` does not simply accept raw 10-bit codes on those bit positions.
+Reverted to the 10BSER layout.
+
+**Recommended fix (next session): use the DCU encoder for the data phase.** `pcs_mode="g8b10b"`
+(ENC_BYPASS=0) is *proven* to put valid 8b10b on the wire - it achieved the full 3Gbps self
+link-up through the loopback in campaign 12. The only reason hybrid exists is that the data-driven
+OOB gap trick needs raw patterns, and in g8b10b `tx_produce_pattern` forces `tx_bus=0` (a real D0.0
+symbol, not a constant). Two ways out, in preference order:
+  1. **Split the phases.** OOB does not need valid 8b10b at all - the drive's squelch is
+     amplitude/envelope based, which is why OOB already works in hybrid despite the broken mapping.
+     So drive the OOB burst/gap from the LDR or from `tx_produce_pattern` while the PCS stays in
+     g8b10b for the data phase. Check whether the constant-gap requirement can be met by holding
+     the LDR level (LDR is muxed in after the encoder, so it is unaffected by ENC_BYPASS).
+  2. **Find the real ENC_BYPASS bus layout** - diff a Diamond-generated G8B10B+ENC_BYPASS design's
+     TX bus wiring, or sweep the remaining plausible bit positions with the loopback as the oracle
+     (each iteration is ~5 min and gives an unambiguous verdict).
+
+The loopback is the right oracle for all of this and should be used before ever going back to the
+drive: it answers "is our TX valid 8b10b?" in one capture.
