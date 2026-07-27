@@ -2197,3 +2197,49 @@ Also still untried from LUNA: its two-stage RX reset (`FFC_RRST` for the CDR, se
 `FFC_LANE_RX_RST` for the PCS) - pulsing the CDR reset on entry to AWAIT-ALIGN, once the device is
 actually transmitting, is cheap and is exactly the "make the CDR re-acquire on live data" action we
 have never performed.
+
+## *** CAMPAIGN 36: THE DEVICE'S DATA IS ARRIVING AND THE CDR IS LOCKED ***
+## *** CAMPAIGN 32's SPEED-MISMATCH CONCLUSION IS RETRACTED ***
+
+Probed the **raw DCU RX parallel bus** (`rx_bus[0:24]`) and `FFS_RLOL` directly - never done against
+a real drive in `bypass` PCS, because without `serdes.rx_word_data` the analyzer group only ever
+showed the already-decoded `datapath.rx.source`. Triggered on carrier (`phy_rx_idle0 == 0`):
+
+    2040 samples
+      rx_idle            912/2040  (44.7%)
+      rx_lol (unlocked)    0/2040   <== CDR LOCKED FOR THE ENTIRE CAPTURE
+      raw bus NONZERO   1134/2040  (55.6%)
+        000000  906 (44.4%)   <- the idle periods; matches rx_idle exactly
+        14001E   46 (2.3%)
+        0A000F   42 (2.1%)
+        394001   36 (1.8%)
+        0F2200   36 (1.8%)
+        0CF3F3   32 (1.6%)
+
+The nonzero fraction (55.6%) matches the signal-present fraction (55.3%) to within a sample, and the
+content is varied real data, not a stuck pattern.
+
+**=> There is no line-rate mismatch and no CDR lock failure.** The receiver is sampling the device's
+transmission correctly at Gen2/3.0Gbps. **Campaign 32's conclusion ("device carrier present but at an
+unlockable rate") is retracted** - it was inferred from the *decoded* view being zero, without ever
+looking at the bus. `rx_lol = 0` is the direct refutation.
+
+By extension the campaign-33/34 work is also explained: the DCU half-rate divider, the Gen1 fuse,
+the RX equalizer, `PDEN_SEL`, termination and LOL thresholds all measured neutral **because nothing
+was wrong at that layer**.
+
+**The blocker is downstream, in our own RX decode/datapath.** Raw bus carries data; the fabric
+decoders and/or the 16->32 converter and/or `datapath.rx.source.valid` deliver all-zero dwords from
+it. That is our gateware, on the sys side, and it is directly debuggable.
+
+**Next, in order (all cheap now the raw bus is visible):**
+  1. Capture `rx_data[0:20]`, both fabric decoders' `d`/`k`/`invalid`, and
+     `datapath_rx_source_source_valid` alongside `rx_bus_dbg` in the same window. That pinpoints
+     which stage zeroes the data - decoder input mapping, decoder output, converter, or a valid gate.
+  2. Check the bypass RX bit mapping the same way campaign 26 checked TX: `rx_data[0:10]` from
+     `rx_bus[0:10]` and `rx_data[10:20]` from `rx_bus[12:22]`. If the device's words decode to
+     nothing sensible, run the same solve-by-simulation approach used in `bench/captures/solve_map.py`
+     against a captured raw-bus trace to recover the true mapping/phase.
+  3. Only then revisit alignment/polarity - and note 8b10b IS closed under bit inversion, so an
+     inverted pair yields *valid* symbols with no not-in-table errors, which fits our
+     "zero code violations" observation and makes `rx_polarity` a live suspect again.

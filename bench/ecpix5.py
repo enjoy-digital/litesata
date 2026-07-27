@@ -218,6 +218,11 @@ class SATATestSoC(SoCMini):
                         self.long_activity,
                         *([serdes.rx_word_data, serdes.rx_word_ctrl]
                           if hasattr(serdes, "rx_word_data") else []),
+                        # Raw DCU RX bus: in bypass PCS there is no rx_word_data, so without this
+                        # the only RX view is the already-decoded datapath source. Needed to tell a
+                        # mis-decode (bus non-zero) from a non-sampling deserializer (bus zero).
+                        *([serdes.rx_bus_dbg] if hasattr(serdes, "rx_bus_dbg") else []),
+                        *([serdes.rx_lol_dbg] if hasattr(serdes, "rx_lol_dbg") else []),
                         self.sata_phy.datapath.rx.source.valid,
                         self.sata_phy.datapath.rx.source.data,
                         self.sata_phy.datapath.rx.source.charisk,
