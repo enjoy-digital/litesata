@@ -532,6 +532,12 @@ class SerDesECP5(LiteXModule):
         if pcs_mode in ["bypass", "pcie_bypass", "hybrid"]:
             self.encoder  = ClockDomainsRenamer("tx")(Encoder(nwords, True))
             self.decoders = [ClockDomainsRenamer("rx")(Decoder(True)) for _ in range(nwords)]
+            # A plain LIST attribute is NOT auto-registered by LiteXModule (verified: a module
+            # holding a list of Decoders elaborates to zero statements from them), so the fabric
+            # decoders were silently absent from the netlist - d/k/invalid hardwired to 0, which
+            # is exactly the "decoded output always 00000000/k0000, notintable always 0" measured
+            # against the drive. Register them explicitly.
+            self.submodules += self.decoders
         else:
             # OOB: G8B10B mode uses the DCU-internal 8b10b; invalid received symbols are decoded
             # as 0xEE with the K flag set (see LUNA/TN-02206).
