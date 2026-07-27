@@ -1717,3 +1717,53 @@ within milliseconds. It is now 100% over 60s with zero errors.
 **Still open**: the OOB handshake against a real drive (campaign 28 - gaps measured 633-822ns vs the
 304-336ns spec window). IDENTIFY needs a real device to answer a command, so it stays blocked on
 OOB; but the datapath it would run over is now proven.
+
+## *** CAMPAIGN 30: THE DRIVE HEARS OUR COMRESET AGAIN - COMWAKE IS THE ONE REMAINING GAP ***
+
+First attribution-clean drive reaction since campaign 19, and a stronger one than beacon
+suppression: with `pwdn` held (serializer powered down, LDR alone drives the pads) + LDR bursts +
+`ei_mode`, the drive's COMINIT emission **increases by up to 14x** when we transmit. That is exactly
+what a device does on receiving a host COMRESET - it answers with COMINIT.
+
+Metric: drive burst rate with ctrl parked (its free-running beacon) vs ctrl active, `rx_sel=0`
+(RLOS - amplitude based, the only clean detector against a real drive; `rx_sel=1` picks up chatter
+and produced false "gmin=3 cycles" COMWAKE flags earlier - do not use it with a drive attached).
+
+    wake_gap  trail   park/s   act/s  ratio   gmin
+           8      0     13.3    64.0    4.8     28
+           8     16     14.7   140.7    9.6     28
+           8     32     13.3    16.0    1.2     28
+          16      0     13.3    49.3    3.7     28
+          16     16     14.7   133.3    9.1     28
+          16     32     14.0    14.0    1.0     28
+          48      0     14.7   102.7    7.0     28
+          48     16     16.7   232.7   14.0     28
+          48     32     12.7    13.3    1.1     28
+    (18 points total; every trail=0 row 3.1-7.0x, every trail=16 row 8.9-14.0x,
+     every trail=32 row 0.9-1.2x)
+
+**The response is sharply tuned on `ei_trail` and independent of `wake_gap`** - trail=16 always
+reacts, trail=32 always kills it dead. A sharp, reproducible, parameter-selective response across 18
+points is not an artifact: it is the drive.
+
+Self-echo is excluded arithmetically: our own COMINIT gaps measure 57-74 cycles, and the recorder
+would log any gap below its 90-cycle bound, so `gmax` would rise. `gmax` stays at 29 in all 18 runs,
+i.e. everything recorded carries the drive's own 311-322ns COMINIT gap signature.
+
+**`gmin` never leaves 28 cycles: the drive never sends COMWAKE.** So the handshake dies exactly one
+step further along than before - the drive hears our COMRESET and answers COMINIT, but never hears
+our COMWAKE.
+
+**This is precisely the shape the campaign predicted.** EI-carved gaps bottom out around 400-460ns
+(campaigns 15-16). The COMRESET/COMINIT shall-detect window is **304-336ns** - marginally reachable,
+and `ei_trail=16` is evidently the setting that lands it close enough. The COMWAKE window is
+**101.3-112ns** - roughly 4x below the EI floor and therefore unreachable by any EI shaping, which
+is why no `wake_gap` value in the sweep changes anything.
+
+That is the whole reason campaign 19's **data-driven gap** (constant, transition-free serializer
+pattern, no EI involved) mattered: it is the only mechanism that can produce a 107ns gap. Campaign
+28 showed that mechanism is currently not producing gaps at all in any reachable configuration.
+
+**So the single remaining blocker is now sharply defined**: restore the data-driven COMWAKE gap.
+Everything else in the chain is proven - COMRESET is heard (this campaign), and the entire post-OOB
+datapath links up at 100% over 60s with zero errors (campaign 29).
