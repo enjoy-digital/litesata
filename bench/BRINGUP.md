@@ -2538,3 +2538,29 @@ Two hypotheses fit, in order of likelihood:
 
 Also still pending from the plan: dump + descramble the exact transmitted IDENTIFY FIS (field-level
 check). All three are next-session items; each is one capture or one small build.
+
+## *** CAMPAIGN 43: POLITE HOST ADDED; THE BLOCK IS NOW UPSTREAM OF A COMPLETELY FREE LINK ***
+
+1. **Drive re-wedge confirmed and mitigated.** The drive re-entered the COMINIT-only wedge (gmin=28,
+   no COMWAKE) after our identify/reset cycles; 60s of line silence does NOT clear it, only a power
+   cycle does. Root cause on our side: the 3ms align-timeout made a ~300Hz COMRESET hammer. The ECP5
+   arm now enables ctrl's polite-host mode (`oob_retries=4, oob_backoff=0.5`) - in tree, built,
+   timing-clean. After replug: link up in 0.07-0.11s every time.
+
+2. **FIS field packing audited**: `transport.sink.c.eq(1)` (command.py:70), layout matches the spec
+   (type@0, C@15, command@16). Not the bug.
+
+3. **The failure moved upstream.** On the fresh drive + polite build, an armed TX X_RDY trigger
+   never fires for IDENTIFY - the command layer never presents a frame - while a group-2 capture in
+   the same state shows **both link FSMs in IDLE and `from_rx.idle=1` (2040/2040)**: the link is
+   completely free to transmit. Campaign 42's full frame emission (X_RDY->SOF->EOF->WTRM, drive
+   R_OK) was real but is not reproducing in this state. A BIST-generator probe returned done=1
+   instantly with no X_RDY (needs re-verification on a fresh load - a wedged identify from the
+   prior attempt may have held the crossbar for it).
+
+**Next session (one build): add `sata_core.command` TX/RX FSMs, `transport` FSMs and the identify
+FSM state + crossbar grant to an analyzer group**, then on a fresh load + fresh drive trace the
+FIRST identify start pulse through BIST -> crossbar -> command -> transport -> link and see exactly
+which stage swallows it. The signature-FIS interaction at link-up (drive's unsolicited D2H FIS
+arriving into a port nobody reads, backpressuring transport) remains the standing suspect for why a
+fresh drive session differs from campaign 42's.
