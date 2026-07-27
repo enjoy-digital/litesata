@@ -222,6 +222,8 @@ class SATATestSoC(SoCMini):
                         # the only RX view is the already-decoded datapath source. Needed to tell a
                         # mis-decode (bus non-zero) from a non-sampling deserializer (bus zero).
                         *([serdes.rx_bus_dbg] if hasattr(serdes, "rx_bus_dbg") else []),
+                        *([serdes.bp_src_dbg, serdes.bp_dec_d, serdes.bp_dec_k, serdes.bp_dec_inv,
+                           serdes.bp_slip_dbg] if hasattr(serdes, "bp_src_dbg") else []),
                         *([serdes.rx_lol_dbg] if hasattr(serdes, "rx_lol_dbg") else []),
                         self.sata_phy.datapath.rx.source.valid,
                         self.sata_phy.datapath.rx.source.data,

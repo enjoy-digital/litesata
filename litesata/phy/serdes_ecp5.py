@@ -1104,6 +1104,17 @@ class SerDesECP5(LiteXModule):
                     self.sync.rx += If(Cat(*[d.k for d in self.decoders]) != 0,
                         self.bp_kcnt_dbg.eq(self.bp_kcnt_dbg + 1)
                     )
+                    # Stage-by-stage analyzer taps: aligned word, decoder outputs.
+                    self.bp_src_dbg = Signal(20)
+                    self.bp_dec_d   = Signal(16)
+                    self.bp_dec_k   = Signal(2)
+                    self.bp_dec_inv = Signal(2)
+                    self.comb += [
+                        self.bp_src_dbg.eq(bp_aligner.source),
+                        self.bp_dec_d.eq(Cat(self.decoders[0].d, self.decoders[1].d)),
+                        self.bp_dec_k.eq(Cat(self.decoders[0].k, self.decoders[1].k)),
+                        self.bp_dec_inv.eq(Cat(self.decoders[0].invalid, self.decoders[1].invalid)),
+                    ]
                 else:
                     self.comb += rx_raw_al.eq(Cat(rx_bus[0:10], rx_bus[12:22]))
                 self.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(data_width, reverse=True))

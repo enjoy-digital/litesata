@@ -2390,3 +2390,22 @@ stream's longest 1-run is four) so the slip cannot thrash between windows.
 Chain if this works: device Gen2 ALIGN window -> fabric aligner locks on the first comma -> decoders
 emit BC/K -> 16->32 converter byte-aligns -> ctrl sees 7B4A4ABC/k0001 -> align_seen -> SEND-ALIGN ->
 device sees our ALIGN -> SYNC -> READY.
+
+## *** CAMPAIGN 40 (in progress): GEN2 WINDOWS RECUR; RAW HAS 674 K28.5s, HARDWARE DECODES ZERO ***
+
+Window-hunt with the pipelined (timing-clean: rx domain 188.64MHz) sim-proven fabric aligner,
+24 trigger-on-carrier passes, offline-decoding each raw capture and reading the hardware decoded-K
+counter (`_oob_bp.kcnt`) across each pass:
+
+    pass 13: 2040 words  valid 85.9%  offlineK=674   kcntDelta=0
+    all other passes: 12-31% valid, offlineK 0-4, kcntDelta=0
+
+So (1) the device's Gen2 ALIGN window still recurs (~1 in 12-24 passes, matching the earlier 1-in-8);
+(2) in that window the raw bus offline-decodes at 85.9% valid with 674 clean K28.5s AT THE NATURAL
+word boundary; (3) the hardware fabric decoders emitted not a single K during the same second.
+
+The aligner RTL is proven in simulation (test_bypass_word_aligner: all 20 offsets), timing passes,
+slip/slipmv registers demonstrably run (same clock domain as kcnt). The break is therefore in the
+real hardware path between rx_bus and the decoders - something simulation cannot see. Stage-by-stage
+analyzer taps added (bp_src_dbg = aligner output, bp_dec_d/k/inv = decoder outputs, bp_slip_dbg) to
+pinpoint the failing stage in one captured Gen2 window.
