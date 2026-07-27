@@ -87,6 +87,64 @@ CLKIN +-->  M  +--> VCO +--> /D  +--> LINERATE
            linerate = config["linerate"]/1e9)
         return r
 
+# BypassWordAligner --------------------------------------------------------------------------------
+
+class BypassWordAligner(Module):
+    """Fabric word aligner for the raw 10BSER (bypass) datapath.
+
+    The DCU comma aligner is a G8B10B PCS feature and does not operate on the raw 10-bit datapath
+    (measured: against a real device ALIGN stream the raw-bus word boundary drifts freely and the
+    decoded stream never contains a K character, with every DCU aligner knob neutral). This module
+    aligns in the fabric: scan a 40-bit sliding window over consecutive raw words for the K28.5
+    comma7 (serial 0011111 = 0x7C read LSB-first, or its complement 0x03) at all 20 bit offsets,
+    and barrel-shift the datapath to the symbol boundary. Bit 0 of `sink` must be the earliest bit
+    on the wire. Pipelined in three stages (comparators / priority encode / shift) to close timing
+    in the 150MHz rx word-clock domain. Latency 3 cycles; `slip` is quasi-static once locked so
+    the inter-stage vintage skew at re-lock only garbles the word in flight.
+    """
+    def __init__(self):
+        self.enable  = Signal(reset=1) # i
+        self.sink    = Signal(20)      # i: raw word, bit0 first on wire
+        self.source  = Signal(20)      # o: comma-aligned word
+        self.slip    = Signal(5)       # o (debug)
+        self.slip_mv = Signal(8)       # o (debug): slip-change count
+
+        # # #
+
+        prev   = Signal(20)
+        win    = Signal(40)
+        win_r  = Signal(40)
+        hits   = Signal(20)
+        found  = Signal()
+        slip_n = Signal(5)
+        shift  = Signal(40)
+
+        self.comb += win.eq(Cat(prev, self.sink)) # bit 0 = oldest on the wire
+        # Stage A: 20 parallel comma comparators, registered.
+        self.sync += [
+            prev.eq(self.sink),
+            win_r.eq(win),
+            hits.eq(Cat(*[(win[k:k+7] == 0x7C) | (win[k:k+7] == 0x03) for k in range(20)])),
+        ]
+        # Stage B: priority encode (lowest offset wins), registered slip.
+        self.comb += [
+            found.eq(hits != 0),
+            slip_n.eq(self.slip),
+        ]
+        for k in reversed(range(20)): # last match wins -> lowest offset
+            self.comb += If(hits[k], slip_n.eq(k))
+        # Stage C: barrel shift with the (quasi-static) slip, registered output.
+        self.comb += shift.eq(win_r >> self.slip)
+        self.sync += [
+            If(self.enable & found,
+                self.slip.eq(slip_n),
+                If(slip_n != self.slip,
+                    self.slip_mv.eq(self.slip_mv + 1)
+                ),
+            ),
+            self.source.eq(shift[0:20]),
+        ]
+
 # SerDesSCI ----------------------------------------------------------------------------------------
 
 class SerDesECP5SCI(LiteXModule):
@@ -1028,31 +1086,24 @@ class SerDesECP5(LiteXModule):
                 # registered) so the 40->20 dynamic shift gets a full rx cycle.
                 rx_raw_al = Signal(20)
                 if pcs_mode == "bypass":
-                    bp_raw    = Signal(20)
-                    bp_prev   = Signal(20)
-                    bp_win    = Signal(40)
-                    bp_win_r  = Signal(40)
-                    bp_slip   = Signal(5)
-                    bp_found  = Signal()
-                    bp_slip_n = Signal(5)
-                    bp_shift  = Signal(40)
+                    self.bp_aligner = bp_aligner = ClockDomainsRenamer("rx")(BypassWordAligner())
                     self.comb += [
-                        bp_raw.eq(Cat(rx_bus[0:10], rx_bus[12:22])),
-                        bp_win.eq(Cat(bp_prev, bp_raw)),   # bit 0 = oldest on the wire
-                        bp_slip_n.eq(bp_slip),
-                        bp_shift.eq(bp_win_r >> bp_slip),
+                        bp_aligner.enable.eq(rx_align),
+                        bp_aligner.sink.eq(Cat(rx_bus[0:10], rx_bus[12:22])),
+                        rx_raw_al.eq(bp_aligner.source),
                     ]
-                    for k in reversed(range(20)):          # last match wins -> lowest offset
-                        self.comb += If((bp_win[k:k+7] == 0x7C) | (bp_win[k:k+7] == 0x03),
-                            bp_found.eq(1),
-                            bp_slip_n.eq(k),
-                        )
-                    self.sync.rx += [
-                        bp_prev.eq(bp_raw),
-                        bp_win_r.eq(bp_win),
-                        If(rx_align & bp_found, bp_slip.eq(bp_slip_n)),
-                        rx_raw_al.eq(bp_shift[0:20]),
+                    # Debug observation (CSR-polled): slip, slip-change count, and a rolling count
+                    # of rx words whose fabric decode contains a K character.
+                    self.bp_slip_dbg   = Signal(5)
+                    self.bp_slipmv_dbg = Signal(8)
+                    self.bp_kcnt_dbg   = Signal(16)
+                    self.comb += [
+                        self.bp_slip_dbg.eq(bp_aligner.slip),
+                        self.bp_slipmv_dbg.eq(bp_aligner.slip_mv),
                     ]
+                    self.sync.rx += If(Cat(*[d.k for d in self.decoders]) != 0,
+                        self.bp_kcnt_dbg.eq(self.bp_kcnt_dbg + 1)
+                    )
                 else:
                     self.comb += rx_raw_al.eq(Cat(rx_bus[0:10], rx_bus[12:22]))
                 self.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(data_width, reverse=True))

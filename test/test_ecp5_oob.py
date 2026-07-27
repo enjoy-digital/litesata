@@ -392,5 +392,61 @@ class TestECP5OOB(unittest.TestCase):
             self.assertIn(port, v)
 
 
+
+    def test_bypass_word_aligner(self):
+        """The fabric word aligner must recover the symbol boundary at every bit offset.
+
+        Feeds an encoded continuous-ALIGN bit stream, rotated by 0..19 bits, through
+        BypassWordAligner + the fabric decoders, and requires K28.5 to decode and >=90%%
+        clean ALIGN symbols at every offset. (The DCU comma aligner does not operate on
+        the raw 10BSER datapath - this module is what does the job in bypass PCS.)
+        """
+        from litex.soc.cores.code_8b10b import Encoder, Decoder
+        from litesata.phy.serdes_ecp5 import BypassWordAligner
+
+        def enc_stream(pairs, n):
+            e = Encoder(1, True); out = []
+            def g():
+                for i in range(n+4):
+                    d, k = pairs[i % len(pairs)]
+                    yield e.d[0].eq(d); yield e.k[0].eq(k); yield
+                    out.append((yield e.output[0]))
+            run_simulation(e, g()); return out[2:2+n]
+
+        codes = enc_stream([(0xBC,1),(0x4A,0),(0x4A,0),(0x7B,0)], 80)
+        bits  = []
+        for c in codes: bits += [(c >> i) & 1 for i in range(10)]
+
+        class DUT(Module):
+            def __init__(self):
+                self.al = BypassWordAligner()
+                self.submodules += self.al
+                self.decs = [Decoder(True) for _ in range(2)]
+                self.submodules += self.decs
+                self.sync += [
+                    self.decs[0].input.eq(self.al.source[0:10]),
+                    self.decs[1].input.eq(self.al.source[10:20]),
+                ]
+
+        good = [(0xBC,1),(0x4A,0),(0x7B,0)]
+        for off in range(20):
+            dut  = DUT()
+            seen = []
+            def g():
+                stream = bits[off:] + bits[:off]
+                words  = [stream[i:i+20] for i in range(0, len(stream)-20, 20)]
+                for w in words*3:
+                    yield dut.al.sink.eq(sum(b << i for i, b in enumerate(w)))
+                    yield
+                    seen.append(((yield dut.decs[0].d), (yield dut.decs[0].k),
+                                 (yield dut.decs[1].d), (yield dut.decs[1].k)))
+            run_simulation(dut, g())
+            tail   = seen[20:]
+            got_k  = sum(1 for d0,k0,d1,k1 in tail if (k0 and d0 == 0xBC) or (k1 and d1 == 0xBC))
+            sym_ok = sum(1 for d0,k0,d1,k1 in tail if (d0,k0) in good and (d1,k1) in good)
+            self.assertGreater(got_k, 0, f"offset {off}: no K28.5 decoded")
+            self.assertGreaterEqual(sym_ok, 0.9*len(tail), f"offset {off}: {sym_ok}/{len(tail)}")
+
+
 if __name__ == "__main__":
     unittest.main()

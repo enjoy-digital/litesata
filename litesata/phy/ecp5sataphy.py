@@ -980,6 +980,20 @@ class ECP5LiteSATAPHY(LiteXModule):
         self._oob_rx_burst = CSRStatus(fields=[
             CSRField("min", size=16, offset= 0), CSRField("max", size=16, offset=16)])
         self._oob_rx_count = CSRStatus(16, description="RX OOB bursts seen.")
+        if hasattr(self.serdes, "bp_slip_dbg"):
+            self._oob_bp = CSRStatus(fields=[
+                CSRField("slip",   size=5,  offset=0,
+                    description="Fabric word-aligner current bit slip (bypass PCS)."),
+                CSRField("slipmv", size=8,  offset=8,
+                    description="Count of slip changes (rolling)."),
+                CSRField("kcnt",   size=16, offset=16,
+                    description="Count of rx words whose fabric decode contains a K character."),
+            ])
+            self.specials += [
+                MultiReg(self.serdes.bp_slip_dbg,   self._oob_bp.fields.slip,   "sys"),
+                MultiReg(self.serdes.bp_slipmv_dbg, self._oob_bp.fields.slipmv, "sys"),
+                MultiReg(self.serdes.bp_kcnt_dbg,   self._oob_bp.fields.kcnt,   "sys"),
+            ]
 
         # PCIe receiver-detect (TX-path continuity test towards the drive RX termination).
         self._oob_rxdet = CSRStorage(fields=[
