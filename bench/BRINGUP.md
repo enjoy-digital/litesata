@@ -1972,3 +1972,41 @@ so the FSM resets every 3ms and may keep missing the Gen2 window. Next session:
      sys-domain view, which shows nothing when the word clock is not running.
   3. Gen1 build (1.5Gbps) - blocked on the known gen1 PLL problem (tx clock 87MHz instead of 75,
      `CHx_DCO*` tuning unsolved), but that is now the single highest-value unblocking task.
+
+### Campaign 32 addendum 4: SPEED MISMATCH CONFIRMED - the device carrier is present but unlockable
+
+Runtime probe with the handshake running (`quiet=32`, bypass PCS, original drive), watching the
+burst-length recorder for a *sustained* carrier rather than short OOB bursts:
+
+    t= 5s bursts= 21737   burst 9..65535 = 100..728167 ns   gmin=8
+    t=10s bursts= 43512   burst 9..65535 = 100..728167 ns   gmin=8
+    t=20s bursts= 65287   burst 9..65535 = 100..728167 ns   gmin=8
+    t=30s bursts= 65535   burst 9..65535 = 100..728167 ns   gmin=8
+
+`burst_max` **saturates at 65535 cycles (>728us)**: the device is emitting a continuous carrier, not
+just OOB bursts. Meanwhile the datapath decodes all-zero dwords with **zero** not-in-table errors and
+`rx_idle` reads 100% in the sys-domain capture.
+
+**Signal present on the wire + nothing decodable + no code violations = the CDR is not locking, i.e.
+a line-rate mismatch.** The device is running its post-COMWAKE speed negotiation at a generation our
+receiver cannot receive; our RX is pinned at Gen2 (3Gbps). This is consistent with everything else:
+OOB is envelope-based so it works regardless of rate (hence the correct COMWAKE at gmin=8), and only
+the rate-sensitive part fails.
+
+**This closes the diagnosis of the remaining blocker.** The full chain is now:
+
+    COMRESET -> device COMINIT      OK
+    host COMWAKE -> device COMWAKE  OK  (gmin=8, sustained)
+    serdes rx_ready                 OK  (99.9%)
+    device speed-negotiation stream PRESENT but at an unlockable rate  <== BLOCKER
+    ALIGN detect / SEND-ALIGN / READY  not reached
+
+**Next session - the single task is Gen1 (1.5Gbps) RX.** SATA speed negotiation always steps down to
+Gen1, so a working Gen1 receiver is guaranteed to intersect the device's sequence. This is blocked on
+the known gen1 PLL problem (tx clock measured 87MHz instead of 75MHz, `rx_ready=0`, `CHx_DCO*`
+tuning unsolved, and nextpnr ignores `D_TX_MAX_RATE`/`CDR_MAX_RATE`). That is now the highest-value
+unblocking task in the whole campaign - everything else in the chain is proven.
+
+Secondary: build the analyzer in the **rx** clock domain to observe the raw deserializer during the
+device's carrier (the sys-domain view shows nothing when the recovered word clock is not running),
+which would confirm the rate directly rather than by inference.
