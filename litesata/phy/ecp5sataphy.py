@@ -509,6 +509,7 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_ctrl_dis = Signal() # Park ctrl: mask its OOB TX requests + force EI (silent
                                      # line for attribution-clean OOB experiments).
         self.oob_align_force = Signal() # Line test: force continuous ALIGN primitive transmission.
+        self.oob_bypass      = Signal() # Bench debug: skip OOB, go straight to the ALIGN exchange.
         self.oob_burst_len = Signal(8, reset=round(160*tx_clk_freq/1.5e9))
         self.oob_align_holdoff = Signal(16, reset=64)
         self.oob_align_nocomma = Signal(16, reset=64)
@@ -822,6 +823,10 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Force continuous ALIGN primitive transmission (speed-negotiation answer test)."),
             CSRField("ei_carve", size=1, offset=30,
                 description="LDR drives the whole sequence; EI carves the gaps (no enable toggling)."),
+            CSRField("oob_bypass", size=1, offset=31,
+                description="Bench debug: skip the OOB handshake and go straight to the ALIGN "
+                            "exchange, so a TX->RX loopback (which cannot complete OOB by "
+                            "construction) can validate the whole post-OOB datapath."),
         ])
         self._oob_txctl = CSRStorage(fields=[
             CSRField("pwdn",     size=1, offset=0, description="Power down the main TX driver."),
@@ -885,6 +890,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_pat_force.eq(  self._oob_control.fields.pat_force),
             self.oob_echo_mask.eq(  self._oob_control.fields.echo_mask),
             self.oob_align_force.eq(self._oob_control.fields.align_force),
+            self.oob_bypass.eq(     self._oob_control.fields.oob_bypass),
             self.oob_ei_carve.eq(  self._oob_control.fields.ei_carve),
             self.oob_burst_len.eq( self._oob_burst_len.storage),
             self.oob_tx_pwdn.eq(     self._oob_txctl.fields.pwdn),

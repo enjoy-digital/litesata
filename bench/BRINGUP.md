@@ -1678,3 +1678,42 @@ verdict per build in about a minute, with no drive and no scope required.
 
 Unchanged and still good: the word aligner fix (campaign 26) and the TX timing fix. Those are
 verified independently and are not implicated here.
+
+## *** CAMPAIGN 29: POST-OOB TX/RX DATAPATH FULLY WORKING - 100% OVER 60s ***
+
+Priority correction: the goal is TX/RX *after* OOB. A plain TX->RX loopback cannot complete a SATA
+OOB handshake by construction, which had made it useless for exactly the thing that matters. Fixed
+with a bench debug knob, `_oob_control.oob_bypass` (bit 31): ctrl jumps from AWAIT-CRG-RESET
+straight to AWAIT-ALIGN, skipping COMRESET/COMINIT/COMWAKE entirely. Everything after that point is
+the real, unmodified path.
+
+**Result on the loopback (`--gen 2 --pcs-mode hybrid --rx-los-lvl 2 --sys-clk-freq 90e6`,
+ctrl = rx_sel|ei_mode|cdrhold_dis|ldr_timeout(4)|burst_mode|zero_bus|echo_mask|oob_bypass):**
+
+    ready in 0.034s, status 0xf
+    60s soak:  3751/3751 polls ready = 100.00%
+
+    TX to PHY (core -> wire):   B5B5957C/k0001  99.2%   <== SYNC
+                                7B4A4ABC/k0001   0.8%   <== ALIGN
+    RX from wire:               B5B5957C/k0001  99.5%   <== SYNC
+                                7B4A4ABC/k0001   0.5%   <== ALIGN
+    ctrl_misalign     0/1016
+    phy_rxnotintable  0/1016
+    link tx/rx FSM    both IDLE, ctrl_ready 1016/1016
+
+The ALIGN fraction is the correctness check: `LiteSATAALIGNInserter` overrides 2 dwords out of every
+256, i.e. 0.78%, which is what is measured. The core is emitting a spec-correct SYNC idle stream
+with periodic ALIGN, it survives the loop at 3Gbps, and the DCU decodes it with **zero** misalignments
+and **zero** not-in-table errors over the whole capture.
+
+**This also validates the campaign-26 word-aligner fix under real link traffic**, not just under the
+`align_force` line test. The campaign-24 worry that drove the regression - that continuous alignment
+would re-lock on comma-like scrambled data and lose the word boundary after ~10us - does not occur
+with `LSM_DISABLE=1` + pulsed re-arm: alignment holds for 60s of continuous SYNC/ALIGN traffic.
+
+Compare with where this started today: the link reached READY only 20-29% of the time and collapsed
+within milliseconds. It is now 100% over 60s with zero errors.
+
+**Still open**: the OOB handshake against a real drive (campaign 28 - gaps measured 633-822ns vs the
+304-336ns spec window). IDENTIFY needs a real device to answer a command, so it stays blocked on
+OOB; but the datapath it would run over is now proven.

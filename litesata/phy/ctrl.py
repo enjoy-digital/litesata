@@ -74,6 +74,17 @@ class LiteSATAPHYCtrl(LiteXModule):
         if loopback is None:
             loopback = Signal()
 
+        # OOB bypass (bench debug): jump straight from reset to the ALIGN exchange, skipping the
+        # whole COMRESET/COMINIT/COMWAKE handshake. A plain TX->RX loopback cannot complete a SATA
+        # OOB handshake by construction - the host transmits COMINIT only while in the COMINIT
+        # state and is silent in AWAIT-COMINIT, so it never hears its own burst - which otherwise
+        # makes the loopback useless for validating everything that happens AFTER OOB. With this
+        # set, the loopback exercises the real post-OOB path end to end: ALIGN exchange ->
+        # SEND-ALIGN -> READY -> the core's SYNC idle stream.
+        oob_bypass = getattr(trx, "oob_bypass", None)
+        if oob_bypass is None:
+            oob_bypass = Signal()
+
         # Sticky ALIGN/ALIGN_N detection (cleared with the FSM): the device's ALIGN bursts are
         # short and must not be missed while the FSM is between states.
         align_seen   = Signal()
@@ -130,7 +141,11 @@ class LiteSATAPHYCtrl(LiteXModule):
                 NextValue(trx.rx_polarity, 0),
                 # Alternate TX polarity on each retry.
                 NextValue(trx.tx_polarity, ~trx.tx_polarity),
-                NextState("COMINIT")
+                If(oob_bypass,
+                    NextState("AWAIT-ALIGN")
+                ).Else(
+                    NextState("COMINIT")
+                )
             )
         )
         fsm.act("COMINIT",
