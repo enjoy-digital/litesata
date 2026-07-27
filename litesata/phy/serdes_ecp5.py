@@ -832,6 +832,18 @@ class SerDesECP5(LiteXModule):
         # the designated word) - unlike the slow asynchronous behavior measured in the 10BSER/UC
         # bypass configuration. Alignment: the link state machine must be disabled and the
         # edge-sensitive FFC_ENABLE_CGALIGN input pulsed to re-arm the word aligner (per LUNA).
+        if pcs_mode == "bypass":
+            # Word alignment for the raw 10BSER datapath. The bypass arm previously inherited only
+            # the base parameters (ENABLE_CG_ALIGN=1, LSM left at its default, FFC_ENABLE_CGALIGN
+            # undriven), i.e. it never got the campaign-26 configuration that made the aligner
+            # actually lock in hybrid. With the link state machine enabled, the LSM owns the barrel
+            # shifter and nothing else can move it; disabling it and re-arming on decode errors is
+            # the arrangement proven to hold for 60s of continuous SYNC/ALIGN traffic.
+            self.serdes_params.update(
+                p_CHX_LSM_DISABLE        = "0b1",
+                p_CHX_ENABLE_CG_ALIGN    = "0b1",
+                i_CHX_FFC_ENABLE_CGALIGN = Mux(align_cont_rx, rx_align, cg_align_pulse),
+            )
         if pcs_mode == "pcie_bypass":
             # OOB: EI-flag feature on top of the raw 10BSER bypass datapath: bits 11/23 are
             # unused in bypass gearing, so the per-byte EI flags can ride them if the feature
@@ -1014,6 +1026,34 @@ class SerDesECP5(LiteXModule):
                 for i in range(nwords):
                     self.sync.rx += self.decoders[i].input.eq(rx_data[10*i:10*(i+1)])
                 self.sync.rx += self.rx_prbs.i.eq(rx_data)
+
+            if pcs_mode == "bypass":
+                # Word-aligner re-arm for the raw datapath, mirroring the hybrid arm but sourced
+                # from the FABRIC decoders (there is no DCU decode here, so no 0xEE marker): pulse
+                # on any invalid symbol, and also after a spell with no K character at all, since
+                # a wrong boundary frequently decodes to plausible symbols with nothing flagged.
+                bp_holdoff = Signal(16)
+                bp_nocomma = Signal(16)
+                bp_invalid = Signal()
+                bp_kseen   = Signal()
+                self.comb += [
+                    bp_invalid.eq(Cat(*[d.invalid for d in self.decoders]) != 0),
+                    bp_kseen.eq(  Cat(*[d.k       for d in self.decoders]) != 0),
+                ]
+                self.sync.rx += [
+                    cg_align_pulse.eq(0),
+                    If(bp_kseen,
+                        bp_nocomma.eq(0)
+                    ).Else(
+                        bp_nocomma.eq(bp_nocomma + 1)
+                    ),
+                    If(bp_holdoff != 0,
+                        bp_holdoff.eq(bp_holdoff - 1)
+                    ).Elif(rx_align & (bp_invalid | (bp_nocomma >= align_nocomma_rx)),
+                        cg_align_pulse.eq(1),
+                        bp_holdoff.eq(align_holdoff_rx),
+                    )
+                ]
         else:
             # OOB: G8B10B datapaths: 8-bit data + K flag per byte on the DCU bus (disparity bits
             # left at 0 = automatic running disparity).

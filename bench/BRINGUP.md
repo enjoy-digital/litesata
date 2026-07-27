@@ -1839,3 +1839,25 @@ order of expected value:
      there; it is a one-line change and the same litescope instrument measures it.
   2. Work out why a constant raw word does not stay flat under G8B10B/ENC_BYPASS, which would let
      hybrid do both.
+
+### Campaign 31 addendum 2: the bypass RX drop is CDR lock, NOT word alignment
+
+Applied the campaign-26 aligner configuration to the bypass arm (`LSM_DISABLE=1`,
+`ENABLE_CG_ALIGN=1`, `FFC_ENABLE_CGALIGN` pulsed, with a re-arm generator sourced from the fabric
+decoders' `invalid`/`k` outputs since there is no DCU 0xEE marker in 10BSER). Build timing clean
+(txoutclk 177.30MHz, sys 110.13MHz).
+
+Result: **no improvement.** `ready 0/1564`, status histogram `0x6 x1190, 0x2 x373` - i.e. `rx_ready`
+still drops for ~24% of samples (was ~27%). The device COMWAKE is still arriving (`gmin=8`).
+
+**This localises the bypass blocker precisely: status 0x2 means `rx_ready` is low, and `rx_ready`
+comes from the SerdesInit FSM (rx_lol / CDR lock), not from the word aligner.** The RX is losing
+*bit* lock, not word boundary. So the campaign-10 "gen2 RX word-clock collapse" is a CDR/PLL problem
+and no amount of comma-alignment configuration will touch it. The aligner change is kept (it makes
+bypass consistent with hybrid and is measurably neutral) but it is not the fix.
+
+Next session should attack `rx_ready` directly: `SerdesInit` rx_lol handling, `rx_los_lvl`, CDR
+settings (`CHx_DCO*`, `RX_LOS_CEQ`, equalisation), and whether the CDR is being disturbed by the OOB
+phase (`cdrhold_dis` currently set). The `_oob_control.oob_bypass` knob added this session is useful
+here: it skips OOB entirely, so `rx_ready` stability can be characterised on a quiet line without
+the OOB storm as a confounder.
