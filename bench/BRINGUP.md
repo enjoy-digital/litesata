@@ -2647,3 +2647,33 @@ it: instant core attach + EAT_REG_D2H), IDENTIFY should complete immediately.
 Session-added robustness, all default-off/parameterized and regression-green: BypassWordAligner
 voting + K28.5-age re-arm; sync_relax (txctl bit 10); blind_rrdy (bit 11); early_d102 (bit 9);
 EAT_REG_D2H signature consumption; stability_us=1 + align_cdr_hold=False + polite host (ECP5).
+
+## *** CAMPAIGN 47: SPEC SEND-ALIGN EXIT RESTORED; DRIVE RE-WEDGED (REMOTE - NO POWER CYCLE) ***
+
+Accepting the drive as healthy (it worked before this campaign), two real corrections landed:
+
+1. **align_accept_align=False restored (spec negotiation exit).** Counting the drive's own ALIGNs
+   to leave SEND-ALIGN - a broken-RX-era workaround - stopped our ALIGN transmission ~1.4us into
+   the drive's negotiation; post-READY captures showed its ALIGN stream degrading into
+   doubled-Gen1-family junk = it kept STEPPING RATES and only settled by luck. The host now
+   transmits ALIGN until the device itself sends non-ALIGN, per spec. Link-up measured 0.08s.
+
+2. Offline shift-analysis library extended: 0xA01CA01C (pre-READY) is neither a shifted X_RDY nor
+   any shifted held primitive - consistent with doubled-Gen1 content (drive still rate-stepping,
+   supporting correction 1). Byte-rotated X_RDY signatures cataloged (0x7C5757B5, 0xB57C5757,
+   0x57B57C57) - exact-match triggers never covered these.
+
+Post-READY misalign hunt (armed with cond={misalign,ready} - litescope multi-signal triggers work)
+caught the drive's ALIGN tail degrading, confirming the rate-stepping diagnosis. After the spec fix
+the first link came up in 0.08s but IDENTIFY remained unanswered; before the armed link-RX-RDY
+watch could run on a good link, the drive re-entered its COMINIT-only wedge (6 failed handshakes,
+status 0x6) and the session is remote - no power cycle possible.
+
+**Next session, the moment the drive is power-cycled (in this order, all tooling ready):**
+  1. Armed link-RX-RDY watch (group 2, fsm2==RDY) across the first link-up: does the drive's
+     signature X_RDY reach the link RX at all on a spec-negotiated link.
+  2. If yes but transient: the signature-consumption path (EAT_REG_D2H) is already in place -
+     IDENTIFY immediately after.
+  3. If no: post-READY misalign+ready-armed capture for a rotated/short X_RDY; then the
+     blind_rrdy probe (bit 11) tuned faster.
+  4. Consider wiring the drive to a PC once to confirm it still enumerates there (sanity anchor).

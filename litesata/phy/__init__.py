@@ -101,7 +101,12 @@ class LiteSATAPHY(LiteXModule):
             ctrl_kwargs     = dict(
                 misalign_tolerance   = 512,
                 align_needs_signal   = False,
-                align_accept_align   = True,
+                # Campaign 46 correction: counting the drive's own ALIGNs to leave SEND-ALIGN
+                # (align_accept_align=True, a workaround from the broken-RX era) stopped our ALIGN
+                # transmission ~1.4us into the drive's negotiation - it then kept stepping rates
+                # (post-READY RX shows its ALIGN degrading into doubled-Gen1 junk) and only settled
+                # by luck. Spec: the host transmits ALIGN until the DEVICE sends non-ALIGN.
+                align_accept_align   = False,
                 align_timeout_us     = 3000,
                 retry_timeout_us     = 50000,
                 nocomwake_timeout_us = 0.4,
