@@ -512,6 +512,7 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_burst_len = Signal(8, reset=round(160*tx_clk_freq/1.5e9))
         self.oob_align_holdoff = Signal(16, reset=64)
         self.oob_align_nocomma = Signal(16, reset=64)
+        self.oob_align_cont    = Signal() # Continuous DCU comma alignment (vs re-arm on error).
         self.oob_gap_pattern = Signal(16) # DC pattern transmitted during gaps (de-emphasis idle).
         self.oob_deemph_gap  = Signal()   # Enable the data-driven (de-emphasis) idle.
         self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
@@ -526,10 +527,17 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_echo_mask = Signal() # Loopback: mask self-echo OOB detections while stb high.
         self.oob_pat_force = Signal() # Line test: force continuous raw-pattern transmission with
                                       # EI off (DC amplitude measurement on scope).
+        # align_force is a line test: it makes ctrl drive continuous ALIGN primitives, so it must
+        # also take the transmitter OUT of electrical idle and off the raw-pattern path, otherwise
+        # the ALIGNs never reach the wire (the ctrl FSM asserts tx_idle in every pre-ALIGN state).
+        # This is what makes a plain TX->RX loopback usable as an encoder/word-aligner oracle: the
+        # OOB handshake cannot self-complete on a loopback, so the FSM never leaves AWAIT-COMINIT.
         self.comb += [
-            serdes.tx_produce_pattern.eq((self.oob_zero_bus & (self.tx_idle | self.oob_ctrl_dis))
+            serdes.tx_produce_pattern.eq((self.oob_zero_bus & (self.tx_idle | self.oob_ctrl_dis)
+                                          & ~self.oob_align_force)
                                          | self.oob_pat_force),
-            self.txelecidle.eq((self.tx_idle | self.oob_ctrl_dis) & ~self.oob_pat_force),
+            self.txelecidle.eq((self.tx_idle | self.oob_ctrl_dis)
+                               & ~self.oob_pat_force & ~self.oob_align_force),
             serdes.tx_idle.eq(self.txelecidle),
             serdes.ei_mode.eq(self.ei_mode),
             serdes.rx_cdr_hold.eq(self.rx_cdrhold & ~self.oob_cdrhold_dis),
@@ -690,6 +698,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             serdes.tx_pattern_alt.eq(self.oob_pat_alt),
             serdes.align_holdoff.eq(self.oob_align_holdoff),
             serdes.align_nocomma.eq(self.oob_align_nocomma),
+            serdes.align_cont.eq(self.oob_align_cont),
             serdes.tx_pattern_gap.eq(Cat(self.oob_gap_pattern, self.oob_gap_pattern[0:4])),
             serdes.tx_oob_gap.eq(com_gen.ei_req & deemph_gap_tx),
             serdes.sci_oob_gate_en.eq(self.oob_sci_gate),
@@ -701,7 +710,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             # runtime equivalent of p_CHX_PCIE_MODE's permanent silence: the LDR aux driver stays
             # alive (402mV, its best amplitude) and OOB gaps need no EI request at all.
             serdes.tx_lane_rst.eq(self.oob_tx_lane_rst |
-                                  (self.oob_lane_rst_auto & self.tx_idle & ~self.oob_pat_force)),
+                                  (self.oob_lane_rst_auto & self.tx_idle & ~self.oob_pat_force
+                                   & ~self.oob_align_force)),
         ]
 
         # tx clk -> sys clk
@@ -834,6 +844,10 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="RX cycles to wait after a word-aligner re-arm pulse."),
             CSRField("nocomma", size=16, offset=16, reset=64,
                 description="Re-arm the word aligner after this many RX cycles with no K char."),
+            CSRField("cont", size=1, offset=32,
+                description="1 = continuous DCU comma alignment (FFC_ENABLE_CGALIGN held), "
+                            "0 = edge-pulsed re-arm on decode error / no-comma timeout (default: "
+                            "the combination proven on the loopback, with LSM_DISABLE=1)."),
         ])
         self._oob_gap_pattern = CSRStorage(16, reset=0x0000,
             description="Raw pattern transmitted during OOB gaps (constant = de-emphasis idle).")
@@ -883,6 +897,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
             self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),
+            self.oob_align_cont.eq(self._oob_align.fields.cont),
             self.oob_sci_burst_val.eq(self._oob_sci_vals.fields.burst),
             self.oob_sci_gap_val.eq(  self._oob_sci_vals.fields.gap),
             self.oob_seq_quiet.eq(  self._oob_seq_quiet.storage),

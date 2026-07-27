@@ -489,6 +489,7 @@ class SerDesECP5(LiteXModule):
 
         tx_lol     = Signal()
         tx_data    = Signal(20)
+        tx_data_r  = Signal(20) # tx_data registered in the tx domain (DCU TX bus setup, see below).
         tx_bus     = Signal(24)
 
         # Control/Status CDC -----------------------------------------------------------------------
@@ -497,8 +498,10 @@ class SerDesECP5(LiteXModule):
         tx_pattern             = Signal(20)
         self.align_holdoff     = Signal(16, reset=64)   # rx cycles to wait after a re-arm pulse
         self.align_nocomma     = Signal(16, reset=64)   # re-arm after this many cycles with no K
+        self.align_cont        = Signal()               # 1 = continuous CG align, 0 = re-arm on error
         align_holdoff_rx       = Signal(16, reset=64)
         align_nocomma_rx       = Signal(16, reset=64)
+        align_cont_rx          = Signal()
         pattern_alt_tx         = Signal()
         pattern_toggle         = Signal()
         tx_prbs_config         = Signal(2)
@@ -513,6 +516,7 @@ class SerDesECP5(LiteXModule):
             MultiReg(self.tx_pattern_alt,     pattern_alt_tx,     "tx"),
             MultiReg(self.align_holdoff, align_holdoff_rx, "rx"),
             MultiReg(self.align_nocomma, align_nocomma_rx, "rx"),
+            MultiReg(self.align_cont,    align_cont_rx,    "rx"),
             MultiReg(self.tx_pattern, tx_pattern, "tx"),
             MultiReg(self.tx_prbs_config, tx_prbs_config, "tx"),
         ]
@@ -834,14 +838,25 @@ class SerDesECP5(LiteXModule):
                 p_CHX_UC_MODE            = "0b0",
                 p_CHX_ENC_BYPASS         = "0b1",  # TX: raw 10-bit words from fabric
                 p_CHX_DEC_BYPASS         = "0b0",  # RX: DCU 8b10b decode + aligner
-                # Word alignment: let the DCU link state machine maintain it (LSM_DISABLE=0) and
-                # re-arm the barrel shifter only when decode errors appear. Continuous alignment
-                # (ENABLE_CG_ALIGN=1) does acquire lock, but it re-aligns on anything comma-like
-                # once real scrambled data flows and the link loses alignment after ~10us; aligning
-                # on error and holding otherwise is the stable arrangement.
-                p_CHX_LSM_DISABLE        = "0b0",
-                p_CHX_ENABLE_CG_ALIGN    = "0b0",
-                i_CHX_FFC_ENABLE_CGALIGN = cg_align_pulse,
+                # Word alignment: the DCU link state machine maintains it (LSM_DISABLE=0). The
+                # static ENABLE_CG_ALIGN fuse must be set for the aligner to work at all: with it
+                # cleared, pulsing the edge-sensitive FFC_ENABLE_CGALIGN input does nothing and the
+                # barrel shifter stays wherever it landed. Loopback proof: transmitting a known-good
+                # ALIGN stream came back decoded as FC35B5EE/k0001, which is bit-exactly a correct
+                # 7B4A4ABC/k0001 read 3 bits off the word boundary (see bench/BRINGUP.md, and the
+                # per-phase decode table there). align_cont selects continuous alignment (the
+                # configuration that first reached READY) vs error-driven re-arm at runtime.
+                # LSM_DISABLE=1 is what actually matters: with the link state machine ENABLED
+                # (LSM_DISABLE=0) the LSM owns the barrel shifter and neither the static
+                # ENABLE_CG_ALIGN fuse nor an FFC_ENABLE_CGALIGN pulse can move it - measured on a
+                # clean continuous-ALIGN loopback, the aligner sat stably 3 bits off (FC35B5EE) for
+                # five consecutive captures while the comma occurs, uniquely, only at phase 0.
+                # LSM_DISABLE=1 is also what `g8b10b` uses, the mode that achieved the campaign-12
+                # 3Gbps loopback self link-up, and liteiclink leaves the LSM at its default with
+                # ENABLE_CG_ALIGN=1.
+                p_CHX_LSM_DISABLE        = "0b1",
+                p_CHX_ENABLE_CG_ALIGN    = "0b1",
+                i_CHX_FFC_ENABLE_CGALIGN = Mux(align_cont_rx, rx_align, cg_align_pulse),
             )
         if pcs_mode in ["g8b10b", "pcie"]:
             self.serdes_params.update(
@@ -922,10 +937,20 @@ class SerDesECP5(LiteXModule):
                 ).Else(
                     tx_data.eq(self.tx_prbs.o)
                 ),
-                tx_bus[ 0:10].eq(tx_data[ 0:10]),
-                tx_bus[12:22].eq(tx_data[10:20]),
+                tx_bus[ 0:10].eq(tx_data_r[ 0:10]),
+                tx_bus[12:22].eq(tx_data_r[10:20]),
             ]
-            self.sync.tx += pattern_toggle.eq(~pattern_toggle)
+            # Pipeline the TX word: tx_data is the output of a deep combinational cone (square-wave
+            # / OOB pattern / gap / pat_alt / PRBS muxing, several of whose selects come out of CDC
+            # synchronizers). Driving DCUA.CH0_FF_TX_D_* straight from that cone missed setup at
+            # 150MHz (nextpnr: 8.8ns against a 6.66ns budget, txoutclk capped at 127.75MHz), which
+            # intermittently corrupts transmitted words. One tx-domain register costs a uniform
+            # 6.7ns of TX latency - no relative skew between pattern, gap and data - and hands the
+            # DCU a flop output.
+            self.sync.tx += [
+                tx_data_r.eq(tx_data),
+                pattern_toggle.eq(~pattern_toggle),
+            ]
 
             if pcs_mode == "hybrid":
                 # RX comes from the DCU 8b10b decoder (the path proven to decode real 3Gbps data

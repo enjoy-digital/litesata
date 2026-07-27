@@ -1416,3 +1416,126 @@ symbol, not a constant). Two ways out, in preference order:
 
 The loopback is the right oracle for all of this and should be used before ever going back to the
 drive: it answers "is our TX valid 8b10b?" in one capture.
+
+## *** CAMPAIGN 26: CAMPAIGN 25 RETRACTED - THE TX ENCODING IS CORRECT ***
+
+**Campaign 25's conclusion was wrong, and the loopback capture that produced it actually contains
+the real answer.** `FC35B5EE/k0001` is not garbage: it is *bit-exactly* what a perfectly correct
+ALIGN stream decodes to when the word aligner is locked **3 bits off the word boundary**.
+
+Method (`scratchpad/solve_map.py`, pure computation, no hardware): simulate the litex `Encoder`
+(the one instantiated in `serdes_ecp5.py`) over a continuous ALIGN stream to get the real 10-bit
+codes, build a software 8b10b decode table by exercising the same encoder over every D/K symbol in
+both disparities, serialize under each plausible TX bus layout, then decode at all 10 bit phases
+and all dword offsets. Unknown codes map to `0xEE`/K, which is what the DCU emits for an invalid
+symbol.
+
+    identity mapping (symbol0 then symbol1, bit0 = first on the wire):
+      phase  0: 7B4A4ABC / k0001   <== correct ALIGN
+      phase  1: EEB5B5EE / k1001
+      phase  2: EE0A4AEE / k1001
+      phase  3: FC35B5EE / k0001   <== EXACTLY what campaign 25 measured
+      phase  4: 6E8A4A57 / k0000
+      phase  5: EE15B5AB / k1000
+      phase  6: EE3F4A45 / k1000
+      phase  7: EE65B5A2 / k1000
+      phase  8: EEEE4A49 / k1100
+      phase  9: EEF0B5A4 / k1000
+
+A 32-bit data + 4-bit charisk exact match is ~2^-36 by chance. The `tx_bus[0:10] + tx_bus[12:22]`
+layout, the fabric encoder, and `ENC_BYPASS=1` under `UC_MODE=0` are all **correct**. (The
+contiguous `[0:10]+[10:20]` layout really is wrong - hence the all-zero decode - so reverting it
+was right, for the wrong reason.)
+
+Independent corroboration of the bit order: the DCU's own comma configuration in the base
+parameters is `UDF_COMMA_B = 0x17C`, and K28.5 RD- (`001111 1010`) written LSB-first with bit0 =
+'a' is `0b0101111100` = **0x17C**. The DCU expects exactly the bit order our encoder emits.
+
+**Root cause: the word aligner was disabled.** Commit `0ded383` ("fix word alignment via LSM") set
+`p_CHX_ENABLE_CG_ALIGN = "0b1"` for hybrid - that is the configuration that first reached READY.
+Commit `47f4cd1` changed it to `"0b0"` and replaced it with an edge-pulsed `FFC_ENABLE_CGALIGN`
+re-arm, on the theory that continuous alignment would re-lock on comma-like scrambled data. But an
+earlier campaign had already established that the edge-pulsed re-arm **never converges** (holdoff
+and nocomma swept exhaustively 1..65535, all failed): with the static fuse cleared, pulsing the
+input does nothing at all and the barrel shifter stays wherever it happened to land. So the
+observed misalignment was not a false lock - it was **no lock, ever**.
+
+Fixes in this session:
+  1. `p_CHX_ENABLE_CG_ALIGN = "0b1"` restored for hybrid, with the mode now selectable at runtime:
+     `FFC_ENABLE_CGALIGN = Mux(align_cont, rx_align, cg_align_pulse)` and a new
+     `_oob_align.cont` CSR field (offset 32, reset 1). One build tests both hypotheses.
+  2. `align_force` made a real line test. It previously only drove ctrl's `source` with ALIGN
+     while the PHY still held electrical idle, so the ALIGNs never reached the wire (the ctrl FSM
+     asserts `tx_idle` in every pre-ALIGN state). It now also deasserts EI and keeps the raw
+     pattern path off. This is what makes a plain TX->RX loopback usable as an oracle at all: an
+     OOB handshake **cannot** self-complete on a loopback (the host transmits COMINIT only while in
+     the COMINIT state and is silent in AWAIT-COMINIT), so without this the FSM sits in
+     AWAIT-COMINIT with the line dead - measured: `rx_idle` 1016/1016 samples, raw DCU word
+     `0xEEEE/k11`, `fsm2_state` = 3 = AWAIT-COMINIT for the entire capture.
+
+### Timing violations found in the gen2 core builds (previously unexamined)
+
+nextpnr on the `--gen 2 --pcs-mode hybrid --with-bist --with-analyzer` build reports:
+
+    $glbnet$phy_serdesecp5_txoutclk : 127.75 MHz (FAIL at 150.01 MHz)
+    $glbnet$crg_clkout0             :  96.09 MHz (FAIL at 100.00 MHz)
+
+The TX critical path ends at `DCUA.CH0_FF_TX_D_20`: **`tx_bus` was driven straight from a deep
+combinational cone** (square-wave / OOB pattern / gap / pat_alt / PRBS muxing, several selects
+arriving from CDC synchronizers) - 8.8ns against a 6.66ns budget, 3.4ns logic + 5.4ns routing.
+Setup violations on the DCU's TX data bus intermittently corrupt transmitted words, which is a
+strong candidate contributor to a link that comes up and then falls over. Fixed by registering
+`tx_data` one stage in the tx domain before `tx_bus`; the cost is a uniform 6.7ns of TX latency
+with no relative skew between pattern, gap and data.
+
+The sys-domain path is in the core's `rx_buffer`/BIST checker (unrelated to the PHY) and misses by
+only 4%; the bench is built at `--sys-clk-freq 90e6` rather than 100MHz until that is addressed.
+Build A (gen1, PHY only) passed timing, which is why this went unnoticed for the whole campaign.
+
+### Campaign 26 result: THE WORD ALIGNER IS FIXED (loopback, 4/4 passes)
+
+Making `align_force` a real line test turned the loopback into a working oracle, and three
+configurations were then compared back-to-back on a clean continuous-ALIGN stream. `ctrl_dis` is
+set as well so the ctrl FSM's OOB retries cannot drive the LDR over our ALIGNs (without it the
+capture is only ~66% ALIGN halves and the rest junk - see the first result below).
+
+| LSM_DISABLE | ENABLE_CG_ALIGN | FFC_ENABLE_CGALIGN | decoded dword | verdict |
+|---|---|---|---|---|
+| 0 | 1 | `rx_align` (held) | `FC35B5EE/k0001` x5 passes | ALIGN, stuck 3 bits off |
+| 1 | 1 | `rx_align` (held) | `CF4A4AEE/k0001` x5 passes | not any phase of ALIGN |
+| **1** | **1** | **`cg_align_pulse`** | **`7B4A4ABC/k0001` x4 passes** | **CORRECT, stable** |
+
+**Winning configuration: `LSM_DISABLE=1` + `ENABLE_CG_ALIGN=1` + edge-pulsed re-arm.** Both parts
+are necessary: the LSM has to be disabled *and* the re-arm has to be pulsed. That reconciles every
+earlier observation - the exhaustive runtime sweep of holdoff/nocomma failed because it was run
+with the LSM enabled (`LSM_DISABLE=0`), where the LSM owns the barrel shifter and the FFC input is
+inert; and `g8b10b`, which already used `LSM_DISABLE=1` with the pulsed re-arm, is exactly the mode
+that achieved the campaign-12 3Gbps loopback self link-up.
+
+The raw DCU words in the passing case are `BC7B/k10` and `4A4A/k00`, i.e. the DCU aligns the comma
+into byte lane **1**, pairing symbols as [D27.3, K28.5] and [D10.2, D10.2]; the 16->32 converter
+reassembles that into correct ALIGN. Worth knowing when reading raw-word captures.
+
+The middle row is diagnostic too: `CF4A4AEE` is **not** any bit phase or dword offset of a clean
+ALIGN stream (verified by exhaustive scan over all 400 bit phases x 4 dword offsets). Its signature
+is that `4A4A` - D10.2, the only disparity-*neutral* symbol in ALIGN - decodes correctly while
+K28.5 and D27.3, both disparity-dependent, do not. That is a running-disparity mismatch, not a bit
+offset: continuously asserting FFC_ENABLE_CGALIGN with the LSM off apparently re-arms the aligner
+every cycle and disturbs the decoder's RD tracking. So "continuous alignment" is not merely
+suboptimal here, it is wrong; `align_cont` now defaults to 0.
+
+**Also established, and worth stating plainly: the TX path was never broken.** Campaign 25's
+verdict is fully retracted. `ENC_BYPASS=1` with `UC_MODE=0`, the fabric encoder, and the
+`tx_bus[0:10] + tx_bus[12:22]` layout are all correct, and the DCU decodes our own ALIGN perfectly
+once the aligner is configured properly.
+
+A plain TX->RX loopback **cannot** complete a SATA OOB handshake (the host transmits COMINIT only
+while in the COMINIT state and is silent in AWAIT-COMINIT, so it never hears its own burst), so
+ctrl parks in AWAIT-COMINIT/COMINIT and `ready` stays 0 by construction. Everything above is
+therefore measured with ctrl parked and the line driven by `align_force`. Confirming link hold and
+running IDENTIFY needs the drive back on the connector.
+
+Bitstream `M-gen2-align` archived: `--gen 2 --sys-clk-freq 90e6 --pcs-mode hybrid --rx-los-lvl 2
+--with-bist --with-analyzer`, all three clocks PASS timing (txoutclk 156.18MHz, sys 103.99MHz,
+from3237 166.03MHz). Verified on the loopback straight out of reset with no CSR tuning of the
+aligner: `7B4A4ABC/k0001`, 100%, 4/4 passes.
