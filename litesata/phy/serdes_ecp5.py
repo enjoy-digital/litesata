@@ -391,6 +391,7 @@ class SerDesECP5(LiteXModule):
         pcs_mode    = "bypass",
         tx_boost    = False,
         rx_los_lvl  = 4,
+        rx_rate_mode = "0b0",
         pcie_mode   = False):
         assert dual       in [0, 1]
         assert channel    in [0, 1]
@@ -729,6 +730,11 @@ class SerDesECP5(LiteXModule):
 
             # CHX RX — link state machine
             i_CHX_FFC_SIGNAL_DETECT = rx_align & (self.rx_prbs_config == 0),
+            # RATE_MODE_RX/TX are 1-bit fuses that nextpnr DOES emit (see nextpnr
+            # ecp5/dcu_bitstream.h "DCU.CH0_RATE_MODE_RX"), defaulting to 0 = full rate.
+            # The FFC_ ports give dynamic control on top; the TX one is proven to change
+            # the wire, the RX one appears to need the fuse set to take effect.
+            p_CHX_RATE_MODE_RX      = rx_rate_mode,
             i_CHX_FFC_RATE_MODE_TX  = self.rate_mode_tx,
             i_CHX_FFC_RATE_MODE_RX  = self.rate_mode_rx,
             o_CHX_FFS_LS_SYNC_STATUS= rx_lsm,

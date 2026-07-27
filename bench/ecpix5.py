@@ -101,6 +101,7 @@ class SATATestSoC(SoCMini):
         pcie_mode       = False,
         tx_boost        = False,
         rx_los_lvl      = 4,
+        rx_rate_mode    = "0b0",
     ):
         assert gen in ["gen1", "gen2"]
         assert analyzer_domain in ["sys", "tx", "rx"]
@@ -135,6 +136,7 @@ class SATATestSoC(SoCMini):
             pcie_mode  = pcie_mode,
             tx_boost   = tx_boost,
             rx_los_lvl = rx_los_lvl,
+            rx_rate_mode = rx_rate_mode,
         )
 
         # SerDes TX/RX word clock measurement (debug).
@@ -297,6 +299,8 @@ def main():
         help="Set CHX_PCIE_MODE (g8b10b mode only).")
     parser.add_argument("--tx-boost", action="store_true",
         help="Max TX driver slice currents (OOB hearing-margin experiment).")
+    parser.add_argument("--rx-rate-mode", default="0b0", choices=["0b0","0b1"],
+        help="DCU RX rate fuse: 0b0 = full rate (Gen2), 0b1 = half rate (Gen1 from a Gen2 PLL).")
     parser.add_argument("--rx-los-lvl", default=4, type=int,
         help="CHX_RX_LOS_LVL threshold 0-7 (default 4; lower = more sensitive).")
     args = parser.parse_args()
@@ -314,6 +318,7 @@ def main():
         pcie_mode       = args.pcie_mode,
         tx_boost        = args.tx_boost,
         rx_los_lvl      = args.rx_los_lvl,
+        rx_rate_mode    = args.rx_rate_mode,
     )
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)

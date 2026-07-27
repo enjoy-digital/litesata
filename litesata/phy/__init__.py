@@ -31,7 +31,7 @@ class LiteSATAPHY(LiteXModule):
     """
     def __init__(self, device, pads, gen, clk_freq, refclk=None, data_width=16,
                  qpll=None, gt_type="GTY", use_gtgrefclk=True, dual=0, channel=0,
-                 oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False, tx_boost=False, rx_los_lvl=4,
+                 oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False, tx_boost=False, rx_los_lvl=4, rx_rate_mode="0b0",
                  with_csr=True):
         self.pads   = pads
         self.gen    = gen
@@ -81,7 +81,8 @@ class LiteSATAPHY(LiteXModule):
         elif re.match("^LFE5UM5G-", device):
             from litesata.phy.ecp5sataphy import ECP5LiteSATAPHYCRG, ECP5LiteSATAPHY
             self.phy = ECP5LiteSATAPHY(refclk, pads, gen, clk_freq, data_width, dual=dual, channel=channel,
-                oob_config=oob_config, pcs_mode=pcs_mode, pcie_mode=pcie_mode, tx_boost=tx_boost, rx_los_lvl=rx_los_lvl)
+                oob_config=oob_config, pcs_mode=pcs_mode, pcie_mode=pcie_mode, tx_boost=tx_boost, rx_los_lvl=rx_los_lvl,
+                rx_rate_mode=rx_rate_mode)
             self.crg = ECP5LiteSATAPHYCRG(self.phy)
 
         # Unknown.

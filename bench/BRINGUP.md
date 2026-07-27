@@ -2051,3 +2051,45 @@ clock divider *is* reachable through prjtrellis after all. The earlier campaign 
   2. Use `D_TX_VCO_CK_DIV` / `D_TX_MAX_RATE` / `CDR_MAX_RATE` for a proper Gen1 build now that they
      are known to be emitted - this is the likely real fix for the 87MHz-instead-of-75MHz tx clock.
   3. With a working Gen1 RX, hunt Gen2/Gen1 at runtime during AWAIT-ALIGN like a real host.
+
+### Campaign 33 addendum: RX half-rate does NOT recover the device stream
+
+`p_CHX_RATE_MODE_RX = "0b1"` (RX fuse = half rate, Gen1 off the Gen2 PLL) built clean and was tested
+against the drive with the dynamic ports off/on:
+
+    A fuse alone (Gen1 RX)        ready 0%  gmin= 8   RX nonzero 0/1016, notintable 0, rx_idle 1016
+    B fuse + rate_rx port         ready 0%  gmin= 8   RX nonzero 0/1016, notintable 0, rx_idle 1016
+    C fuse + rate_rx + rate_tx    ready 0%  gmin=27   RX nonzero 0/1016, notintable 0, rx_idle 1016
+
+**No change.** Neither the fuse nor the dynamic port recovers anything from the device. `rate_tx`
+still visibly moves the device (gmin 8 -> 27), confirming the TX side of the rate divider is live,
+so the mechanism is wired correctly - the RX half-rate path simply does not make the device's stream
+decodable.
+
+Note the apparent tension with campaign 32: the burst recorder saturated (>728us carrier) over a 30s
+run, yet these 1016-sample (~11us) litescope windows show `rx_idle` asserted throughout. Both can be
+true - the recorder integrates over the whole run including every FSM state, while the litescope
+window lands in AWAIT-ALIGN. **Before more rate work, that must be resolved**: trigger the analyzer
+on the sustained carrier itself (e.g. on `~phy_rx_idle0`) rather than free-running, to capture the
+device's transmission when it actually happens and read its content directly.
+
+New build option: `bench/ecpix5.py --rx-rate-mode 0b0|0b1`, threaded through
+`LiteSATAPHY(rx_rate_mode=...)` -> `SerDesECP5(rx_rate_mode=...)` -> `p_CHX_RATE_MODE_RX`.
+
+**Where the campaign stands (all measured):**
+
+    COMRESET -> device COMINIT           OK
+    host COMWAKE -> device COMWAKE       OK   gmin=8 (89ns), sustained
+    serdes rx_ready                      OK   99.9%
+    post-OOB datapath (loopback)         OK   100% over 60s, zero errors
+    device speed-negotiation stream      present, not decodable at Gen2 OR Gen1 half-rate
+    ALIGN / SEND-ALIGN / READY           not reached
+
+**Next, in order:**
+  1. Trigger-on-carrier capture (above) - answers "what is the device actually sending" directly,
+     and is cheap. Everything else is guesswork until that is known.
+  2. If the carrier is real data at an unlockable rate, revisit `D_TX_VCO_CK_DIV` /
+     `D_TX_MAX_RATE` / `CH0_CDR_MAX_RATE` (all confirmed emitted by nextpnr's
+     `ecp5/dcu_bitstream.h`) for a genuine Gen1 PLL/CDR build rather than the half-rate divider.
+  3. `rx_polarity`: AWAIT-ALIGN only flips it on ALIGN_N, which cannot fire if nothing decodes;
+     force both polarities explicitly.

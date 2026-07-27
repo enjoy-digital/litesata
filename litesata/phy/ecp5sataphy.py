@@ -360,7 +360,7 @@ class ECP5LiteSATAPHY(LiteXModule):
     def __init__(self, refclk, pads, gen, clk_freq, data_width=16, dual=0, channel=0, refclk_freq=None,
         oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False, tx_boost=False,
         tx_idle_sync=True,
-        rx_los_lvl=4):
+        rx_los_lvl=4, rx_rate_mode="0b0"):
         assert data_width in [16]
         assert gen in ["gen1", "gen2"]
         # Common signals
@@ -439,6 +439,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             pcs_mode    = pcs_mode,
             tx_boost    = tx_boost,
             rx_los_lvl  = rx_los_lvl,
+            rx_rate_mode = rx_rate_mode,
             pcie_mode   = pcie_mode,
         )
         serdes.add_stream_endpoints()
