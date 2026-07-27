@@ -516,6 +516,8 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_align_cont    = Signal() # Continuous DCU comma alignment (vs re-arm on error).
         self.oob_gap_pattern = Signal(16) # DC pattern transmitted during gaps (de-emphasis idle).
         self.oob_deemph_gap  = Signal()   # Enable the data-driven (de-emphasis) idle.
+        self.oob_rate_tx     = Signal()   # DCU half-rate divider: transmit Gen1 from a Gen2 PLL.
+        self.oob_rate_rx     = Signal()   # DCU half-rate divider: receive  Gen1 from a Gen2 PLL.
         self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
@@ -711,6 +713,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             serdes.tx_pattern_gap.eq(Cat(self.oob_gap_pattern, self.oob_gap_pattern[0:4])),
             serdes.tx_oob_gap.eq(com_gen.ei_req & deemph_gap_tx),
             serdes.tx_oob_deemph.eq(deemph_gap_tx),
+            serdes.rate_mode_tx.eq(self.oob_rate_tx),
+            serdes.rate_mode_rx.eq(self.oob_rate_rx),
             serdes.sci_oob_gate_en.eq(self.oob_sci_gate),
             serdes.sci_oob_burst_val.eq(self.oob_sci_burst_val),
             serdes.sci_oob_gap_val.eq(self.oob_sci_gap_val),
@@ -852,6 +856,11 @@ class ECP5LiteSATAPHY(LiteXModule):
             CSRField("deemph_gap", size=1, offset=6,
                 description="OOB gaps = constant pattern; with post-cursor matched to main in "
                             "SCI CH_12/CH_14 the FIR cancels DC (data-driven electrical idle)."),
+            CSRField("rate_tx", size=1, offset=7,
+                description="DCU half-rate divider on TX (PLL at Gen2 -> transmit Gen1)."),
+            CSRField("rate_rx", size=1, offset=8,
+                description="DCU half-rate divider on RX (PLL at Gen2 -> receive Gen1). Lets the "
+                            "host hunt the device's speed-negotiation rate at runtime."),
         ])
         self._oob_align = CSRStorage(fields=[
             CSRField("holdoff", size=16, offset=0,  reset=64,
@@ -909,6 +918,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_sci_gate.eq(    self._oob_txctl.fields.sci_gate),
             self.oob_pat_alt.eq(     self._oob_txctl.fields.pat_alt),
             self.oob_deemph_gap.eq(  self._oob_txctl.fields.deemph_gap),
+            self.oob_rate_tx.eq(     self._oob_txctl.fields.rate_tx),
+            self.oob_rate_rx.eq(     self._oob_txctl.fields.rate_rx),
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
             self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),

@@ -2010,3 +2010,44 @@ unblocking task in the whole campaign - everything else in the chain is proven.
 Secondary: build the analyzer in the **rx** clock domain to observe the raw deserializer during the
 device's carrier (the sys-domain view shows nothing when the recovered word clock is not running),
 which would confirm the rate directly rather than by inference.
+
+## *** CAMPAIGN 33: DCU RATE-MODE PORTS WIRED - TX HALF-RATE PROVEN LIVE ON THE WIRE ***
+
+Attacking the campaign-32 speed mismatch. Rather than fix the broken Gen1 PLL, use the DCU's
+**dynamic half-rate divider**: keep the PLL at Gen2 (3.0Gbps) and halve to Gen1 (1.5Gbps). Confirmed
+present in Diamond's silicon description
+(`/opt/diamond/3.12/ispfpga/sa5p00/data/DCUA.v`): ports `CH0_FFC_RATE_MODE_RX` /
+`CH0_FFC_RATE_MODE_TX`, defparams `CH0_RATE_MODE_RX/TX` ("DONTCARE" | "0b0" | "0b1").
+
+Wired both as runtime CSRs - `_oob_txctl.rate_tx` (bit 7) and `_oob_txctl.rate_rx` (bit 8).
+**nextpnr/prjtrellis accepts the `i_CHX_FFC_RATE_MODE_*` ports without complaint** and the build is
+timing-clean (txoutclk 193.01MHz, sys 110.71MHz, all PASS).
+
+Measured against the real drive (bypass PCS, `quiet=32`, deemph OOB):
+
+    1 rate_rx=0 (Gen2 RX, baseline)     ready 0%  gmin= 8   RX nonzero 0/1016, notintable 0
+    2 rate_rx=1 (Gen1 RX half-rate)     ready 0%  gmin= 8   RX nonzero 0/1016, notintable 0
+    3 rate_rx=1 + rate_tx=1 (both)      ready 0%  gmin=27   RX nonzero 0/1016, notintable 0
+
+**Row 3 is the result that matters: `gmin` moves 8 -> 27 when `rate_tx` is asserted.** That is the
+device's measured response to our OOB changing, i.e. **the TX half-rate divider demonstrably alters
+what is on the wire** - the port is real and functional, not silently dropped by the toolchain. This
+is a new capability for this PHY.
+
+`rate_rx=1` alone changed nothing in the RX decode. Most likely the RX side additionally needs the
+`CHX_RATE_MODE_RX` defparam set (it defaults to "DONTCARE", which may gate the dynamic input) and/or
+a CDR reset + word-aligner re-arm after the rate flips - a rate change mid-flight is exactly the
+case where the CDR must re-acquire.
+
+**External review (codex) surfaced the decisive toolchain fact**: nextpnr's `ecp5/dcu_bitstream.h`
+emits `D_TX_VCO_CK_DIV` (line 422) as well as `D_TX_MAX_RATE` / `CH0_CDR_MAX_RATE` - so the VCO
+clock divider *is* reachable through prjtrellis after all. The earlier campaign note that
+"nextpnr ignores D_TX_MAX_RATE/CDR_MAX_RATE" should be re-checked against
+`/home/florent/dev/yosys/nextpnr/ecp5/dcu_bitstream.h`, which is the authority.
+
+**Next session, in order:**
+  1. Set `p_CHX_RATE_MODE_RX = "0b1"` (and/or sweep DONTCARE/0b0/0b1) and re-test `rate_rx`; add an
+     RX reset + aligner re-arm on the rate transition.
+  2. Use `D_TX_VCO_CK_DIV` / `D_TX_MAX_RATE` / `CDR_MAX_RATE` for a proper Gen1 build now that they
+     are known to be emitted - this is the likely real fix for the 87MHz-instead-of-75MHz tx clock.
+  3. With a working Gen1 RX, hunt Gen2/Gen1 at runtime during AWAIT-ALIGN like a real host.

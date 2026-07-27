@@ -447,6 +447,12 @@ class SerDesECP5(LiteXModule):
         self.tx_pattern_gap         = Signal(20) # i: pattern sent during OOB gaps (DC = idle).
         self.tx_oob_gap             = Signal()   # i (tx domain): 1 = OOB gap in progress.
         self.tx_oob_deemph          = Signal()   # i (tx domain): data-driven gaps -> mask EI.
+        # SATA speed negotiation: the DCU's dynamic half-rate divider. With the PLL at 3.0Gbps
+        # (Gen2), asserting the RX rate mode receives 1.5Gbps (Gen1) without touching the PLL -
+        # which is how a real SATA host hunts the device's rate during speed negotiation. Ports
+        # confirmed present in Diamond's DCUA.v (CH0_FFC_RATE_MODE_RX/TX).
+        self.rate_mode_tx           = Signal()
+        self.rate_mode_rx           = Signal()
         self.sci_oob_gate_en   = Signal() # i: SCI slice gate enable.
         self.sci_oob_gate_lvl  = Signal() # i: 1 = burst, 0 = gap.
         self.sci_oob_burst_val = Signal(8)
@@ -723,6 +729,8 @@ class SerDesECP5(LiteXModule):
 
             # CHX RX — link state machine
             i_CHX_FFC_SIGNAL_DETECT = rx_align & (self.rx_prbs_config == 0),
+            i_CHX_FFC_RATE_MODE_TX  = self.rate_mode_tx,
+            i_CHX_FFC_RATE_MODE_RX  = self.rate_mode_rx,
             o_CHX_FFS_LS_SYNC_STATUS= rx_lsm,
             p_CHX_ENABLE_CG_ALIGN   = "0b1",
             p_CHX_UDF_COMMA_MASK    = "0x3ff",  # compare all 10 bits
