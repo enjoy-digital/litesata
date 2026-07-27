@@ -1592,3 +1592,29 @@ Inconclusive checks, recorded so they are not repeated as if meaningful:
 data cable (a marginal TX-side contact would leave the drive's beacon perfectly readable while
 making our OOB unheard - exactly this signature). A `--tx-boost` build is also queued as a
 gateware-side hearing-margin retry.
+
+### Campaign 27 addendum: second drive, power-cycled, and tx-boost - all identical
+
+  * **Drive B** (different unit, powered off/on): beacons at ~17 bursts/s (vs ~660/s for drive A -
+    normal device-to-device variation in COMINIT beacon persistence), gap 311..322ns, burst 100ns.
+    20s handshake: 0% ready, gap min never below 28 cycles => no COMWAKE.
+  * **`--tx-boost`** build (`N-gen2-boost-align`, max TDRV slice currents): 20s, 0% ready, gap min
+    28 cycles. No change.
+
+**Elimination as it now stands.** Earlier this session, with the loopback fitted, our own 3Gbps
+ALIGN came back through the physical loop and decoded at 100% (`7B4A4ABC/k0001`). That exercises
+the DCU TX driver, the board TX traces and the board-side SATA connector, all at full line rate -
+so the transmitter is good. Ruled out since: the word-aligner fix, the TX pipeline register and the
+90MHz sys clock (archived `L-gen2-core` fails identically), the drive itself (two units, one freshly
+power-cycled), drive wedging (drive B was never hammered before its first clean shot), and TX
+amplitude (tx-boost).
+
+**The single element common to every failing test and absent from the passing loopback test is the
+SATA data cable to the drive.** A broken or marginal TX pair in that cable produces exactly this
+signature: the drive's beacon arrives perfectly on our RX, while nothing we transmit is ever heard.
+
+**Decisive next experiment (needs the loopback re-fitted for ~2 minutes):** with the loopback in
+place our own RX recorders capture *our own* OOB bursts, giving the measured burst and gap widths
+of what we are actually emitting. Expect burst ~107ns and COMWAKE gap ~107ns / COMRESET gap ~320ns.
+If those are right, the gateware OOB is proven correct and the fault is in the drive-side cable; if
+they are wrong, it is a gateware regression that the drive-based tests cannot localise.
