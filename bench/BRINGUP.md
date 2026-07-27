@@ -1894,3 +1894,35 @@ wake_gap 16; control = `ei_mode|ldr_timeout(4)|burst_mode|zero_bus` and **NOT** 
 Remaining: the ALIGN exchange (AWAIT-ALIGN -> SEND-ALIGN -> READY). Suspects, in order: the device
 stepping ALIGN rates through Gen3/Gen2/Gen1 while our RX is pinned at 3Gbps; rx_polarity; and
 whether the fabric decoders in bypass see the device's ALIGN at all.
+
+### Campaign 32 addendum: CDR released in AWAIT-ALIGN - necessary, not yet sufficient
+
+`ctrl.py` asserted `trx.rx_cdrhold` in AWAIT-ALIGN (`~loopback`). Harmless while `cdrhold_dis=1`
+made the hold a no-op, but once the hold became effective it froze the receiver exactly when it must
+acquire the device's ALIGN bursts - measured: `rx_idle` 2040/2040 and all-zero dwords for the entire
+state. Now parameterised: `LiteSATAPHYCtrl(align_cdr_hold=True)` keeps Xilinx behaviour, the ECP5 arm
+passes `False`.
+
+Result: `ready 0/1876`, status `0x6 x1875` (rx_ready essentially never drops now), `gmin=8`. So the
+serdes is fully stable and the device COMWAKE keeps arriving, but ctrl still does not leave
+AWAIT-ALIGN.
+
+**State of the chain (bypass PCS, original drive):**
+
+    COMINIT/COMRESET      OK   device answers
+    device COMWAKE        OK   gmin=8 cycles = 89ns, sustained
+    serdes rx_ready       OK   99.9% (was 75.3%) after cdrhold_dis=0
+    AWAIT-ALIGN           <-- parked here; device ALIGNs not detected
+    SEND-ALIGN / READY    not reached
+
+**Next steps, in order:**
+  1. Re-capture `datapath_rx_source` / `rx_idle` in AWAIT-ALIGN now that the CDR is released - the
+     previous all-zero capture was taken with the CDR frozen, so it must be repeated before drawing
+     any conclusion about what the device sends.
+  2. If still nothing: speed negotiation. The device steps ALIGN rates (Gen3/Gen2/Gen1) while our RX
+     is pinned at 3Gbps, so its ALIGN burst may never land in our window. `align_timeout_us` is
+     already 3000 on ECP5; consider a gen1 build once the gen1 PLL is fixed.
+  3. `rx_polarity`: AWAIT-ALIGN only flips polarity on ALIGN_N detection, which cannot happen if
+     nothing decodes. Try forcing both polarities explicitly.
+  4. `rx_los_lvl` sweep (build param, currently 2) - `rx_idle` gates nothing on ECP5 any more, but
+     RLOS still drives the OOB detectors.

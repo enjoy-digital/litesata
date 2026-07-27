@@ -29,6 +29,7 @@ class LiteSATAPHYCtrl(LiteXModule):
     # without reseting the FPGA core.
     """
     def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1,
+                 align_cdr_hold=True,
                  align_timeout_us=873, retry_timeout_us=10000, nocomwake_timeout_us=None, stability_us=5000,
                  misalign_tolerance=0, align_needs_signal=True, align_accept_align=False):
         self.clk_freq = clk_freq
@@ -203,7 +204,11 @@ class LiteSATAPHYCtrl(LiteXModule):
             )
         )
         fsm.act("AWAIT-ALIGN",
-            trx.rx_cdrhold.eq(~loopback),
+            # The device transmits ALIGN bursts in this state, so there ARE transitions to lock to:
+            # holding the CDR here freezes the receiver exactly when it must acquire the device's
+            # ALIGNs. Measured on ECP5 with the hold effective: rx_idle 2040/2040 and all-zero
+            # dwords for the entire state. Xilinx keeps the original behaviour by default.
+            trx.rx_cdrhold.eq((~loopback) if align_cdr_hold else 0),
             source.data.eq(Mux(loopback, primitives["ALIGN"], 0x4a4a4a4a)),  # D10.2 (ALIGN in loopback)
             source.charisk.eq(Mux(loopback, 0b0001, 0b0000)),
             align_timer.wait.eq(1),
