@@ -1304,3 +1304,48 @@ negotiation, and periodically resets us - exactly the observed flapping.
 `LiteSATAPHYCtrl(misalign_tolerance=0)` default = original immediate RX reset; ECP5 passes 512.
 `LiteSATAPHYDatapath(align_timeout=256*16)` default unchanged; ECP5 passes 256*16*16.
 Both selected in the ECP5 arm of `litesata/phy/__init__.py`.
+
+## Campaign 24: core always present, link reaches 20-29% uptime, TX encoding suspected
+
+**Root cause of the "all-zero RX" found and fixed.** `bench/ecpix5.py` was the ONLY bench in the
+repo instantiating Core/Crossbar/BIST conditionally (`if with_bist:`, default False); every Xilinx
+bench does it unconditionally. With no core, `sata_phy.sink` is a dangling endpoint, and the ECP5
+PHY copies `sink.data` ignoring `sink.valid`, so the instant `ctrl.ready` flipped the datapath mux
+the TX emitted D0.0 for ever. Fixed: core is now always instantiated (`with_bist` only gates the
+BIST CSRs), plus a `min_sys_clk_freq` guard, plus a defensive `tx_idle_sync` option on the PHY that
+substitutes SYNC (as alternating 16-bit halves) whenever `sink.valid` is low.
+
+**Verified with the new link-layer analyzer group (group 2):** `link.tx.fsm` and `link.rx.fsm` both
+in IDLE, `from_rx.idle=1`, and `tx_align.source` = **B5B5957C / charisk 0b0001 = SYNC**, carried
+through to `datapath.sink`. The core transmits SYNC correctly and continuously.
+
+**Link now comes up in 0.1-0.5s but still flaps: 20-29% uptime over 30s.** Progression measured:
+1-3% (before) -> 20% (align window 41us -> 655us) -> 20-29%. Parameterised, with Xilinx defaults
+preserved (`misalign_tolerance=0`, `align_timeout=256*16`), ECP5 getting
+`misalign_tolerance=512` and `align_timeout=256*16*16` from the ECP5 arm of `phy/__init__.py`.
+
+**Eliminated as causes** (each tested at runtime, no rebuild): the CGALIGN re-arm fighting the LSM
+(holdoff/nocomma swept 16..65535 - all 0-10%); misalign teardown (tolerance 512 changed nothing on
+its own); the SCI background reconfig loop rewriting CH_01/CH_15/CH_18 (pause=0 vs pause=1:
+20% vs 15-29%, i.e. noise).
+
+**Drop signature** (litescope, full rate, triggered on falling `ctrl_ready`): during READY the
+device sends **7B4A4ABC/k0001 = ALIGN continuously** (628 of 742 cycles) with occasional 0xEE
+bursts; then the RX degrades to garbage (`E026D926/k0000`, no K character at all), `rx_idle`
+expires and READY drops to RESET. So the RX loses word alignment and does not re-acquire.
+
+**Leading hypothesis for next session: our TX 8b10b encoding is wrong in hybrid mode.** In
+`pcs_mode="hybrid"` we set `ENC_BYPASS=1` (raw 10-bit words from the FABRIC encoder) with
+`UC_MODE=0` (PCS active). The TX bus mapping used (`tx_bus[0:10]`, `tx_bus[12:22]`) is the
+10BSER/`UC_MODE=1` layout and may not be what the PCS expects with ENC_BYPASS in G8B10B protocol
+mode. If our ALIGNs reach the device malformed, it would keep sending ALIGNs waiting for a valid
+host reply, time out, and restart OOB - which is exactly the observed behaviour (the device never
+progresses past sending ALIGNs, and we never see it settle into SYNC).
+  Tests to discriminate, in order:
+  1. Re-run the loopback (TX->RX cable) in **hybrid** mode: our own proven RX becomes the judge of
+     our TX encoding. If loopback decodes our ALIGNs in g8b10b but not in hybrid, the mapping is
+     confirmed wrong.
+  2. Compare the emitted `.config` TX-bus/gearbox fuses between `g8b10b` and `hybrid`.
+  3. If confirmed: either fix the hybrid TX mapping, or switch the data phase to full `g8b10b`
+     (DCU encoder, proven by the campaign-12 loopback link-up) and keep raw patterns only for the
+     OOB phase - the two need not use the same encoder path.

@@ -29,8 +29,8 @@ class LiteSATAPHYCtrl(LiteXModule):
     # without reseting the FPGA core.
     """
     def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1,
-                 align_timeout_us=3000, nocomwake_timeout_us=0.4, stability_us=50,
-                 misalign_tolerance=0):
+                 align_timeout_us=873, retry_timeout_us=10000, nocomwake_timeout_us=None, stability_us=5000,
+                 misalign_tolerance=0, align_needs_signal=True, align_accept_align=False):
         self.clk_freq = clk_freq
         self.ready    = Signal()
         self.sink     = sink   = stream.Endpoint(phy_description(32))
@@ -53,9 +53,10 @@ class LiteSATAPHYCtrl(LiteXModule):
         # several ~54.6us step-downs plus its own retry delays. Waiting longer costs nothing and
         # lets us catch the ALIGN burst instead of resetting OOB just before it arrives.
         # Bounded wait for the device's COMWAKE to clear (see AWAIT-NO-COMWAKE).
-        nocomwake_timer = WaitTimer(self.us(nocomwake_timeout_us))
+        # `None` keeps the original behaviour of waiting for the detection to deassert.
+        nocomwake_timer = WaitTimer(self.us(nocomwake_timeout_us if nocomwake_timeout_us else 1))
         self.submodules += nocomwake_timer
-        retry_timer = WaitTimer(self.us(50000))
+        retry_timer = WaitTimer(self.us(retry_timeout_us))
         align_timer = WaitTimer(self.us(align_timeout_us))
         align_count = Signal(4)
         self.submodules += align_timer, retry_timer
@@ -182,7 +183,7 @@ class LiteSATAPHYCtrl(LiteXModule):
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
             nocomwake_timer.wait.eq(1),
-            If(~trx.rx_comwake_stb | nocomwake_timer.done,
+            If(~trx.rx_comwake_stb | (nocomwake_timer.done if nocomwake_timeout_us else 0),
                 NextState("AWAIT-ALIGN")
             )
         )
@@ -191,11 +192,14 @@ class LiteSATAPHYCtrl(LiteXModule):
             source.data.eq(Mux(loopback, primitives["ALIGN"], 0x4a4a4a4a)),  # D10.2 (ALIGN in loopback)
             source.charisk.eq(Mux(loopback, 0b0001, 0b0000)),
             align_timer.wait.eq(1),
-            If(align_seen,
+            # `align_needs_signal` keeps the original gate on the transceiver's rx_idle. On ECP5
+            # the RLOS-derived rx_idle stays asserted right through a device's ALIGN bursts, so the
+            # comparison would never be evaluated; decoding a valid ALIGN is itself proof of signal.
+            If(align_seen & ((~trx.rx_idle) if align_needs_signal else 1),
                 NextValue(trx.rx_polarity, 0),
                 NextState("SEND-ALIGN")
             ),
-            If(align_n_seen,
+            If(align_n_seen & ((~trx.rx_idle) if align_needs_signal else 1),
                 NextValue(trx.rx_polarity, 1),
                 NextState("SEND-ALIGN")
             )
@@ -210,7 +214,8 @@ class LiteSATAPHYCtrl(LiteXModule):
                 # Count SYNC (K28.3, low byte 0x7C) or ALIGN (K28.5, 0xBC): a device that is
                 # still emitting ALIGNs after speed negotiation is just as valid a confirmation
                 # that the link is established, and some devices linger on ALIGN.
-                If((sink.data[0:8] == 0x7c) | (sink.data[0:8] == 0xbc),
+                If((sink.data[0:8] == 0x7c) |
+                   ((sink.data[0:8] == 0xbc) if align_accept_align else 0),
                     NextValue(align_count, align_count - 1),
                 ).Else(
                     NextValue(align_count, 4-1),

@@ -97,7 +97,15 @@ class LiteSATAPHY(LiteXModule):
         ctrl_kwargs      = {}
         datapath_kwargs  = {}
         if re.match("^LFE5UM5G-", device):
-            ctrl_kwargs     = dict(misalign_tolerance=512)
+            ctrl_kwargs     = dict(
+                misalign_tolerance   = 512,
+                align_needs_signal   = False,
+                align_accept_align   = True,
+                align_timeout_us     = 3000,
+                retry_timeout_us     = 50000,
+                nocomwake_timeout_us = 0.4,
+                stability_us         = 50,
+            )
             # The DCU word aligner drops lock in short bursts and re-acquires unaided; a 41us
             # ALIGN window tears the link down during those, so give it far more slack.
             datapath_kwargs = dict(align_timeout=256*16*16)
