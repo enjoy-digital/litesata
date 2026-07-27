@@ -1861,3 +1861,36 @@ settings (`CHx_DCO*`, `RX_LOS_CEQ`, equalisation), and whether the CDR is being 
 phase (`cdrhold_dis` currently set). The `_oob_control.oob_bypass` knob added this session is useful
 here: it skips OOB entirely, so `rx_ready` stability can be characterised on a quiet line without
 the OOB storm as a confounder.
+
+## *** CAMPAIGN 32: OOB HANDSHAKE COMPLETES - `cdrhold_dis` WAS THE WRONG WAY ROUND ***
+
+`cdrhold_dis=1` (the value used all campaign) *disables* ctrl's CDR hold, leaving the CDR to run
+free on a mostly-idle line during OOB - which is precisely the campaign-10 collapse mechanism.
+Clearing it lets ctrl hold the CDR through the OOB phase:
+
+    A cdrhold_dis=1 (CDR free, as used all campaign):
+        rx_ready up 75.3%   status hist: 0x6 x942, 0x2 x308
+    B cdrhold_dis=0 (ctrl HOLDS the CDR during OOB):
+        rx_ready up 99.9%   status hist: 0x6 x1248        <== no drops at all
+    C cdrhold_dis=0, no ei_mode: identical to B (99.9%)
+
+**The RX instability is completely gone.** The "gen2 RX word-clock collapse" that has shaped this
+campaign since campaign 10 was self-inflicted: we were releasing the CDR exactly when the line had
+no transitions to lock to. (Note the previous addendum's conclusion still holds - the drop was in
+CDR bit lock, not word alignment - the fix is just on the hold side, not the DCO side.)
+
+**And the OOB handshake now completes.** ctrl FSM occupancy in this configuration is
+**AWAIT-ALIGN 100.0%** (2040/2040 samples), i.e. it has traversed
+COMINIT -> AWAIT-COMINIT -> AWAIT-NO-COMINIT -> CALIBRATE -> COMWAKE -> AWAIT-COMWAKE ->
+AWAIT-NO-COMWAKE and is now waiting for the device's ALIGN bursts. `gmin=8` throughout confirms
+the device COMWAKE is real.
+
+**Working configuration (bypass PCS, original drive):**
+`--gen 2 --sys-clk-freq 90e6 --pcs-mode bypass --rx-los-lvl 2 --with-bist --with-analyzer`;
+txctl = `pat_alt|deemph_gap`; pattern 0xF0F0, gap_pattern 0x0000, burst_len 16, quiet 50,
+wake_gap 16; control = `ei_mode|ldr_timeout(4)|burst_mode|zero_bus` and **NOT** `cdrhold_dis`,
+**NOT** `rx_sel`.
+
+Remaining: the ALIGN exchange (AWAIT-ALIGN -> SEND-ALIGN -> READY). Suspects, in order: the device
+stepping ALIGN rates through Gen3/Gen2/Gen1 while our RX is pinned at 3Gbps; rx_polarity; and
+whether the fabric decoders in bypass see the device's ALIGN at all.
