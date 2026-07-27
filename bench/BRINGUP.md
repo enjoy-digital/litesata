@@ -2455,3 +2455,37 @@ stalls before X_RDY. Next session: re-run the X_RDY trigger capture on THIS buil
 drops, so the capture is meaningful now); if X_RDY absent, probe command/transport upstream; if
 present, decode the drive's answer (R_RDY? R_ERR = CRC/scrambler mismatch?). Reload the bitstream
 between attempts - a wedged identify still holds the crossbar grant.
+
+## *** CAMPAIGN 42: IDENTIFY ACCEPTED BY THE DRIVE (R_OK) - RX BOUNDARY LOST DURING THE EXCHANGE ***
+
+With the freeze-policy build, measured step by step:
+
+1. **Our IDENTIFY command FIS is transmitted and ACCEPTED.** Analyzer at X_RDY on the wire: link TX
+   walks X_RDY x364 -> SOF -> payload -> EOF -> WTRM x592 -> SYNC. Trigger on RX R_ERR: never
+   fires. Trigger on RX **R_OK: FIRES** - the drive acknowledges a CRC-valid frame. Since the CRC
+   is computed by the core over its dwords and verified by the drive over the wire, R_OK proves the
+   ENTIRE ECP5 TX datapath delivers the frame bit-exact. TX is done and proven at every layer.
+
+2. **The drive's response is never seen**: no RX X_RDY within 5s of the accepted command; our link
+   RX FSM never leaves IDLE (2040/2040), from_rx.insert stays 0.
+
+3. **The reason, from the steady state 0.5s after the command**: RX decodes 75% zeros (= invalid
+   symbols) plus a 0xE0-family of junk with the K flag wandering across byte lanes. The drive is
+   NOT idling in decodable SYNC - our RX word boundary is LOST from the exchange onward. So "the
+   drive never responds" is unproven; more likely the response is in that undecodable stream.
+
+**Mechanism**: the exchange brings scrambled payload and CONT junk, which contains comma7
+lookalikes at random offsets. The freeze policy re-arms on sustained invalids - correct - but the
+hunt can then lock a false comma, and between drive ALIGNs there is nothing to correct it: **only
+K28.5 carries the 0011111 comma7; SYNC's K28.3 is 0011110 and does not match**, so a boundary lost
+during junk stays lost except at the 256-dword ALIGN beacons, and a false comma7 in junk can
+immediately steal it back.
+
+**Fix for next session (build): slip-offset VOTING in BypassWordAligner.** Only adopt a new slip
+after the same offset is seen N times (>=2) consecutively/within a short window: the drive's ALIGN
+bursts put 2 back-to-back K28.5s at the SAME offset every 256 dwords, while false commas in
+scrambled junk land at random offsets - a 2-of-N vote filter kills them. Alternatively (or in
+addition) verify-decode at the candidate offset before committing. Then re-run IDENTIFY: TX is
+proven, the drive accepts, and the response is likely already arriving.
+
+Status: link 100% solid through everything; identify_done still 0; TX exonerated end-to-end.
