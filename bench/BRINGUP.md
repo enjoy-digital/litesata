@@ -2616,3 +2616,34 @@ never transmits a single frame of its own is out of spec.
 Every host-side layer is now individually proven. Next discriminator: THE OTHER DRIVE (drive B).
 Identical behaviour = something environmental/protocol-subtle on our side; drive B talking =
 this SSD has a transport quirk and the bring-up is complete.
+
+## *** CAMPAIGN 46: K28.5-AGE GATE + EVIDENCE THE DRIVE ITSELF IS ATA-DEAD ***
+
+Aligner re-arm refined once more (K28.5-age gate): re-arm requires no-decoded-K28.5 for >=2047 rx
+cycles (~13.6us) AND (invalids or nocomma). Genuine traffic refreshes the age via the drive's
+256-dword ALIGN beacons (~3.4us apart) and stays locked; a wrong boundary never decodes K28.5 and
+unlocks in ~14us. This supersedes both earlier policies; regressions green.
+
+The TX-corruption scare (0x9575/0xB53C halves at phy.sink) was ANALYZER TEARING - the sys-domain
+analyzer sampling 150MHz sata_tx signals mid-transition. The datapath TX/RX already have proper
+stream.ClockDomainCrossing FIFOs (checked); no CDC bug. The ALIGNInserter stalls correctly while
+inserting (checked); no mid-frame payload loss.
+
+**The evidence now converges on the DRIVE being ATA-dead** (a classic corrupted-firmware SSD
+failure mode: PHY autonomics run, no firmware behind them):
+  1. Pre-armed full-rate X_RDY trigger across the FIRST link-up after a fresh power cycle: the
+     drive NEVER attempts its mandatory signature FIS.
+  2. It link-ACKs (R_RDY + R_OK) a descramble-verified textbook IDENTIFY FIS and never responds;
+     WRITE_DMA equally unanswered.
+  3. Nondeterministically it instead HARD-DROPS the link on receiving a frame (rx line goes quiet
+     -> rx_los; measured with deep pre-trigger capture) - transport-less firmware panic fits.
+  4. All host layers are independently measured-good, most on this very drive: OOB both ways,
+     negotiation, pristine SYNC idle, frame delivery CRC-verified BY the drive itself (R_OK).
+
+**The bring-up cannot be concluded against this device. Next session: a known-good SATA drive -
+five minutes decides it.** If it sends its signature at link-up (our RX now catches and consumes
+it: instant core attach + EAT_REG_D2H), IDENTIFY should complete immediately.
+
+Session-added robustness, all default-off/parameterized and regression-green: BypassWordAligner
+voting + K28.5-age re-arm; sync_relax (txctl bit 10); blind_rrdy (bit 11); early_d102 (bit 9);
+EAT_REG_D2H signature consumption; stability_us=1 + align_cdr_hold=False + polite host (ECP5).

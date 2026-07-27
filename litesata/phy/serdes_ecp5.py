@@ -1133,6 +1133,16 @@ class SerDesECP5(LiteXModule):
                     self.comb += bp_k285.eq(
                         ((self.decoders[0].k == 1) & (self.decoders[0].d == 0xBC)) |
                         ((self.decoders[1].k == 1) & (self.decoders[1].d == 0xBC)))
+                    # K28.5-age gate: the two failure modes pull opposite ways. A MISALIGNED
+                    # ALIGN stream (link-up) decodes no true K28.5 and needs fast re-arm; the
+                    # frame-exchange CONT junk (valid scrambled symbols, occasional invalids, no
+                    # K28.5 between the drive's 256-dword ALIGN beacons ~3.4us apart) must NOT
+                    # re-arm or the boundary is stolen mid-exchange and ctrl tears the link down
+                    # (measured: identify -> status 0xa -> drive back to OOB). Gate every re-arm
+                    # on "no K28.5 for >=1024 rx cycles (~6.8us)": genuine traffic refreshes the
+                    # age via ALIGN beacons and stays locked; a wrong boundary never decodes
+                    # K28.5, ages out in 7us, and unlocks the aligner.
+                    bp_k285_age = Signal(11)
                     self.sync.rx += [
                         If(bp_kseen,
                             bp_nocom.eq(0)
@@ -1140,14 +1150,20 @@ class SerDesECP5(LiteXModule):
                             bp_nocom.eq(bp_nocom + 1)
                         ),
                         If(bp_k285,
-                            bp_invcnt.eq(0)
-                        ).Elif(bp_inv & (bp_invcnt != 63),
-                            bp_invcnt.eq(bp_invcnt + 1)
+                            bp_k285_age.eq(0),
+                            bp_invcnt.eq(0),
+                        ).Else(
+                            If(bp_k285_age != 2**11-1,
+                                bp_k285_age.eq(bp_k285_age + 1)
+                            ),
+                            If(bp_inv & (bp_invcnt != 63),
+                                bp_invcnt.eq(bp_invcnt + 1)
+                            ),
                         ),
                     ]
                     self.comb += [
-                        bp_aligner.enable.eq(rx_align &
-                            ((bp_invcnt >= 32) | (bp_nocom >= align_nocomma_rx))),
+                        bp_aligner.enable.eq(rx_align & (bp_k285_age == 2**11-1) &
+                            ((bp_invcnt >= 8) | (bp_nocom >= align_nocomma_rx))),
                         bp_aligner.sink.eq(Cat(rx_bus[0:10], rx_bus[12:22])),
                         rx_raw_al.eq(bp_aligner.source),
                     ]
