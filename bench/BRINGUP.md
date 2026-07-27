@@ -2143,3 +2143,57 @@ device's transmission instead of free-running into a quiet window, and read its 
 Still worth mining from LUNA afterwards: its two-stage RX reset sequencing (does the CDR need an
 explicit `FFC_RRST` pulse after the OOB phase before it will acquire?), and `lfps.py`'s
 burst-detection approach as a cross-check on our COMChecker.
+
+## *** CAMPAIGN 35: THE TWO ARTIFACTS ARE GONE - SIGNAL PRESENT, CLOCK RUNNING, BUS STILL ZERO ***
+
+Two measurements that had been muddying the diagnosis are now settled, and both were artifacts of
+mine rather than real effects.
+
+**1. Trigger-on-carrier capture** (analyzer triggered on `phy_rx_idle0 == 0` instead of
+free-running, which is what campaigns 32-34 kept deferring):
+
+    TRIGGERED. 2040 samples: rx_idle 916/2040 (45%), notintable 0, nonzero 0
+    FSM: AWAIT-ALIGN 900, AWAIT-COMINIT 430, COMWAKE 246
+    RX dwords: 00000000/k0000 x2040 (100%)
+
+**`rx_idle` deasserts for 55% of the window.** The device's signal IS arriving and RLOS does see it.
+The earlier "rx_idle 2040/2040, the line is idle" readings were simply free-running captures landing
+in quiet windows - they were never evidence of a silent device. **Retract that reading**; it is the
+same class of mistake as the campaign-27 cable narrowing.
+
+**2. Recovered word clock measured** via the existing `_serdes_clock_latch/tx_cycles/rx_cycles` CSRs:
+
+    trial 0: tx=330241482  rx=330117160
+    trial 1: tx=408538839  rx=408403699     rx delta / tx delta = 78286539/78297357 = 0.99986
+    trial 2: tx=487705134  rx=487551718
+    trial 3: tx=566912827  rx=566740640
+
+**The recovered RX word clock is running at ~150MHz**, tracking the TX clock to 0.04%. The
+campaign-10 "gen2 RX word-clock collapse" is not occurring here (note this only proves the clock
+runs - the ECP5 CDR free-runs near the reference when unlocked, so it is not proof of *lock*).
+
+**So the situation is now sharply defined and quite strange:**
+
+    device signal present on the wire      YES (RLOS deasserts 55% of the window)
+    recovered RX word clock running        YES (~150MHz, 0.04% of TX)
+    DCU RX parallel bus content            ALL ZEROS
+    not-in-table / code violations         ZERO
+
+All-zero raw words should not decode cleanly - `0b0000000000` is not a valid 8b10b code and ought to
+raise `invalid` on the fabric decoders. Getting zeros *with no violations* points at the observation
+path rather than the link: either the datapath source is simply not valid (and we are counting idle
+samples), or the DCU parallel bus really is held at zero despite signal and clock.
+
+**Next step - the definitive one, and it needs a build:** probe the **raw DCU RX bus** directly.
+In `bypass` PCS `serdes.rx_word_data` does not exist, so `bench/ecpix5.py` group 0 falls back to the
+decoded `datapath.rx.source` and we have never actually looked at `rx_bus[0:24]`/`rx_data[0:20]` on a
+real drive. Add those (plus `datapath_rx_source_source_valid`, and the fabric decoders' `invalid`)
+to the analyzer and re-run the trigger-on-carrier capture. That distinguishes, in one shot:
+  * raw bus non-zero but mis-decoded  -> alignment/polarity/disparity problem, all fixable;
+  * raw bus genuinely zero            -> the deserializer is not sampling, i.e. CDR lock, and the
+    LOL status (`FFS_RLOL`, already wired to `init.rx_lol`) should then be read alongside it.
+
+Also still untried from LUNA: its two-stage RX reset (`FFC_RRST` for the CDR, separate
+`FFC_LANE_RX_RST` for the PCS) - pulsing the CDR reset on entry to AWAIT-ALIGN, once the device is
+actually transmitting, is cheap and is exactly the "make the CDR re-acquire on live data" action we
+have never performed.
