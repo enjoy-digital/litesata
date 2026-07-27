@@ -1093,8 +1093,36 @@ class SerDesECP5(LiteXModule):
                 rx_raw_al = Signal(20)
                 if pcs_mode == "bypass":
                     self.bp_aligner = bp_aligner = ClockDomainsRenamer("rx")(BypassWordAligner())
+                    # Re-arm policy: scrambled payloads contain comma-like bit patterns, so an
+                    # always-tracking aligner false-slips mid-frame (measured: starting IDENTIFY
+                    # drops rx_ready - the drive's scrambled response garbles the boundary and
+                    # ctrl tears the RX down). Freeze the slip once locked; re-arm only under
+                    # sustained decode errors (leaky bucket) or a genuinely comma-free stretch
+                    # (align_nocomma, runtime CSR - set it well above the 512-word device ALIGN
+                    # period). A wrong slip floods invalids, so re-lock is self-healing.
+                    bp_inv    = Signal()
+                    bp_kseen  = Signal()
+                    bp_nocom  = Signal(16)
+                    bp_invcnt = Signal(4)
                     self.comb += [
-                        bp_aligner.enable.eq(rx_align),
+                        bp_inv.eq(Cat(*[d.invalid for d in self.decoders]) != 0),
+                        bp_kseen.eq(Cat(*[d.k for d in self.decoders]) != 0),
+                    ]
+                    self.sync.rx += [
+                        If(bp_kseen,
+                            bp_nocom.eq(0)
+                        ).Elif(bp_nocom != 0xFFFF,
+                            bp_nocom.eq(bp_nocom + 1)
+                        ),
+                        If(bp_inv,
+                            If(bp_invcnt != 15, bp_invcnt.eq(bp_invcnt + 1))
+                        ).Elif(bp_invcnt != 0,
+                            bp_invcnt.eq(bp_invcnt - 1)
+                        ),
+                    ]
+                    self.comb += [
+                        bp_aligner.enable.eq(rx_align &
+                            ((bp_invcnt >= 8) | (bp_nocom >= align_nocomma_rx))),
                         bp_aligner.sink.eq(Cat(rx_bus[0:10], rx_bus[12:22])),
                         rx_raw_al.eq(bp_aligner.source),
                     ]

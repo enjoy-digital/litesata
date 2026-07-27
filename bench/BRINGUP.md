@@ -2435,3 +2435,23 @@ issue). Next session: reload, capture analyzer group 2 (link tx/rx FSMs, tx_alig
 the identify, checking whether the core emits X_RDY and what the drive answers - scrambling/CONT
 handling against a real device has never been exercised (the loopback echoed our own unscrambled
 stream). The identify wedge holds the crossbar grant, so reload the bitstream between attempts.
+
+## *** CAMPAIGN 41: ALIGNER FREEZE POLICY - LINK NOW SURVIVES IDENTIFY; COMMAND STILL STALLS ***
+
+IDENTIFY was killing the link: starting it took status 0xf -> 0xa (ready and rx_ready dropped). As
+predicted for scrambled traffic, the always-tracking fabric aligner false-slips on comma-like bit
+patterns inside the drive's scrambled response, the stream garbles, misalign floods, and ctrl tears
+the RX down (the campaign-24 DCU failure mode reproduced in fabric).
+
+Fix: freeze-once-locked re-arm policy around BypassWordAligner.enable - re-arm only under a
+sustained-invalid leaky bucket (>=8 net) or a genuinely comma-free stretch (align_nocomma CSR; set
+it to 4096 at runtime, well above the 512-word device ALIGN period). Initial acquisition still works
+via the invalid path; a wrong slip floods invalids so re-lock is self-healing.
+
+Result: **the link now holds 0xf through the entire identify attempt** (was 0xa within 2s).
+identify_done still never asserts, and an analyzer trigger on X_RDY at datapath.sink did not fire in
+the pre-policy run - so the next question is whether the command layer ever gets its frame out, or
+stalls before X_RDY. Next session: re-run the X_RDY trigger capture on THIS build (link no longer
+drops, so the capture is meaningful now); if X_RDY absent, probe command/transport upstream; if
+present, decode the drive's answer (R_RDY? R_ERR = CRC/scrambler mismatch?). Reload the bitstream
+between attempts - a wedged identify still holds the crossbar grant.
