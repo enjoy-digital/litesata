@@ -133,13 +133,29 @@ class BypassWordAligner(Module):
         ]
         for k in reversed(range(20)): # last match wins -> lowest offset
             self.comb += If(hits[k], slip_n.eq(k))
+        # Slip-offset voting: scrambled payload and CONT junk contain comma7 LOOKALIKES at random
+        # offsets, and a single false comma used to steal the boundary - which is unrecoverable
+        # between the drive's 256-dword ALIGN beacons since only K28.5 carries the true comma7
+        # (SYNC's K28.3 is 0011110, no match). Adopt a new slip only when two CONSECUTIVE comma
+        # detections agree on the offset: the drive's ALIGN bursts put two back-to-back K28.5s at
+        # the same offset (and repeat every 256 dwords), while junk commas land at random offsets,
+        # so a 2-of-2 vote passes real ALIGNs and rejects junk. A detection at the current slip
+        # clears the candidate, so an isolated junk comma cannot pair with a later unrelated one.
+        cand    = Signal(5)
+        cand_ok = Signal()
         # Stage C: barrel shift with the (quasi-static) slip, registered output.
         self.comb += shift.eq(win_r >> self.slip)
         self.sync += [
             If(self.enable & found,
-                self.slip.eq(slip_n),
-                If(slip_n != self.slip,
-                    self.slip_mv.eq(self.slip_mv + 1)
+                If(slip_n == self.slip,
+                    cand_ok.eq(0),                     # confirmed at current offset
+                ).Elif(cand_ok & (slip_n == cand),
+                    self.slip.eq(slip_n),              # second consecutive vote -> adopt
+                    self.slip_mv.eq(self.slip_mv + 1),
+                    cand_ok.eq(0),
+                ).Else(
+                    cand.eq(slip_n),                   # first vote for a new offset
+                    cand_ok.eq(1),
                 ),
             ),
             self.source.eq(shift[0:20]),

@@ -2489,3 +2489,25 @@ addition) verify-decode at the candidate offset before committing. Then re-run I
 proven, the drive accepts, and the response is likely already arriving.
 
 Status: link 100% solid through everything; identify_done still 0; TX exonerated end-to-end.
+
+### Campaign 42 addendum: voting works; the drive silently discards the accepted command
+
+Slip-offset voting (2-of-2 consecutive agreement) built and measured: `slipmv` drops from hundreds
+per 3s to 11 per run, post-exchange steady state improves from 75% invalid to mostly-decodable
+(zeros 82/1024 vs 1530/2040), kcnt runs continuously. The boundary now substantially holds through
+scrambled traffic. Kept (unit test passes at all 20 offsets with voting).
+
+With the boundary held, re-verified the response path end to end: after the drive's R_OK there is
+NO X_RDY, NO SOF, and zero dwords ever reach the identify FIFO. **The drive acknowledges our
+CRC-valid IDENTIFY FIS with R_OK and then silently discards it at the transport level.**
+
+Next session, in order:
+  1. **Dump the exact FIS we transmit**: analyzer on `phy.sink` between SOF and EOF, descramble
+     offline with litesata's Scrambler model, and check the H2D Register FIS byte-by-byte against
+     the spec (FIS type 0x27, C bit set, command 0xEC, device field). R_OK only proves link-level
+     integrity; a field-level error is exactly what a drive drops silently.
+  2. **The signature FIS question**: after OOB every device sends an unsolicited D2H Register FIS
+     (the signature). Our link came up with the RX boundary settling - if that frame was garbled
+     and our link R_ERR'd or ignored it, some drives park the transport until it is delivered.
+     Capture link-up with the voting build and look for the signature exchange completing.
+  3. Try a different command (BIST generator read) to see whether ANY command gets a response.
