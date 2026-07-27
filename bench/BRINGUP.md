@@ -1349,3 +1349,34 @@ progresses past sending ALIGNs, and we never see it settle into SYNC).
   3. If confirmed: either fix the hybrid TX mapping, or switch the data phase to full `g8b10b`
      (DCU encoder, proven by the campaign-12 loopback link-up) and keep raw patterns only for the
      OOB phase - the two need not use the same encoder path.
+
+### Campaign 24 addendum: link now HOLDS (89% / 8.2s unbroken runs); IDENTIFY stalls one layer up
+
+After completing the Phase-3 parameterization the link became far more stable:
+    ready in 0.04-0.10s, then **86/97 samples (89%)** over 20s,
+    and over a 60s run: 166/235 (71%) with an **unbroken run of 8.2s**.
+(Best settings: `_oob_quiet=50`, `_oob_align` holdoff=1024 / nocomma=65535, and **SCI background
+reconfig frozen** - `sci_reconfig_pause=1`, worth ~7 points on its own since the loop continuously
+rewrites CH_01/CH_15/CH_18 underneath a live link.)
+
+**IDENTIFY issued on a held link does not complete**: `identify_done` stays 0 after 3s while
+`sata_phy_status` remains **0xf throughout** - so this is no longer a PHY problem. Per
+`litesata/frontend/identify.py:34-36` the FSM parks in SEND-CMD (port never granted), WAIT-ACK (no
+PIO-Setup FIS back) or RECEIVE-DATA, with no timeout and no error path, and a hung attempt holds
+the crossbar grant (`litesata/frontend/arbitration.py:76-83`) until the FPGA is reloaded. The host
+script therefore uses a bounded poll and a reload between attempts.
+
+Most likely next causes, to probe with the group-2 link analyzer plus the command/transport FSMs:
+  1. The device still transmits ALIGN and never SYNC ⇒ it has not accepted our transmission, so
+     no FIS is ever answered. That points again at the **hybrid `ENC_BYPASS=1` fabric-encoder TX
+     mapping**, which has never been validated against a real receiver (the campaign-12 loopback
+     link-up used g8b10b, where the DCU encodes).
+  2. Link-layer handshake (X_RDY/R_RDY/SOF) never completing - probe
+     `sata_core.link.tx.fsm`/`rx.fsm` leaving IDLE when identify starts.
+
+**Parameterization complete (plan Phase 3).** All ECP5-specific behaviour is now behind
+constructor parameters whose defaults reproduce the original Xilinx semantics exactly:
+`LiteSATAPHYCtrl(align_timeout_us=873, retry_timeout_us=10000, nocomwake_timeout_us=None,
+stability_us=5000, misalign_tolerance=0, align_needs_signal=True, align_accept_align=False)` and
+`LiteSATAPHYDatapath(align_timeout=256*16)`. The ECP5 arm of `litesata/phy/__init__.py` selects the
+ECP5 values. Regression `test_phy test_bist test_ecp5_oob` green (EXIT=0) before and after.
