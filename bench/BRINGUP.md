@@ -2596,3 +2596,23 @@ resets only on KNOWN primitives), fixed aligner re-arm policy, stability_us=1 + 
 BEFORE enabling the PHY with subsampled deep capture around SEND-ALIGN; find exactly when its
 X_RDY appears relative to our ALIGN count; then either answer R_RDY from ctrl itself during
 SEND-ALIGN (ctrl-level R_RDY insertion) or attach the core before SEND-ALIGN completes.
+
+## *** CAMPAIGN 45: SIGNATURE-FIS EAT + FULL CHAIN CLEAN - THE DRIVE NEVER TRANSMITS A FRAME ***
+
+Fixes landed and verified this session:
+  * SEND-ALIGN passes in <1.4us and the core attaches ~2us after link-up (stability_us=1 measured).
+  * Drive idles in PLAIN SYNC + 0.8% ALIGN - pristine link, boundary rock solid.
+  * command.py WAIT_PIO_SETUP_D2H no longer ABORTS (FLUSH) on an unsolicited non-error REG_D2H:
+    it consumes it (new EAT_REG_D2H state) and keeps waiting - the stale-signature abort killed
+    the first command of every session when a signature was buffered. Regressions green.
+
+Definitive negatives, all on a GENUINE link (drive SYNC decoding, R_RDY + R_OK measured for our
+frames): IDENTIFY unanswered (cmd_rx correctly parks in WAIT_PIO_SETUP now); WRITE_DMA via the
+BIST generator equally unanswered (no SOF); and the killer: **a pre-armed full-rate X_RDY trigger
+across the entire link-up sees NOTHING in 30s - the drive never attempts its mandatory signature
+FIS.** A device that completes OOB + negotiation, holds the link, link-ACKs every host frame and
+never transmits a single frame of its own is out of spec.
+
+Every host-side layer is now individually proven. Next discriminator: THE OTHER DRIVE (drive B).
+Identical behaviour = something environmental/protocol-subtle on our side; drive B talking =
+this SSD has a transport quirk and the bring-up is complete.

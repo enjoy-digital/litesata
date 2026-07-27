@@ -114,10 +114,11 @@ enum,3,fsm4_state,1,WAIT_WRITE_ACTIVATE_OR_REG_D2H
 enum,3,fsm4_state,2,PRESENT_WRITE_RESPONSE
 enum,3,fsm4_state,3,WAIT_READ_DATA_OR_REG_D2H
 enum,3,fsm4_state,4,WAIT_PIO_SETUP_D2H
-enum,3,fsm4_state,5,PRESENT_PIO_SETUP_D2H
-enum,3,fsm4_state,6,PRESENT_READ_DATA
-enum,3,fsm4_state,7,PRESENT_READ_RESPONSE
-enum,3,fsm4_state,8,FLUSH
+enum,3,fsm4_state,5,EAT_REG_D2H
+enum,3,fsm4_state,6,PRESENT_PIO_SETUP_D2H
+enum,3,fsm4_state,7,PRESENT_READ_DATA
+enum,3,fsm4_state,8,PRESENT_READ_RESPONSE
+enum,3,fsm4_state,9,FLUSH
 signal,3,fsm7_state,2
 enum,3,fsm7_state,0,IDLE
 enum,3,fsm7_state,1,SEND_CTRL_CMD

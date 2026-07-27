@@ -244,9 +244,26 @@ class LiteSATACommandRX(Module):
                 transport.source.ready.eq(0),
                 If(test_type("PIO_SETUP_D2H"),
                     NextState("PRESENT_PIO_SETUP_D2H")
+                ).Elif(test_type("REG_D2H") &
+                       ~transport.source.status[reg_d2h_status["err"]],
+                    # Unsolicited, non-error Register D2H: the device SIGNATURE FIS, delivered at
+                    # link-up and buffered in the RX path until the first command asserted ready.
+                    # Aborting on it (the old FLUSH path) killed the first command of every session
+                    # and orphaned the drive's real response. Consume it and keep waiting for the
+                    # PIO Setup; a genuine error response (err=1) still takes the FLUSH path.
+                    transport.source.ready.eq(1),
+                    If(~transport.source.last,
+                        NextState("EAT_REG_D2H")
+                    )
                 ).Else(
                     NextState("FLUSH")
                 )
+            )
+        )
+        fsm.act("EAT_REG_D2H",
+            transport.source.ready.eq(1),
+            If(transport.source.valid & transport.source.last,
+                NextState("WAIT_PIO_SETUP_D2H")
             )
         )
         fsm.act("PRESENT_PIO_SETUP_D2H",
