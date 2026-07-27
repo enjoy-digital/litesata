@@ -1811,3 +1811,31 @@ hybrid. `PROTOCOL`/`UC_MODE` are fuses, so the two cannot be switched at runtime
   2. Find why a constant raw word does not stay flat under `G8B10B`+`ENC_BYPASS`, and fix hybrid.
 
 Option 1 is the immediate next test: bring the link all the way up in bypass with `deemph_gap`.
+
+### Campaign 31 addendum: bypass gets OOB but its RX is unstable - the split is now exact
+
+Full link attempt in bypass with `deemph_gap`, 25s each, both EI modes:
+
+    bypass + deemph, ei_mode : ready 0/1563   gmin=8   status hist: 0x6 x1143, 0x2 x419
+    bypass + deemph, no ei   : ready 0/1561   gmin=8   status hist: 0x6 x1135, 0x2 x425
+
+`gmin=8` confirms the device COMWAKE is arriving throughout. But the status oscillates between 0x6
+(tx_ready+rx_ready) and **0x2 (tx_ready only)** for ~27% of samples: **`rx_ready` keeps dropping**.
+That is the campaign-10 gen2 RX word-clock collapse, which is exactly why hybrid was introduced.
+
+So the two halves are now precisely characterised, and they are in different PCS modes:
+
+| | `bypass` (10BSER) | `hybrid` (G8B10B+ENC_BYPASS) |
+|---|---|---|
+| OOB data-driven gap / device COMWAKE | **works** (gmin 8, 6.7x) | dead (no gaps at all) |
+| RX stability at 3Gbps | `rx_ready` drops ~27% | **solid** |
+| post-OOB link | not reached | **100% over 60s, 0 errors** |
+
+`PROTOCOL`/`UC_MODE` are fuses, so this cannot be resolved by a runtime switch. Next session, in
+order of expected value:
+  1. **Fix bypass RX stability.** This is now the single blocker for a complete drive link-up, and
+     the aligner knowledge from campaign 26 (`LSM_DISABLE=1` + `ENABLE_CG_ALIGN=1` + pulsed re-arm)
+     has never been applied to the bypass arm - it currently inherits only the base params. Start
+     there; it is a one-line change and the same litescope instrument measures it.
+  2. Work out why a constant raw word does not stay flat under G8B10B/ENC_BYPASS, which would let
+     hybrid do both.
