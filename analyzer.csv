@@ -42,8 +42,6 @@ signal,0,phy_comwake_gaps,3
 signal,0,phy_tx_polarity,1
 signal,0,phy_rx_polarity,1
 signal,0,long_activity,1
-signal,0,phy_serdesecp5_rx_word_data,16
-signal,0,phy_serdesecp5_rx_word_ctrl,2
 signal,0,datapath_rx_source_source_valid,1
 signal,0,datapath_rx_source_source_payload_data,32
 signal,0,datapath_rx_source_source_payload_charisk,4

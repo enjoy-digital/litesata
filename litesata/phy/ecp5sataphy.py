@@ -687,9 +687,17 @@ class ECP5LiteSATAPHY(LiteXModule):
             com_gen.kick.eq(kick_tx),
             serdes.tx_oob_en.eq(com_gen.tx_oob_en & ~burst_mode_tx),
             serdes.tx_oob_data.eq(com_gen.tx_oob_data),
-            serdes.tx_oob_idle.eq(com_gen.tx_idle),
+            serdes.tx_oob_idle.eq(com_gen.tx_idle & ~deemph_gap_tx),
             serdes.tx_oob_active.eq(com_gen.active),
-            serdes.tx_oob_ei_req.eq(com_gen.ei_req),
+            # deemph_gap makes the OOB gap out of DATA: the serializer switches to a constant,
+            # transition-free pattern (tx_oob_gap below) while the driver keeps driving. Electrical
+            # idle must therefore be kept OUT of the sequence entirely - otherwise EI mutes the
+            # driver underneath the constant pattern and the gap width is set by the EI un-mute
+            # latency instead of by the generator. That is what campaign 28 measured: 633-822ns
+            # gaps against a 304-336ns COMRESET window, because tx_oob_ei_req and tx_oob_gap were
+            # both driven from com_gen.ei_req. Masking EI here is what makes the sub-112ns COMWAKE
+            # gap reachable at all - no EI mechanism on this silicon goes below ~400ns.
+            serdes.tx_oob_ei_req.eq(com_gen.ei_req & ~deemph_gap_tx),
             # pwdn_gap: make the OOB gaps by POWERING DOWN the main TX driver, so the bursts can
             # carry line-rate serializer content (a SATA squelch expects GHz energy; the LDR aux
             # path can only make a ~75MHz square, likely far below the receiver's detection band).
@@ -702,6 +710,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             serdes.align_cont.eq(self.oob_align_cont),
             serdes.tx_pattern_gap.eq(Cat(self.oob_gap_pattern, self.oob_gap_pattern[0:4])),
             serdes.tx_oob_gap.eq(com_gen.ei_req & deemph_gap_tx),
+            serdes.tx_oob_deemph.eq(deemph_gap_tx),
             serdes.sci_oob_gate_en.eq(self.oob_sci_gate),
             serdes.sci_oob_burst_val.eq(self.oob_sci_burst_val),
             serdes.sci_oob_gap_val.eq(self.oob_sci_gap_val),

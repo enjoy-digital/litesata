@@ -446,6 +446,7 @@ class SerDesECP5(LiteXModule):
         self.tx_pattern_alt         = Signal() # i: alternate tx_pattern with its inverse.
         self.tx_pattern_gap         = Signal(20) # i: pattern sent during OOB gaps (DC = idle).
         self.tx_oob_gap             = Signal()   # i (tx domain): 1 = OOB gap in progress.
+        self.tx_oob_deemph          = Signal()   # i (tx domain): data-driven gaps -> mask EI.
         self.sci_oob_gate_en   = Signal() # i: SCI slice gate enable.
         self.sci_oob_gate_lvl  = Signal() # i: 1 = burst, 0 = gap.
         self.sci_oob_burst_val = Signal(8)
@@ -538,7 +539,13 @@ class SerDesECP5(LiteXModule):
             # Shaped: during an OOB sequence the COMGenerator emits an EI request with lead/trail
             # compensation for the slow FFC_EI_EN response; outside sequences ctrl's tx_idle rules.
             ei_shaped.eq(Mux(self.tx_oob_active, self.tx_oob_ei_req, tx_idle_tx)),
-            ei_en.eq(Mux(ei_mode_tx, ei_shaped, ei_legacy)),
+            # Data-driven gaps: the gap is made by the serializer holding a constant, transition-free
+            # pattern while the driver keeps driving, so electrical idle must be kept out of the
+            # whole sequence - any EI assertion mutes the driver and the gap width then follows the
+            # EI un-mute latency (213-427ns measured), which cannot reach the 101.3-112ns COMWAKE
+            # window. Masked here, in the tx domain, so it holds for both EI modes.
+            ei_en.eq(Mux(ei_mode_tx, ei_shaped, ei_legacy)
+                     & ~(self.tx_oob_deemph & self.tx_oob_active)),
         ]
 
         self.specials += [

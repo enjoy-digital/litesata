@@ -1767,3 +1767,47 @@ pattern, no EI involved) mattered: it is the only mechanism that can produce a 1
 **So the single remaining blocker is now sharply defined**: restore the data-driven COMWAKE gap.
 Everything else in the chain is proven - COMRESET is heard (this campaign), and the entire post-OOB
 datapath links up at 100% over 60s with zero errors (campaign 29).
+
+## *** CAMPAIGN 31: OOB RESTORED - THE DATA-DRIVEN GAP NEEDS `bypass` PCS, NOT `hybrid` ***
+
+The drive answers with its own COMWAKE again. Tested on the **original** drive (reinstated to remove
+the drive swap as a confounder; its ~654 bursts/s beacon identifies it - drive B beaconed at ~14/s).
+
+    BYPASS PCS, original drive, rx_sel=0 (RLOS)
+    config                                    park/s  act/s  ratio  gmin  verdict
+    deemph+pat_alt, ei_mode                      659   4404    6.7     8   DEVICE COMWAKE
+    deemph+pat_alt, NO ei_mode                   668   4388    6.6     8   DEVICE COMWAKE
+    pat_alt only + ei_mode (EI gaps)             663    660    1.0    28   -
+    pat_alt only + ei_mode trail=16              671    672    1.0    28   -
+    pwdn held LDR bursts + ei trail=16           672    665    1.0    28   -
+    pwdn held LDR bursts + ei trail=16 wg48      660    780    1.2    28   -
+    gap_mode + ei_mode                           671    658    1.0    28   -
+
+`gmin = 8 cycles = 89ns` is unambiguous: the drive's COMINIT gaps are 28-29 cycles (311-322ns), so an
+8-cycle gap is a different signal entirely - the device's COMWAKE. Only the two `deemph_gap` rows
+produce it; all five non-deemph configs sit at ratio 1.0 with gmin 28. Perfectly selective.
+
+**The finding: the data-driven gap works in `pcs_mode="bypass"` and does NOT work in
+`pcs_mode="hybrid"`.** Identical CSR settings, identical fabric TX datapath code, opposite result.
+Campaign 19 ran on bypass (10BSER, `UC_MODE=1`); the campaign-20+ move to hybrid (`G8B10B` +
+`ENC_BYPASS=1`, `UC_MODE=0`) for DCU-side RX decode silently killed the OOB gap. Campaign 28's
+"the data-driven gap produces no gaps in any configuration" was measured entirely in hybrid, which
+is why it read as a regression - it is a **PCS-mode dependency**, not a regression.
+
+Note this does not contradict campaign 26: hybrid's TX path faithfully carries *8b10b traffic* (our
+own ALIGN looped back and decoded 100% correct). But a **constant, transition-free** raw word does
+not survive to the wire as a flat level in G8B10B/ENC_BYPASS the way it does in 10BSER - and a flat
+level is precisely what the gap needs. So both results stand.
+
+Also worth recording: `deemph_gap` works with EI masked *and* with EI shaped (6.7x vs 6.6x, gmin 8
+either way), so the EI-masking change made this session is harmless but not the active ingredient.
+The serializer's constant pattern is doing the work.
+
+**Architecture consequence.** OOB needs bypass; the campaign-26/29 datapath results were obtained in
+hybrid. `PROTOCOL`/`UC_MODE` are fuses, so the two cannot be switched at runtime. Two ways forward:
+  1. **Run everything in bypass.** The DCU word aligner is still active in 10BSER (base params set
+     `ENABLE_CG_ALIGN=1` with the K28.5 UDF comma), only the 8b10b decode moves to the fabric
+     decoders. If the aligner behaves there as it now does in hybrid, this is the whole solution.
+  2. Find why a constant raw word does not stay flat under `G8B10B`+`ENC_BYPASS`, and fix hybrid.
+
+Option 1 is the immediate next test: bring the link all the way up in bypass with `deemph_gap`.
