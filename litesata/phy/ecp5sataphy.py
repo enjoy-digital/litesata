@@ -359,6 +359,7 @@ class COMChecker(LiteXModule):
 class ECP5LiteSATAPHY(LiteXModule):
     def __init__(self, refclk, pads, gen, clk_freq, data_width=16, dual=0, channel=0, refclk_freq=None,
         oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False, tx_boost=False,
+        tx_idle_sync=True,
         rx_los_lvl=4):
         assert data_width in [16]
         assert gen in ["gen1", "gen2"]
@@ -461,11 +462,37 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.source.data.eq(self.rxdata)
         ]
 
-        self.sync.sata_tx += [
-            self.txcharisk.eq(self.sink.charisk),
-            self.txdata.eq(self.sink.data),
-            self.sink.ready.eq(1),
-        ]
+        # TX: the PHY copies the bus rather than gating on sink.valid (as the Xilinx PHYs do). If
+        # the sink ever starves - a core that is absent, in reset, or stalled - that transmits D0.0
+        # for ever, the device stops answering and the link tears down. Substitute SYNC (the SATA
+        # link-layer idle) whenever the sink has nothing valid, so a starved sink is harmless.
+        if tx_idle_sync:
+            # SYNC is a 32-bit primitive on a 16-bit bus, so emit it as its two halves in turn:
+            # low half = K28.3 + D21.5 (charisk on byte 0), high half = D21.5 D21.5.
+            sync_half = Signal()
+            self.sync.sata_tx += [
+                If(self.sink.valid,
+                    self.txcharisk.eq(self.sink.charisk),
+                    self.txdata.eq(self.sink.data),
+                    sync_half.eq(0),
+                ).Else(
+                    sync_half.eq(~sync_half),
+                    If(sync_half,
+                        self.txcharisk.eq(0b00),
+                        self.txdata.eq((primitives["SYNC"] >> 16) & 0xffff),
+                    ).Else(
+                        self.txcharisk.eq(0b01),
+                        self.txdata.eq(primitives["SYNC"] & 0xffff),
+                    ),
+                ),
+                self.sink.ready.eq(1),
+            ]
+        else:
+            self.sync.sata_tx += [
+                self.txcharisk.eq(self.sink.charisk),
+                self.txdata.eq(self.sink.data),
+                self.sink.ready.eq(1),
+            ]
 
         # 8b10b decode errors (rx -> sys) ----------------------------------------------------------
         rxnotintable = Signal(data_width//8)

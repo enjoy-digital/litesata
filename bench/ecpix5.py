@@ -105,6 +105,10 @@ class SATATestSoC(SoCMini):
         assert gen in ["gen1", "gen2"]
         assert analyzer_domain in ["sys", "tx", "rx"]
         sata_clk_freq = {"gen1": 75e6, "gen2": 150e6}[gen]
+        # The 16->32 RX StrideConverter requires sys_clk > sata_rx_clk/2 (see acorn.py).
+        min_sys_clk_freq = sata_clk_freq*16/32
+        assert sys_clk_freq >= min_sys_clk_freq, \
+            f"sys_clk_freq must be >= {min_sys_clk_freq/1e6:.1f}MHz for {gen}."
 
         # CRG --------------------------------------------------------------------------------------
         # SATA SerDes refclk = linerate/20 (x20 DCU PLL multiplier, see ecp5sataphy.py).
@@ -136,11 +140,14 @@ class SATATestSoC(SoCMini):
         # SerDes TX/RX word clock measurement (debug).
         self.sata_phy.phy.serdes.add_clock_cycles()
 
-        # Core / Crossbar / BIST
-        if with_bist:
-            self.sata_core     = LiteSATACore(self.sata_phy)
-            self.sata_crossbar = LiteSATACrossbar(self.sata_core)
-            self.sata_bist     = LiteSATABIST(self.sata_crossbar, with_csr=True)
+        # Core / Crossbar / BIST.
+        # The core is ALWAYS instantiated (as on every other bench): LiteSATAPHYDatapath hands the
+        # transmitter from ctrl to the core the instant ctrl.ready asserts, and the PHY copies
+        # sink.data ignoring sink.valid - so a dangling sink transmits D0.0 for ever, the device
+        # stops answering and the link tears down ~41us later. with_bist only gates the BIST CSRs.
+        self.sata_core     = LiteSATACore(self.sata_phy)
+        self.sata_crossbar = LiteSATACrossbar(self.sata_core)
+        self.sata_bist     = LiteSATABIST(self.sata_crossbar, with_csr=with_bist)
 
         # Timing constraints
         platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
@@ -220,6 +227,23 @@ class SATATestSoC(SoCMini):
                     1: [
                         self.sata_phy.source,
                         self.sata_phy.sink,
+                    ],
+                    # Group 2: link layer - what the core actually transmits once ctrl.ready hands
+                    # the transmitter over. Healthy idle = SYNC (0xb5b5957c) x254 then ALIGN
+                    # (0x7b4a4abc) x2, charisk 0b0001.
+                    2: [
+                        self.sata_core.link.tx.fsm,
+                        self.sata_core.link.rx.fsm,
+                        self.sata_core.link.tx.from_rx.idle,
+                        self.sata_core.link.tx.from_rx.insert,
+                        self.sata_core.link.tx_align.source.valid,
+                        self.sata_core.link.tx_align.source.data,
+                        self.sata_core.link.tx_align.source.charisk,
+                        self.sata_phy.sink.valid,
+                        self.sata_phy.sink.data,
+                        self.sata_phy.sink.charisk,
+                        self.sata_phy.ctrl.ready,
+                        self.sata_phy.ctrl.rx_idle,
                     ],
                 }
             if analyzer_domain == "tx":

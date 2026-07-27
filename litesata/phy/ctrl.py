@@ -29,7 +29,8 @@ class LiteSATAPHYCtrl(LiteXModule):
     # without reseting the FPGA core.
     """
     def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1,
-                 align_timeout_us=3000, nocomwake_timeout_us=0.4, stability_us=50):
+                 align_timeout_us=3000, nocomwake_timeout_us=0.4, stability_us=50,
+                 misalign_tolerance=0):
         self.clk_freq = clk_freq
         self.ready    = Signal()
         self.sink     = sink   = stream.Endpoint(phy_description(32))
@@ -89,20 +90,26 @@ class LiteSATAPHYCtrl(LiteXModule):
             )
         ]
 
-        # Misalignment debounce (leaky bucket). A dword whose K character lands outside byte 0
-        # is normal during resynchronisation - the RX converter self-resets and recovers within a
-        # few words. Tearing the link down on a single event prevents READY from ever completing
-        # its stability timer. Only sustained misalignment should reset the RX.
-        mis_score    = Signal(8)
+        # Misalignment policy. A dword whose K character lands outside byte 0 is normal during
+        # resynchronisation - the RX converter self-resets and the link recovers within a few
+        # words. `misalign_tolerance` = 0 keeps the original behaviour (reset the RX on the first
+        # event, as the Xilinx PHYs have always done); a non-zero value runs a leaky-bucket
+        # integrator so only SUSTAINED misalignment resets the RX. On ECP5 the DCU word aligner
+        # emits short bursts of 0xEE decode errors that the link recovers from unaided, and
+        # tearing down on those prevents READY from ever completing its stability timer.
         misalign_flt = Signal()
-        self.sync += [
-            If(self.misalign,
-                If(mis_score < 248, mis_score.eq(mis_score + 8))
-            ).Elif(mis_score != 0,
-                mis_score.eq(mis_score - 1)
-            )
-        ]
-        self.comb += misalign_flt.eq(mis_score > 128)
+        if misalign_tolerance:
+            mis_score = Signal(max=2*misalign_tolerance + 2)
+            self.sync += [
+                If(self.misalign,
+                    If(mis_score < 2*misalign_tolerance, mis_score.eq(mis_score + 1))
+                ).Elif(mis_score != 0,
+                    mis_score.eq(mis_score - 1)
+                )
+            ]
+            self.comb += misalign_flt.eq(mis_score >= misalign_tolerance)
+        else:
+            self.comb += misalign_flt.eq(self.misalign)
 
         self.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)

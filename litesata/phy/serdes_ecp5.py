@@ -834,11 +834,14 @@ class SerDesECP5(LiteXModule):
                 p_CHX_UC_MODE            = "0b0",
                 p_CHX_ENC_BYPASS         = "0b1",  # TX: raw 10-bit words from fabric
                 p_CHX_DEC_BYPASS         = "0b0",  # RX: DCU 8b10b decode + aligner
-                # Let the DCU link state machine drive word alignment (LSM_DISABLE=0) with
-                # continuous CG align: the edge-pulsed re-arm never converges on the comma
-                # against a real device (swept exhaustively at runtime).
+                # Word alignment: let the DCU link state machine maintain it (LSM_DISABLE=0) and
+                # re-arm the barrel shifter only when decode errors appear. Continuous alignment
+                # (ENABLE_CG_ALIGN=1) does acquire lock, but it re-aligns on anything comma-like
+                # once real scrambled data flows and the link loses alignment after ~10us; aligning
+                # on error and holding otherwise is the stable arrangement.
                 p_CHX_LSM_DISABLE        = "0b0",
-                p_CHX_ENABLE_CG_ALIGN    = "0b1",
+                p_CHX_ENABLE_CG_ALIGN    = "0b0",
+                i_CHX_FFC_ENABLE_CGALIGN = cg_align_pulse,
             )
         if pcs_mode in ["g8b10b", "pcie"]:
             self.serdes_params.update(

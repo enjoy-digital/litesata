@@ -90,13 +90,24 @@ class LiteSATAPHY(LiteXModule):
 
         # Control.
         # --------
-        self.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq)
+        # ECP5 needs a tolerant OOB/link policy: its DCU word aligner emits short bursts of decode
+        # errors the link recovers from unaided, its RLOS-derived rx_idle stays asserted through a
+        # device's ALIGN bursts, and the device repeats COMWAKE until answered. Every other PHY
+        # keeps the original (Xilinx) behaviour by default.
+        ctrl_kwargs      = {}
+        datapath_kwargs  = {}
+        if re.match("^LFE5UM5G-", device):
+            ctrl_kwargs     = dict(misalign_tolerance=512)
+            # The DCU word aligner drops lock in short bursts and re-acquires unaided; a 41us
+            # ALIGN window tears the link down during those, so give it far more slack.
+            datapath_kwargs = dict(align_timeout=256*16*16)
+        self.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq, **ctrl_kwargs)
         if hasattr(self.phy, "oob_align_force"):
             self.comb += self.ctrl.align_force.eq(self.phy.oob_align_force)
 
         # Datapath.
         # ---------
-        self.datapath = LiteSATAPHYDatapath(self.phy, self.ctrl)
+        self.datapath = LiteSATAPHYDatapath(self.phy, self.ctrl, **datapath_kwargs)
         self.comb += [
             self.ctrl.rx_idle.eq(self.datapath.rx_idle),
             self.ctrl.misalign.eq(self.datapath.misalign)

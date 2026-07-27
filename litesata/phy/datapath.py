@@ -151,12 +151,12 @@ class LiteSATAPHYAlignTimer(Module):
     decide whether or not our device is returning valid data (Using RX idle
     signal from the transceiver is not recommended by vendors).
     """
-    def __init__(self):
+    def __init__(self, timeout=256*16):
         self.sink = sink = stream.Endpoint(phy_description(32))
 
         # # #
 
-        self.submodules.timer = WaitTimer(256*16)
+        self.submodules.timer = WaitTimer(timeout)
 
         charisk_match = sink.charisk == 0b0001
         data_match    = sink.data == primitives["ALIGN"]
@@ -189,7 +189,7 @@ class LiteSATAPHYDatapath(Module):
     are used by the SATA PHY controller
 
     """
-    def __init__(self, trx, ctrl):
+    def __init__(self, trx, ctrl, align_timeout=256*16):
         self.sink   = sink   = stream.Endpoint(phy_description(32))
         self.source = source = stream.Endpoint(phy_description(32))
 
@@ -213,7 +213,7 @@ class LiteSATAPHYDatapath(Module):
         # RX path
         rx    = LiteSATAPHYDatapathRX(trx.data_width)
         demux = Demultiplexer(phy_description(32), 2)
-        align_timer = LiteSATAPHYAlignTimer()
+        align_timer = LiteSATAPHYAlignTimer(align_timeout)
         self.rx = rx # exposed for debug/analyzer
         self.submodules += rx, demux, align_timer
         self.comb += [

@@ -1245,3 +1245,62 @@ Next session, in order:
 
 The PHY itself is now proven: OOB, alignment and the ALIGN exchange all work, and READY is
 reached reliably (0.2-8.8s over six trials).
+
+## Campaign 24: core always present, link holds intermittently; device never leaves ALIGN
+
+**Phase 0 fixes (plan-driven):**
+1. **`bench/ecpix5.py` now instantiates Core/Crossbar/BIST unconditionally** - it was the only bench
+   in the repo doing it under `if with_bist:` (every Xilinx bench does it unconditionally). With no
+   core, `sata_phy.sink` is a dangling endpoint and the PHY (which copies the bus ignoring
+   `sink.valid`, like the Xilinx PHYs) transmitted **D0.0 for ever** the instant `ctrl.ready` flipped
+   the datapath mux. `with_bist` now only gates the BIST CSRs. Added the acorn `min_sys_clk_freq`
+   guard.
+2. **Defensive `tx_idle_sync`** in `ecp5sataphy.py`: when `sink.valid` is low the PHY now transmits
+   SYNC (as two alternating 16-bit halves) instead of the raw bus, so a starved sink can never again
+   be link-fatal.
+3. **Analyzer group 2** (link layer): `link.tx.fsm`, `link.rx.fsm`, `from_rx.idle/insert`,
+   `tx_align.source`, `datapath.sink`, `ctrl.ready/rx_idle`.
+
+**Verified: our transmitter is correct.** With the core present, group 2 shows `link.tx.fsm` and
+`link.rx.fsm` both in IDLE, `from_rx.idle=1`, and `tx_align.source` = **`B5B5957C` / charisk=0b0001
+/ valid=1** - continuous SYNC - carried identically on `datapath.sink`. The TX handover is no longer
+the problem.
+
+**Link now reaches READY in 0.1-0.5s but flaps.** Progress from parameterized tolerances:
+    baseline (core fix only)                          :  1% ready
+    + misalign_tolerance=512                          :  1%
+    + ALIGN window 41us -> 655us                      : 20%
+    + SCI background reconfig frozen (pause=1)        : 28-35%
+Each is a real improvement but none is the cure. `_oob_align` holdoff/nocomma sweeps (12 settings,
+1..65535) change nothing material - the CGALIGN re-arm is not the driver.
+
+**Root-cause evidence for what remains.** Capturing the drop (trigger on falling `ctrl_ready`):
+    -5 READY rdy=1 rx_idle=0 mis=1  0000EEEE/k0011
+    -2 READY rdy=1 rx_idle=1 mis=0  E026D926/k0000     <- alignment lost, garbage
+    +0 RESET rdy=0 rx_idle=1        0000EEEE/k0011
+`rx_idle` (not misalign) is the evictor, and the RX content at that moment is garbage with no K
+character: **the DCU word aligner drops lock mid-link.** Continuous alignment
+(`ENABLE_CG_ALIGN=1`) acquires lock but is unstable once real data flows; switched to
+**LSM maintenance (`LSM_DISABLE=0`) + pulse-on-error re-arm**, which is the committed config.
+
+**The decisive observation: during READY the device transmits ALIGN continuously (628 of 742
+dwords) and NEVER progresses to SYNC.** A device that had accepted our transmission would move to
+SYNC. So the remaining suspect is **our TX 8b10b stream itself**: in `hybrid` mode
+(`ENC_BYPASS=1`) the raw 10-bit words come from the *fabric* encoder, and that path has never been
+validated against a real receiver - the loopback self link-up of campaign 12 used **g8b10b**, where
+the *DCU* encodes. If our raw-word bit mapping into `tx_bus[0:10]/[12:22]` (the 10BSER layout) is
+not what G8B10B+ENC_BYPASS expects, the device sees invalid symbols, never leaves speed
+negotiation, and periodically resets us - exactly the observed flapping.
+
+**Next, in order:**
+  1. Validate the hybrid TX encoding: re-fit the loopback cable and check our own RX decodes our
+     own fabric-encoded ALIGN/SYNC in `hybrid` mode. That isolates TX-mapping from device
+     behaviour in one measurement.
+  2. If the mapping is wrong, find the correct `ENC_BYPASS=1` TX bus layout (TN1261 Table 7.3 /
+     Diamond reference), or move OOB into a `g8b10b` build so the DCU encodes both directions.
+  3. Only then retry IDENTIFY - the link must hold for milliseconds, and 35% flapping is far short.
+
+**Parameterization (keeps Xilinx behaviour byte-identical), per plan Phase 3:**
+`LiteSATAPHYCtrl(misalign_tolerance=0)` default = original immediate RX reset; ECP5 passes 512.
+`LiteSATAPHYDatapath(align_timeout=256*16)` default unchanged; ECP5 passes 256*16*16.
+Both selected in the ECP5 arm of `litesata/phy/__init__.py`.
