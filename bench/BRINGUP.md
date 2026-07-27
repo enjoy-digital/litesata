@@ -2511,3 +2511,30 @@ Next session, in order:
      and our link R_ERR'd or ignored it, some drives park the transport until it is delivered.
      Capture link-up with the voting build and look for the signature exchange completing.
   3. Try a different command (BIST generator read) to see whether ANY command gets a response.
+
+### Campaign 42 addendum 2: fresh-drive test - THE DRIVE NEVER INITIATES A FRAME, not even its signature FIS
+
+Drive physically unplugged/replugged (fresh power state), beacon back at 601/s in 1s, link up in
+0.11s. RX-SOF trigger armed BEFORE the PHY was enabled, so the very first frame the drive sends
+after negotiation would be caught: **no SOF within 6s of link-up.** After OOB + negotiation a SATA
+device MUST send its unsolicited D2H Register FIS (the signature) - ours never does. IDENTIFY on
+the fresh drive: still accepted (per earlier R_OK measurements) and still unanswered.
+
+So the asymmetry is now sharply characterized, on a freshly power-cycled device:
+  * drive link-layer RX: WORKS (it R_RDYs our X_RDY and R_OKs our CRC-valid frame)
+  * drive link-layer TX: WORKS (SYNC/ALIGN/R_* primitives flow)
+  * drive frame INITIATION: NEVER HAPPENS - no signature FIS, no command response
+
+Two hypotheses fit, in order of likelihood:
+  1. **The drive's first signature-FIS attempt is being mangled by us and R_ERR'd/ignored during
+     the link-up settling window** (boundary/byte-rotation converging right then), and THIS drive
+     parks its transport after a failed signature delivery instead of retrying forever. The
+     detection window is the first ~ms after ctrl.ready. Capture there with a trigger on any
+     non-(SYNC/ALIGN/zero) RX dword (a rotated SOF will NOT match the exact 0x3737B57C trigger -
+     hunt rotated variants too: 0x7C3737B5 etc).
+  2. Our idle stream is missing something this drive requires before initiating (CONT insertion is
+     absent from our TX - spec-legal but worth testing: add LiteSATACONTInserter to the TX
+     pipeline, it exists in litesata already).
+
+Also still pending from the plan: dump + descramble the exact transmitted IDENTIFY FIS (field-level
+check). All three are next-session items; each is one capture or one small build.
