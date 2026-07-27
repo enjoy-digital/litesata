@@ -1926,3 +1926,49 @@ AWAIT-ALIGN.
      nothing decodes. Try forcing both polarities explicitly.
   4. `rx_los_lvl` sweep (build param, currently 2) - `rx_idle` gates nothing on ECP5 any more, but
      RLOS still drives the OOB detectors.
+
+### Campaign 32 addendum 3: RX re-captured with the CDR running, and `_oob_quiet` characterised
+
+**1. The AWAIT-ALIGN capture repeated with the CDR actually released** (the previous one was taken
+with it frozen and was not trustworthy):
+
+    2040 samples, rx_idle 2040/2040 (100%), notintable 0/2040, FSM AWAIT-ALIGN 100%
+    RX dwords: 00000000/k0000 x2040
+
+Unchanged. `litesata/phy/datapath.py` does not gate RX data on idle, so those zeros are the real
+deserializer output - the device is not delivering anything we can lock to in this state. Note a
+2040-sample window is only ~22us, far too short to see the ~10ms COMINIT beacon, so this says
+nothing about the beacon; it says the device is not sending the *continuous* post-COMWAKE stream.
+
+**2. `_oob_quiet` sweep (runtime CSR, no rebuild), looking for a response-latency violation.**
+The spec requires the host to start D10.2 within **533ns** of the device's last COMWAKE burst, and
+`_oob_quiet` sets how long the COMChecker waits before declaring the sequence over - i.e. it is a
+lower bound on our reaction time.
+
+    quiet   ns    ready%   gmin
+       12  133      0.0      28     COMWAKE detection LOST
+       16  178      0.0      28     "
+       20  222      0.0      28     "
+       24  267      0.0      28     "
+       28  311      0.0      28     "
+       32  356      0.0       8     COMWAKE detected
+       40  444      0.0       8     "
+       50  556      0.0       8     "  (the value used all campaign - OVER the 533ns budget)
+       64  711      0.0       8     "
+
+COMWAKE detection needs `quiet >= 32`. So the usable window is 356-533ns, and **`quiet=32` sits
+inside the spec budget while still detecting COMWAKE** - yet READY is still never reached.
+
+**=> The response-latency hypothesis is disproven.** `quiet=50` (556ns) was indeed marginally out of
+spec and should be changed to ~32-40, but it is not what blocks the link.
+
+**Remaining suspect, now the strongest: speed negotiation.** `rx_idle=100%` with zero not-in-table
+errors is exactly what a signal at a rate our CDR cannot lock to looks like. Our RX is pinned at
+Gen2/3Gbps; the device may open with Gen3 (6Gbps) and step down. `align_timeout_us` is 3000 on ECP5,
+so the FSM resets every 3ms and may keep missing the Gen2 window. Next session:
+  1. Raise `align_timeout_us` well past the device's full step-down cycle and watch for a transient
+     non-zero RX rather than requiring READY.
+  2. Capture with the analyzer in the **rx** domain to see raw deserializer output rather than the
+     sys-domain view, which shows nothing when the word clock is not running.
+  3. Gen1 build (1.5Gbps) - blocked on the known gen1 PLL problem (tx clock 87MHz instead of 75,
+     `CHx_DCO*` tuning unsolved), but that is now the single highest-value unblocking task.
