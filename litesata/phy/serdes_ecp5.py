@@ -663,7 +663,11 @@ class SerDesECP5(LiteXModule):
             i_CHX_HDINP             = rx_pads.p,
             i_CHX_HDINN             = rx_pads.n,
 
-            p_CHX_REQ_EN            = "0b0",    # Enable equalizer
+            # RX equalizer: LUNA enables it for its 5Gbps USB3 link on this same DCU
+            # (luna/gateware/interface/serdes_phy/ecp5.py: REQ_EN=1, REQ_LVL_SET=0b01, 9dB).
+            # We had it OFF while receiving a real drive over a SATA cable.
+            p_CHX_REQ_EN            = "0b1",    # Enable equalizer
+            p_CHX_REQ_LVL_SET       = "0b01",   # Equalizer attenuation, 9 dB (LUNA value)
             p_CHX_RX_RATE_SEL       = "0d10",   # Equalizer  pole position
             p_CHX_RTERM_RX          = {
                 "5k-ohms": "0d00",
@@ -674,7 +678,9 @@ class SerDesECP5(LiteXModule):
                 "50-ohms": "0d19",
                 "46-ohms": "0d25"}["50-ohms"],
             p_CHX_RXIN_CM           = "0b11",   # CMFB (wizard value used)
-            p_CHX_RXTERM_CM         = "0b11",   # RX Input (wizard value used)
+            p_CHX_RXTERM_CM         = "0b10",   # Terminate RX to GND (LUNA value)
+            p_CHX_RX_LOS_HYST_EN    = "0b0",    # (LUNA value)
+            p_D_CDR_LOL_SET         = "0b10",   # +-4000ppm lock / +-7000ppm unlock (LUNA)
 
             # CHX RX ­— clocking
             i_CHX_RX_REFCLK         = pll.refclk,
@@ -696,7 +702,11 @@ class SerDesECP5(LiteXModule):
 
             p_CHX_AUTO_FACQ_EN      = "0b1",    # undocumented (wizard value used)
             p_CHX_AUTO_CALIB_EN     = "0b1",    # undocumented (wizard value used)
-            p_CHX_PDEN_SEL          = "0b1",    # phase detector disabled on LOS
+            # PDEN_SEL=1 disables the CDR phase detector whenever RLOS asserts. With a squelch
+            # that reads "idle" on the device's post-OOB stream this deadlocks: LOS -> phase
+            # detector off -> CDR never locks -> no data -> LOS stays asserted. Symptom is exactly
+            # all-zero dwords with ZERO not-in-table errors, which is what we measure. Decoupled.
+            p_CHX_PDEN_SEL          = "0b0",    # phase detector NOT gated by LOS
 
             p_CHX_DCOATDCFG         = "0b00",   # begin undocumented (sample code used)
             p_CHX_DCOATDDLY         = "0b00",

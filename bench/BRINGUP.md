@@ -2093,3 +2093,53 @@ New build option: `bench/ecpix5.py --rx-rate-mode 0b0|0b1`, threaded through
      `ecp5/dcu_bitstream.h`) for a genuine Gen1 PLL/CDR build rather than the half-rate divider.
   3. `rx_polarity`: AWAIT-ALIGN only flips it on ALIGN_N, which cannot fire if nothing decodes;
      force both polarities explicitly.
+
+## *** CAMPAIGN 34: LUNA (USB3 on the same ECP5 DCU) REVIEW - CONFIG DIFFS FOUND, NONE UNBLOCK US ***
+
+LUNA is installed locally at
+`/home/florent/.local/lib/python3.10/site-packages/luna/gateware/interface/serdes_phy/` (ecp5.py
+1206 lines, lfps.py 194). Its USB3 backend drives the *same* DCU at 5Gbps, and its LFPS signalling
+is the structural analogue of SATA OOB, so its RX configuration is a useful reference.
+
+**Differences found against ours (LUNA value first):**
+
+| parameter | LUNA | ours (before) | note |
+|---|---|---|---|
+| `CHX_REQ_EN` | `0b1` | **`0b0`** | LUNA runs the RX equalizer; we had it OFF |
+| `CHX_REQ_LVL_SET` | `0b01` (9dB) | unset | equalizer attenuation |
+| `CHX_RXTERM_CM` | `0b10` (to GND) | `0b11` | RX common-mode termination |
+| `D_CDR_LOL_SET` | `0b10` | unset | +-4000ppm lock / +-7000ppm unlock |
+| `CHX_RX_LOS_HYST_EN` | `0b0` | unset | |
+| `CHX_RX_RATE_SEL` | `0d09` | `0d10` | equalizer pole |
+| `CHX_PDEN_SEL` | `0b1` | `0b1` | same - phase detector gated by LOS |
+| `CHX_LSM_DISABLE` | `0b1` | `0b1` (since campaign 26/31) | agrees with our fix |
+| `UDF_COMMA_A/B/MASK` | `0x17c`/`0x283`/`0x3ff` | identical | confirms our bit order again |
+
+LUNA also splits the RX reset into two sequenced resets - `FFC_RRST` (`rx_cdr_reset`) and
+`FFC_LANE_RX_RST` (`rx_pcs_reset`, also pulsed on CTC under/overrun) - and derives `rx_cdr_locked`
+from `~FFS_RLOL`. We drive `FFC_RRST` from `~rx_enable | init.rx_rst` only.
+
+**Hypothesis tested: the LOS/CDR deadlock.** `PDEN_SEL=1` disables the CDR phase detector while
+RLOS asserts. Our RLOS reads idle 100% during AWAIT-ALIGN, which would give a self-reinforcing
+deadlock (LOS -> phase detector off -> CDR never locks -> no data -> LOS stays asserted) and would
+produce precisely our symptom: all-zero dwords with **zero** not-in-table errors.
+
+Built with `PDEN_SEL=0b0` (decoupled) plus the equalizer enabled and LUNA's RXTERM_CM / LOL_SET /
+HYST_EN values. Timing clean. Against the drive:
+
+    ready 0/1564 (0.0%)   gmin=8   RX nonzero 0/1016, notintable 0, rx_idle 1016/1016
+
+**No change. The deadlock hypothesis is disproven.** Five parameters were changed at once and the
+result is neutral, so none of them is individually attributable - they are kept because they align
+with a known-working ECP5 SerDes design (notably the equalizer, which has no business being off when
+receiving a real drive over a cable), but they are NOT a fix and were not bisected.
+
+**What remains unexplained, and must be settled first**: RLOS reads idle for the entire AWAIT-ALIGN
+window, yet the burst-length recorder saturated at a >728us carrier over a 30s run. Until that is
+resolved, every rate/equalisation experiment is shooting in the dark. The concrete next step is
+unchanged from campaign 33: **trigger the analyzer on `~phy_rx_idle0`** so the capture lands on the
+device's transmission instead of free-running into a quiet window, and read its content directly.
+
+Still worth mining from LUNA afterwards: its two-stage RX reset sequencing (does the CDR need an
+explicit `FFC_RRST` pulse after the OOB phase before it will acquire?), and `lfps.py`'s
+burst-detection approach as a cross-check on our COMChecker.
