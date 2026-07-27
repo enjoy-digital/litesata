@@ -521,7 +521,7 @@ from_rx = [
 ]
 
 class LiteSATALinkTX(Module):
-    def __init__(self):
+    def __init__(self, sync_relax=None):
         self.sink    = sink   = stream.Endpoint(link_description(32))
         self.source  = source = stream.Endpoint(phy_description(32))
         self.from_rx = stream.Endpoint(from_rx)
@@ -563,13 +563,30 @@ class LiteSATALinkTX(Module):
 
         # FSM
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        # The SYNC gate below only opens when the far end's SYNC is DECODED. A device idling in
+        # CONT mode sends SYNC,SYNC,CONT once and then scrambled junk indefinitely - if that one
+        # SYNC pair is missed (e.g. RX word boundary still settling at link-up on ECP5), the gate
+        # never opens and no frame can ever be transmitted, though the link is otherwise perfect.
+        # sync_relax (runtime signal, absent/0 = original behaviour) additionally opens the gate
+        # after a sustained stretch of RX idleness with no decodable frame activity.
+        if sync_relax is None:
+            sync_relax = Signal()
+        relax_cnt = Signal(13)
+        relax_ok  = Signal()
+        self.sync += \
+            If(~self.from_rx.idle,
+                relax_cnt.eq(0)
+            ).Elif(~relax_ok,
+                relax_cnt.eq(relax_cnt + 1)
+            )
+        self.comb += relax_ok.eq(sync_relax & (relax_cnt == 2**13-1))
         fsm.act("IDLE",
             scrambler.reset.eq(1),
             If(self.from_rx.idle,
                 insert.eq(primitives["SYNC"]),
                 If(pipeline.source.valid,
-                    If(self.from_rx.primitive_valid &
-                       (self.from_rx.primitive == primitives["SYNC"]),
+                    If((self.from_rx.primitive_valid &
+                       (self.from_rx.primitive == primitives["SYNC"])) | relax_ok,
                         NextState("RDY")
                     )
                 )
@@ -641,7 +658,7 @@ class LiteSATALinkTX(Module):
 # Link RX ------------------------------------------------------------------------------------------
 
 class LiteSATALinkRX(Module):
-    def __init__(self):
+    def __init__(self, blind_rrdy=None):
         self.sink   = sink   = stream.Endpoint(phy_description(32))
         self.source = source = stream.Endpoint(link_description(32))
         self.hold   = Signal()
@@ -680,10 +697,44 @@ class LiteSATALinkRX(Module):
 
         # FSM
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        # Blind R_RDY probe (runtime, absent/0 = original behaviour): a device that transmitted
+        # X_RDY,X_RDY,CONT while our RX was not yet attached (pre-READY demux window) holds its
+        # frame request as undecodable CONT junk for ever - no fresh primitive will ever arrive
+        # and neither side can proceed. When enabled, sustained junk reception in IDLE (data
+        # dwords with no primitives) makes us offer R_RDY; a device parked in X_RDY answers with
+        # SOF (fresh, decodable), delivering its pending FIS. If nothing follows, time out back
+        # to IDLE, so a spurious R_RDY on a truly idle link stays harmless and our own TX is not
+        # deadlocked by a held RDY state.
+        if blind_rrdy is None:
+            blind_rrdy = Signal()
+        blind_cnt = Signal(13)
+        blind_ok  = Signal()
+        rdy_to    = Signal(13)
+        self.comb += blind_ok.eq(blind_rrdy & (blind_cnt == 2**13-1))
+        # Junk dwords frequently carry spurious K flags and would count as primitive_valid,
+        # permanently resetting the counter - only a KNOWN primitive proves real link activity.
+        known_prim = Signal()
+        self.comb += known_prim.eq(primitive_valid & (
+            (primitive == primitives["SYNC"])  | (primitive == primitives["ALIGN"]) |
+            (primitive == primitives["X_RDY"]) | (primitive == primitives["R_RDY"]) |
+            (primitive == primitives["R_IP"])  | (primitive == primitives["R_OK"])  |
+            (primitive == primitives["R_ERR"]) | (primitive == primitives["CONT"])  |
+            (primitive == primitives["WTRM"])  | (primitive == primitives["SOF"])   |
+            (primitive == primitives["EOF"])   | (primitive == primitives["HOLD"])  |
+            (primitive == primitives["HOLDA"])))
+        self.sync += [
+            If(known_prim,
+                blind_cnt.eq(0)
+            ).Elif(sink.valid & ~blind_ok,
+                blind_cnt.eq(blind_cnt + 1)
+            ),
+        ]
         fsm.act("IDLE",
             descrambler.reset.eq(1),
             If(primitive_valid &
                (primitive == primitives["X_RDY"]),
+                NextState("RDY")
+            ).Elif(blind_ok,
                 NextState("RDY")
             )
         )
@@ -692,8 +743,16 @@ class LiteSATALinkRX(Module):
             If(primitive_valid &
                (primitive == primitives["SOF"]),
                 NextState("WAIT_FIRST")
+            ).Elif(rdy_to == 2**13-1,
+                NextState("IDLE")
             )
         )
+        self.sync += \
+            If(~fsm.ongoing("RDY"),
+                rdy_to.eq(0)
+            ).Elif(blind_rrdy,
+                rdy_to.eq(rdy_to + 1)
+            )
         fsm.act("WAIT_FIRST",
             insert.eq(primitives["R_IP"]),
             If(data_valid,
@@ -761,14 +820,17 @@ class LiteSATALinkRX(Module):
 class LiteSATALink(Module):
     def __init__(self, phy):
         # TX ---------------------------------------------------------------------------------------
-        self.submodules.tx = BufferizeEndpoints({"source": DIR_SOURCE})(LiteSATALinkTX())
+        # ECP5 bench: optional relaxation of the TX SYNC gate (see LiteSATALinkTX.sync_relax).
+        sync_relax = getattr(phy, "link_tx_sync_relax", None)
+        self.submodules.tx = BufferizeEndpoints({"source": DIR_SOURCE})(LiteSATALinkTX(sync_relax))
         self.submodules.tx_align = LiteSATAALIGNInserter(phy_description(32))
         self.submodules.tx_pipeline = Pipeline(self.tx, self.tx_align, phy)
 
         # RX ---------------------------------------------------------------------------------------
         self.submodules.rx_align = LiteSATAALIGNRemover(phy_description(32))
         self.submodules.rx_cont = LiteSATACONTRemover(phy_description(32))
-        self.submodules.rx = BufferizeEndpoints({"sink": DIR_SINK})(LiteSATALinkRX())
+        blind_rrdy = getattr(phy, "link_rx_blind_rrdy", None)
+        self.submodules.rx = BufferizeEndpoints({"sink": DIR_SINK})(LiteSATALinkRX(blind_rrdy))
         self.submodules.rx_buffer = stream.SyncFIFO(link_description(32), 256)
         self.submodules.rx_pipeline = Pipeline(phy, self.rx_align, self.rx_cont, self.rx, self.rx_buffer)
 

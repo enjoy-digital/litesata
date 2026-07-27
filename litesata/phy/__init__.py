@@ -105,12 +105,24 @@ class LiteSATAPHY(LiteXModule):
                 align_timeout_us     = 3000,
                 retry_timeout_us     = 50000,
                 nocomwake_timeout_us = 0.4,
-                stability_us         = 50,
+                # Attach the core the moment the ALIGN exchange completes: the device sends its
+                # signature-FIS X_RDY immediately after accepting our ALIGNs, and a long stability
+                # window leaves the core deaf to it - this drive does not retry and parks its
+                # transport (link-ACKs every later command but never executes one).
+                stability_us         = 1,
+                align_cdr_hold       = False,
+                # Polite host: OOB retry storms wedge this drive until power-cycled.
+                oob_retries          = 4,
+                oob_backoff          = 0.5,
             )
             # The DCU word aligner drops lock in short bursts and re-acquires unaided; a 41us
             # ALIGN window tears the link down during those, so give it far more slack.
             datapath_kwargs = dict(align_timeout=256*16*16)
         self.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq, **ctrl_kwargs)
+        if hasattr(self.phy, "link_tx_sync_relax"):
+            self.link_tx_sync_relax = self.phy.link_tx_sync_relax
+        if hasattr(self.phy, "link_rx_blind_rrdy"):
+            self.link_rx_blind_rrdy = self.phy.link_rx_blind_rrdy
         if hasattr(self.phy, "oob_align_force"):
             self.comb += self.ctrl.align_force.eq(self.phy.oob_align_force)
 

@@ -2564,3 +2564,35 @@ FIRST identify start pulse through BIST -> crossbar -> command -> transport -> l
 which stage swallows it. The signature-FIS interaction at link-up (drive's unsolicited D2H FIS
 arriving into a port nobody reads, backpressuring transport) remains the standing suspect for why a
 fresh drive session differs from campaign 42's.
+
+## *** CAMPAIGN 44: GENUINE LINK ACHIEVED + PERFECT FIS ON THE WIRE - DRIVE EXECUTES NOTHING ***
+
+Root-caused and fixed the FALSE link-ups: ctrl reached READY while the drive was still negotiating
+(RX showed the misaligned-ALIGN signatures FC35B5../65B5A2.. pre-ready; drive left at t=+146us and
+its COMINIT beacon aliased as K-led primitives, holding our READY forever). Cause: the freeze
+policy's +1/-1 invalid bucket never fired on a misaligned ALIGN stream (3 valid : 1 invalid).
+Fixed: bucket saturates up on invalids and resets ONLY on decoded K28.5. Result: **first genuine
+link on the fresh drive - RX decodes the drive's SYNC / ALIGN / CONT cleanly in idle.**
+
+On that genuine link, the whole command path verified dword-exactly:
+  * TX FIS on the wire, descrambled against the canonical SATA scrambler sequence (C2D2768D...):
+    [00EC8027, E0000000, 0, 0, 0] = type 27h, C=1, command ECh, device E0h - TEXTBOOK IDENTIFY.
+  * drive R_RDY: fires. R_OK: fires. R_ERR: never.
+  * drive response X_RDY/SOF: NEVER, even with 30s patience; identify FIFO stays empty.
+  * The drive also never attempts its SIGNATURE FIS on the genuine link.
+
+A device that link-ACKs a perfect command and executes nothing, and never delivers its signature,
+points at its transport being parked since the signature-delivery failure at link-up (it transmits
+the signature X_RDY immediately after accepting our ALIGNs - inside our stability window where the
+demux still feeds ctrl - and does not retry). stability_us=1 (instant core attach) did NOT fix it,
+so either its X_RDY comes even earlier (during SEND-ALIGN), or the parking persists differently.
+
+Added this session (all runtime-selectable, defaults = original behaviour, regressions green):
+sync_relax (link TX SYNC-gate bypass, txctl bit 10), blind_rrdy (R_RDY probe, bit 11 - counter
+resets only on KNOWN primitives), fixed aligner re-arm policy, stability_us=1 + align_cdr_hold=False
++ polite host restored in ctrl_kwargs.
+
+**Next: catch the drive's signature X_RDY.** Trigger the analyzer on raw-bus/decoded X_RDY armed
+BEFORE enabling the PHY with subsampled deep capture around SEND-ALIGN; find exactly when its
+X_RDY appears relative to our ALIGN count; then either answer R_RDY from ctrl itself during
+SEND-ALIGN (ctrl-level R_RDY insertion) or attach the core before SEND-ALIGN completes.

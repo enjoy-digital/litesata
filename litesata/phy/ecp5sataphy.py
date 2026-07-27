@@ -520,6 +520,8 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_rate_tx     = Signal()   # DCU half-rate divider: transmit Gen1 from a Gen2 PLL.
         self.oob_rate_rx     = Signal()   # DCU half-rate divider: receive  Gen1 from a Gen2 PLL.
         self.oob_early_d102  = Signal()   # Start continuous D10.2 on COMWAKE detection (see ctrl).
+        self.link_tx_sync_relax = Signal() # Open the link TX SYNC gate after sustained RX idle.
+        self.link_rx_blind_rrdy = Signal() # Offer R_RDY on sustained junk (device parked in X_RDY).
         self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
@@ -868,6 +870,14 @@ class ECP5LiteSATAPHY(LiteXModule):
                             "moment the device's COMWAKE is detected, while it is still being "
                             "received) instead of holding electrical idle. Takes the 213-427ns EI "
                             "un-mute latency out of the 533ns post-COMWAKE D10.2 budget."),
+            CSRField("sync_relax", size=1, offset=10,
+                description="Open the link TX SYNC gate after sustained RX idleness: required "
+                            "when the device idles in CONT mode and its single SYNC pair was "
+                            "missed during link-up settling."),
+            CSRField("blind_rrdy", size=1, offset=11,
+                description="Offer R_RDY after sustained junk reception in link RX IDLE: recovers "
+                            "a device parked in X_RDY whose request was sent as CONT junk while "
+                            "our RX was not yet attached."),
         ])
         self._oob_align = CSRStorage(fields=[
             CSRField("holdoff", size=16, offset=0,  reset=64,
@@ -928,6 +938,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_rate_tx.eq(     self._oob_txctl.fields.rate_tx),
             self.oob_rate_rx.eq(     self._oob_txctl.fields.rate_rx),
             self.oob_early_d102.eq(  self._oob_txctl.fields.early_d102),
+            self.link_tx_sync_relax.eq(self._oob_txctl.fields.sync_relax),
+            self.link_rx_blind_rrdy.eq(self._oob_txctl.fields.blind_rrdy),
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
             self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),

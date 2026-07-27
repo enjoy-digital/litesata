@@ -261,6 +261,22 @@ class SATATestSoC(SoCMini):
                         self.sata_phy.ctrl.ready,
                         self.sata_phy.ctrl.rx_idle,
                     ],
+                    # Group 3: command-path trace (identify pulse stage-by-stage).
+                    3: [
+                        self.sata_bist.identify.bist_identify.fsm,
+                        self.sata_core.command.tx.fsm,
+                        self.sata_core.command.rx.fsm,
+                        self.sata_core.transport.tx.fsm,
+                        self.sata_core.transport.rx.fsm,
+                        self.sata_core.command.tx.sink.valid,
+                        self.sata_core.command.tx.sink.ready,
+                        self.sata_core.command.tx.sink.identify,
+                        self.sata_core.link.sink.valid,
+                        self.sata_core.link.sink.ready,
+                        self.sata_core.link.source.valid,
+                        self.sata_core.link.source.ready,
+                        self.sata_phy.ctrl.ready,
+                    ],
                 }
             if analyzer_domain == "tx":
                 analyzer_signals = {

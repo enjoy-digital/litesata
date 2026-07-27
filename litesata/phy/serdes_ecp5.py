@@ -1119,26 +1119,35 @@ class SerDesECP5(LiteXModule):
                     bp_inv    = Signal()
                     bp_kseen  = Signal()
                     bp_nocom  = Signal(16)
-                    bp_invcnt = Signal(4)
+                    bp_invcnt = Signal(6)
                     self.comb += [
                         bp_inv.eq(Cat(*[d.invalid for d in self.decoders]) != 0),
                         bp_kseen.eq(Cat(*[d.k for d in self.decoders]) != 0),
                     ]
+                    # bp_invcnt decrement-on-valid was a trap: a MISALIGNED ALIGN stream decodes
+                    # 3 plausible symbols per 1 invalid (e.g. FC,35,B5,EE), so a +1/-1 bucket never
+                    # reaches the threshold and the aligner stays frozen at the wrong offset - the
+                    # exact situation it must recover from. Saturate up on invalids and reset ONLY
+                    # on a decoded K28.5 (the one symbol that proves the boundary is right).
+                    bp_k285 = Signal()
+                    self.comb += bp_k285.eq(
+                        ((self.decoders[0].k == 1) & (self.decoders[0].d == 0xBC)) |
+                        ((self.decoders[1].k == 1) & (self.decoders[1].d == 0xBC)))
                     self.sync.rx += [
                         If(bp_kseen,
                             bp_nocom.eq(0)
                         ).Elif(bp_nocom != 0xFFFF,
                             bp_nocom.eq(bp_nocom + 1)
                         ),
-                        If(bp_inv,
-                            If(bp_invcnt != 15, bp_invcnt.eq(bp_invcnt + 1))
-                        ).Elif(bp_invcnt != 0,
-                            bp_invcnt.eq(bp_invcnt - 1)
+                        If(bp_k285,
+                            bp_invcnt.eq(0)
+                        ).Elif(bp_inv & (bp_invcnt != 63),
+                            bp_invcnt.eq(bp_invcnt + 1)
                         ),
                     ]
                     self.comb += [
                         bp_aligner.enable.eq(rx_align &
-                            ((bp_invcnt >= 8) | (bp_nocom >= align_nocomma_rx))),
+                            ((bp_invcnt >= 32) | (bp_nocom >= align_nocomma_rx))),
                         bp_aligner.sink.eq(Cat(rx_bus[0:10], rx_bus[12:22])),
                         rx_raw_al.eq(bp_aligner.source),
                     ]

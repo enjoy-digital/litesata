@@ -142,4 +142,5 @@ class LiteSATACrossbar(Module):
 
     def do_finalize(self):
         arbiter = LiteSATAArbiter(self.users, self.master)
+        self.arbiter = arbiter # exposed for analyzer probing
         self.submodules += arbiter

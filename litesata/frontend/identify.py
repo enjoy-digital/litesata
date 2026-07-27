@@ -81,6 +81,7 @@ class LiteSATAIdentifyCSR(Module, AutoCSR):
 
         # # #
 
+        self.bist_identify = bist_identify # exposed for analyzer probing
         self.submodules += bist_identify
         self.comb += [
             bist_identify.start.eq(self._start.wr_data & self._start.wr_stb),
