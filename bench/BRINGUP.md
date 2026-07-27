@@ -2409,3 +2409,29 @@ slip/slipmv registers demonstrably run (same clock domain as kcnt). The break is
 real hardware path between rx_bus and the decoders - something simulation cannot see. Stage-by-stage
 analyzer taps added (bp_src_dbg = aligner output, bp_dec_d/k/inv = decoder outputs, bp_slip_dbg) to
 pinpoint the failing stage in one captured Gen2 window.
+
+## *** CAMPAIGN 40 RESULT: SATA LINK UP AGAINST THE REAL DRIVE - 100% UPTIME ***
+
+With the decoders actually in the netlist (see commit 2bbe8cf: `self.decoders` was a plain list
+attribute, which LiteXModule does NOT auto-register - the fabric 8b10b decoders were absent from
+every bypass build of the campaign, d/k/invalid hardwired 0):
+
+    status = 0xf (ready/tx/rx/ctrl), first ready 3.0s after config, then 0.07s on re-init
+    20s uptime: 1251/1251 = 100.0%
+    slip locked at 0, kcnt counting tens of thousands of K per window
+
+**Full chain, all on the ECP5 DCU with no hardware modification: data-driven OOB -> device
+COMINIT/COMWAKE -> early D10.2 -> device Gen2 ALIGN -> fabric word aligner locks -> fabric decoders
+decode -> ALIGN exchange -> READY, holding at 100%.**
+
+Config (bitstream P-gen2-linkup-drive, build_AF): `--gen 2 --sys-clk-freq 90e6 --pcs-mode bypass
+--rx-los-lvl 2 --with-bist --with-analyzer`; txctl = pat_alt|deemph_gap|early_d102; pattern 0xF0F0,
+gap_pattern 0x0000, burst_len 16, quiet 32, wake_gap 16, align holdoff/nocomma 64/64 cont=0;
+control = ei_mode|ldr_timeout(4)|burst_mode|zero_bus (NO cdrhold_dis, NO rx_sel).
+
+**IDENTIFY: link holds (0xf throughout) but identify_done never asserts** - the command wedges in
+the command/transport layer while the PHY stays up. First capture attempt inconclusive (script
+issue). Next session: reload, capture analyzer group 2 (link tx/rx FSMs, tx_align source) during
+the identify, checking whether the core emits X_RDY and what the drive answers - scrambling/CONT
+handling against a real device has never been exercised (the loopback echoed our own unscrambled
+stream). The identify wedge holds the crossbar grant, so reload the bitstream between attempts.
