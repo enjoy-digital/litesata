@@ -1539,3 +1539,56 @@ Bitstream `M-gen2-align` archived: `--gen 2 --sys-clk-freq 90e6 --pcs-mode hybri
 --with-bist --with-analyzer`, all three clocks PASS timing (txoutclk 156.18MHz, sys 103.99MHz,
 from3237 166.03MHz). Verified on the loopback straight out of reset with no CSR tuning of the
 aligner: `7B4A4ABC/k0001`, 100%, 4/4 passes.
+
+## *** CAMPAIGN 27: DRIVE RECONNECTED - NO OOB RESPONSE, AND IT IS NOT A REGRESSION ***
+
+Drive plugged back in (loopback removed). The aligner fix could not be exercised: the link never
+reaches READY because the OOB handshake no longer completes.
+
+**The drive is alive and healthy.** With the recorders armed (`_oob_rec.enable=1` - note the
+recorders are gated on it, so an unarmed read shows a misleading `bursts=0, gap=65535/0`):
+
+    60s soak: 39911 RX bursts, burst 100ns, gap 311..322ns, beacon valid
+    => textbook COMINIT, gap right inside the 304-336ns shall-detect window, ~660 bursts/s
+       = ~110 sequences/s = one COMINIT sequence every ~9.1ms, matching the known ~10.0ms beacon.
+
+That is the normal device power-on behaviour: beacon COMINIT and wait for a host COMWAKE.
+
+**The drive never emits COMWAKE and is completely unaffected by our transmitter.** Over 60s the
+minimum recorded gap never drops below 28 cycles (311ns); a device COMWAKE would show ~10 cycles
+(107ns). A clean-shot sweep of our COMWAKE gap width, parking ctrl for 3s between points so the
+drive settles, then one active window:
+
+    wake_gap  ns  | parked b/s  gmin | active b/s  gmin
+          12   80 |        659    28 |        663    28
+          14   93 |        673    28 |        667    28
+          16  107 |        650    28 |        665    28
+          18  120 |        657    28 |        651    28
+          20  133 |        660    28 |        645    28
+          24  160 |        657    28 |        667    28
+
+**Parked and active rates are identical at every width.** In campaign 19 the 107ns point suppressed
+the beacon from ~600/s to 6-78/s, deterministically, over three passes. There is no suppression at
+all now, so the drive is not hearing our OOB.
+
+**Attribution control (the important one): the archived pre-change bitstream `L-gen2-core` was
+reloaded and measured on the same drive in the same session - also 0% ready, 9937 bursts, gap
+310..320ns, no COMWAKE.** So this is NOT caused by the word-aligner fix, the TX pipeline register,
+or the 90MHz sys clock. Something outside the gateware changed between the campaign-23/24 sessions
+and now; the cable was swapped twice today (drive -> loopback -> drive).
+
+Note also that **reaching AWAIT-COMWAKE (fsm2_state=7) proves nothing** - the drive free-runs its
+COMINIT beacon, so AWAIT-COMINIT is satisfied whether or not the device heard us. This is the
+campaign-10 attribution trap; only beacon suppression or an actual device COMWAKE is evidence.
+
+Inconclusive checks, recorded so they are not repeated as if meaningful:
+  * PCIe receiver-detect on the TX pair reads `con=1` in 5/6 trials (far-end termination present),
+    but `done=0` throughout, so the detect sequence is not completing and the result is weak.
+  * Scope on C113: parked 144mV pk-pk vs pat_force 216mV vs OOB active 196mV. Not separable, and
+    a 100MHz scope cannot see 3Gbps serializer content anyway (established campaign 14/16). The
+    parked line reading 144mV points at probe pickup/contact rather than real TX content.
+
+**Next actions require physical access**: power-cycle the drive, and reseat or replace the SATA
+data cable (a marginal TX-side contact would leave the drive's beacon perfectly readable while
+making our OOB unheard - exactly this signature). A `--tx-boost` build is also queued as a
+gateware-side hearing-margin retry.
