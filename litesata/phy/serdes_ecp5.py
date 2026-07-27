@@ -1016,13 +1016,52 @@ class SerDesECP5(LiteXModule):
                     self.rx_errs[1].eq(rx_bus[20] & (rx_bus[12:20] == 0xEE)),
                 ]
             else:
+                # Raw RX word source. For bypass, run it through a FABRIC word aligner: the DCU
+                # comma aligner does not operate on the raw 10BSER datapath - measured against a
+                # real device ALIGN stream, the raw-bus word boundary drifts freely (B5/4A phase
+                # mix with occasional clean K28.5s) and the decoded stream never contains a single
+                # K character, while every DCU aligner knob (ENABLE_CG_ALIGN, LSM_DISABLE, FFC
+                # pulse, continuous mode) measures neutral. Comma alignment is a G8B10B PCS
+                # feature; in 10BSER it has to be done here. Scan a 40-bit sliding window for the
+                # K28.5 comma7 (serial 0011111 = 0x7C LSB-first, or its complement 0x03) and
+                # barrel-shift the datapath to the symbol boundary. Pipelined (window and slip
+                # registered) so the 40->20 dynamic shift gets a full rx cycle.
+                rx_raw_al = Signal(20)
+                if pcs_mode == "bypass":
+                    bp_raw    = Signal(20)
+                    bp_prev   = Signal(20)
+                    bp_win    = Signal(40)
+                    bp_win_r  = Signal(40)
+                    bp_slip   = Signal(5)
+                    bp_found  = Signal()
+                    bp_slip_n = Signal(5)
+                    bp_shift  = Signal(40)
+                    self.comb += [
+                        bp_raw.eq(Cat(rx_bus[0:10], rx_bus[12:22])),
+                        bp_win.eq(Cat(bp_prev, bp_raw)),   # bit 0 = oldest on the wire
+                        bp_slip_n.eq(bp_slip),
+                        bp_shift.eq(bp_win_r >> bp_slip),
+                    ]
+                    for k in reversed(range(20)):          # last match wins -> lowest offset
+                        self.comb += If((bp_win[k:k+7] == 0x7C) | (bp_win[k:k+7] == 0x03),
+                            bp_found.eq(1),
+                            bp_slip_n.eq(k),
+                        )
+                    self.sync.rx += [
+                        bp_prev.eq(bp_raw),
+                        bp_win_r.eq(bp_win),
+                        If(rx_align & bp_found, bp_slip.eq(bp_slip_n)),
+                        rx_raw_al.eq(bp_shift[0:20]),
+                    ]
+                else:
+                    self.comb += rx_raw_al.eq(Cat(rx_bus[0:10], rx_bus[12:22]))
                 self.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(data_width, reverse=True))
                 self.comb += [
                     self.rx_prbs.config.eq(rx_prbs_config),
                     self.rx_prbs.pause.eq(rx_prbs_pause),
                     rx_prbs_errors.eq(self.rx_prbs.errors),
-                    rx_data[ 0:10].eq(rx_bus[ 0:10]),
-                    rx_data[10:20].eq(rx_bus[12:22]),
+                    rx_data[ 0:10].eq(rx_raw_al[ 0:10]),
+                    rx_data[10:20].eq(rx_raw_al[10:20]),
                 ]
             if pcs_mode == "hybrid":
                 # The DCU word aligner is edge-triggered via FFC_ENABLE_CGALIGN. Re-arming only on

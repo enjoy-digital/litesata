@@ -1,5 +1,5 @@
-config,None,data_width,115
-config,None,storage_width,115
+config,None,data_width,128
+config,None,storage_width,128
 config,None,depth,1024
 config,None,samplerate,90000000
 config,None,subsampler_width,16
@@ -47,6 +47,9 @@ signal,0,phy_serdesecp5_rx_lol_dbg,1
 signal,0,datapath_rx_source_source_valid,1
 signal,0,datapath_rx_source_source_payload_data,32
 signal,0,datapath_rx_source_source_payload_charisk,4
+signal,0,phy_sink_sink_valid,1
+signal,0,phy_sink_sink_payload_data,16
+signal,0,phy_sink_sink_payload_charisk,2
 signal,0,ctrl_rx_idle,1
 signal,0,ctrl_misalign,1
 signal,0,phy_rxnotintable0,2

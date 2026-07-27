@@ -2351,3 +2351,42 @@ transition + sys->tx CDC + **EI un-mute 213-427ns** = ~700-900ns, structurally o
 stream is already flowing while the device finishes its COMWAKE, taking both the detection latency
 and the EI release out of the loop. Runtime-selectable; off = original Xilinx behaviour
 (`ctrl.py` takes the knob via `getattr(trx, "oob_early_d102")`, absent on Xilinx PHYs).
+
+## *** CAMPAIGN 39: FOUND IT - BYPASS MODE HAS NO WORD ALIGNER AT ALL; FABRIC ALIGNER ADDED ***
+
+**Campaign 37 fully retracted with the correct probe in place**: `phy.sink` (the real transceiver TX
+input, 16-bit post-converter) carries `4A4A/k00` = continuous D10.2 at 100% throughout AWAIT-ALIGN.
+Our TX content was always correct; the "ALIGN" reading was the core's stalled stream.
+
+**The device DOES negotiate at Gen2.** With `early_d102` ON, 8 trigger-on-carrier passes of the raw
+RX bus, offline-decoded (per-pass valid% and symbol histogram, normal vs inverted):
+
+    pass 0: 2038 words  62.3% valid  K28.5 x294, 0xB5 x1008, 0x4A x684   <== Gen2 ALIGN stream!
+    passes 1-7: 17-27% valid, 0x78 (D24.3) dominant                      <== OOB retry phases
+
+Pass 0 is bit-exact for a Gen2-rate ALIGN stream read at a wrong/DRIFTING word boundary: ALIGN's
+D10.2+D10.2 middle is 20 bits of pure alternation, which decodes as 0x4A or 0xB5 depending on phase
+parity; K28.5 only decodes when the boundary momentarily sits right; and inversion changes nothing
+(an alternating stream is its own complement) - **rx_polarity exonerated**. Catching the ~54us Gen2
+window in 1 of 8 passes matches the negotiation/OOB-retry duty cycle.
+
+**And the smoking gun: no decoded K character EVER reaches the datapath.** Two 30s analyzer hunts,
+triggered on `decoded dword == ALIGN` and on `decoded charisk == 0b0001`: neither fired once, while
+the raw bus carried hundreds of clean K28.5s. Alignment knob sweep at runtime (cont=0/64/64,
+cont=1, cont=0/8/8, each 30s): all 0% ready.
+
+**Conclusion: the DCU comma aligner does not operate on the raw 10BSER datapath.** It is a G8B10B
+PCS feature. In bypass the raw bus is simply the unaligned deserializer output - which also explains
+why campaign 31's "apply the campaign-26 aligner config to bypass" measured neutral, and why hybrid
+(DCU decode + aligner) is the mode where alignment ever worked.
+
+**Fix: a fabric word aligner for bypass** (`serdes_ecp5.py`): 40-bit sliding window over consecutive
+raw words, scan for the K28.5 comma7 (serial `0011111` = 0x7C LSB-first, or complement 0x03) at all
+20 offsets, priority to the lowest, barrel-shift the datapath to the symbol boundary. Pipelined
+(window and slip registered) so the dynamic shift gets a full rx cycle. Comma tracking is continuous
+and gated on `rx_align`; a D10.2 or OOB-burst stream contains no comma7 pattern (the doubled-D24.3
+stream's longest 1-run is four) so the slip cannot thrash between windows.
+
+Chain if this works: device Gen2 ALIGN window -> fabric aligner locks on the first comma -> decoders
+emit BC/K -> 16->32 converter byte-aligns -> ctrl sees 7B4A4ABC/k0001 -> align_seen -> SEND-ALIGN ->
+device sees our ALIGN -> SYNC -> READY.
