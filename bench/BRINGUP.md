@@ -2677,3 +2677,29 @@ status 0x6) and the session is remote - no power cycle possible.
   3. If no: post-READY misalign+ready-armed capture for a rotated/short X_RDY; then the
      blind_rrdy probe (bit 11) tuned faster.
   4. Consider wiring the drive to a PC once to confirm it still enumerates there (sanity anchor).
+
+## *** CAMPAIGN 48 (remote day): WEDGE SELF-CLEARS OVERNIGHT; NEGOTIATION REJECTION TRACED END-TO-END ***
+
+* The COMINIT-only wedge CLEARED BY ITSELF overnight (no power cycle): gmin back to 6-9 on the
+  first morning attempts. Wedge recovery is therefore time-based (minutes-hours), not power-only.
+* Full negotiation trace (SEND-ALIGN-triggered, 364us window): drive's Gen1-doubled window
+  (0xA01CA01C junk) ~100us -> its clean Gen2 ALIGN window opens -> we enter SEND-ALIGN and reply
+  continuous ALIGN for the ENTIRE ~110us window -> **the drive steps away regardless** (ALIGN
+  degrades to D24.3/OOB content, then near-silence). Its acceptance of our ALIGN reply is
+  nondeterministic and mostly absent today.
+* With the spec exit (align_accept_align=False) the link therefore NEVER forms (300s patience run:
+  no READY) - the spec exit needs the drive's SYNC, which needs it to accept our ALIGNs. All of
+  yesterday's instant links used the lenient exit; on the genuinely-settled ones (SYNC idle,
+  R_OK'd frames) the drive still never initiated a frame. Both symptoms plausibly share one root:
+  the drive's RX qualifies our stream only partially/never.
+
+**Candidate levers for next session, in order:**
+  1. **D10.2 at Gen1 rate** (spec: host sends D10.2 at its LOWEST supported speed = bit-doubled at
+     our Gen2 line rate = 750MHz square). We send Gen2-rate D10.2. Its window qualifier may key on
+     this. One small change: early_d102/AWAIT-ALIGN source 0x33333333-style doubled pattern
+     (charisk=0) or serdes-level doubled raw word.
+  2. Rebuild with align_accept_align=True as the pragmatic link-former (restores yesterday's
+     instant links) and continue the initiation hunt on settled links.
+  3. In-office: scope our TX eye/amplitude at the drive connector; measure refclk ppm precisely
+     (campaign-35 clock CSRs showed drive-vs-us = 140ppm, within spec, but jitter unmeasured).
+  4. Sanity: the drive in a PC once (does it still enumerate).
