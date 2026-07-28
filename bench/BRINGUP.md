@@ -2773,3 +2773,33 @@ slice0 400uA + slice2 3200uA + slice3 2400uA). Pivot: TX electrical.
 - SCI channel regs dumped and partially mapped for runtime sweeps: CH_12 = slice0-3 SELs
   (0x51 read matches params exactly; OOB gate's 0x55/0x00 burst/gap confirmed), CH_11 = slice
   currents family. Runtime TDRV sweep possible without rebuilds once boost shows direction.
+
+## *** CAMPAIGN 52: GEN1-RATE HOST (RATE-MODE FUSES) - DRIVE REJECTS NEGOTIATION AT BOTH RATES ***
+
+The FFC_RATE_MODE runtime ports are no-ops without the bitstream fuse (measured shot 9: with
+rate_rx set at runtime the RX still shows the 0xA01CA01C Gen1-doubled family - full-rate sampling
+unchanged; explains campaign 33/34's "neutral"). Fuses plumbed end to end:
+`--rx-rate-mode 0b1 --tx-rate-mode 0b1`, tx_clk_freq auto-halves so COMGenerator OOB timing stays
+spec-exact (8-word/106.7ns bursts at 75MHz words). Bitstreams: rx-half measurement + T-g1host.
+
+**Fused RX-half decodes the drive's real Gen1 ALIGNs on hardware** (shot 11 cap4: two clean
+0x7B4A4ABC decodes during its autonomous stepping while we sat in BACKOFF) - the instrument works.
+
+Gen1-host results:
+- Lenient exit: instant degenerate link again (0.11s - our exit fires on its ALIGNs before its
+  qualifier can decide). Held 0xf, no signature X_RDY (pre-armed fsm2 watch), identify dead.
+- **Spec exit at Gen1: NO link in 45s** - the drive never sends SYNC at Gen1 either, exactly as
+  at Gen2. Ended status 0x6.
+
+**RTL truth-check of the wire in SEND-ALIGN** (campaign-37 lesson applied): tx_produce_pattern =
+(zero_bus & (tx_idle|ctrl_dis) & ~align_force) | pat_force | (d102_phase & gen1_d102) - every
+term is 0 in SEND-ALIGN, txelecidle=0, so the encoder ALIGN stream genuinely reaches the wire.
+
+**Standing conclusion: the drive READS our ALIGN replies (proven mid-link at Gen2; its own Gen1
+ALIGNs decode at our fused RX) and its negotiation logic REFUSES them at both rates.** Not a
+signal-quality story. Prime remaining theory: latched negotiation state in the drive from this
+long power session (hundreds of attempts since last true power-on; the COMINIT-only wedge is the
+known extreme form, self-clearing only with long silence). Next: 35-min deep-silence park, then
+one pristine Gen1-host spec-exit attempt, everything pre-armed. Fallback: overnight ultra-gentle
+autonomous hunter alternating {G2-lenient, G1-lenient, G1-spec} with identify-on-READY, plus the
+in-office items (scope TX eye, drive-in-PC sanity, real power cycle).
