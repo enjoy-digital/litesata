@@ -2744,3 +2744,32 @@ sends PIO Setup + data. Transport-parked theory stands. Also spotted: drive RX c
 
 Next: pre-armed link-RX-RDY watch (fsm2==RDY armed BEFORE PHY enable) across first link-up - does
 the drive's signature-FIS X_RDY ever reach our attached link RX?
+
+## *** CAMPAIGN 51: RETRAIN OFFER = DRIVE INDIFFERENT; PARKED-X_RDY KILLED; PIVOT TO TX ELECTRICAL ***
+
+Three definitive negatives this session, each closing a theory:
+
+1. **Pre-armed link-RX-RDY watch across first link-up (fsm2==RDY armed before PHY enable): the
+   drive NEVER sends X_RDY** - no signature-FIS attempt within link-up + 8s, RX boundary locked
+   the whole time. Its firmware never queues the signature on lenient-formed links.
+2. **Parked-X_RDY-under-CONT killed by existing data**: shot-3 RX census shows the drive
+   re-emitting SYNC + ALIGN pairs under CONT in idle - a held X_RDY would re-emit X_RDY at every
+   CONT refresh; zero seen. The drive has NO pending frame. (Also: 0x5555b57c seen during our
+   frame = litesata R_IP, i.e. textbook reception-in-progress, NOT a PM request - PMREQ theory
+   retracted before it started.)
+3. **Mid-link retrain offer (new txctl.retrain + align_dwell knobs, bitstream R-retrain): works
+   perfectly at our end** - READY -> 400us clean ALIGN blast -> READY, link intact, zero line
+   discontinuity - **and the drive SYNCs straight through it, completely indifferent.** Its
+   negotiation qualifier only runs inside its own OOB-initiated windows.
+
+Conclusion stack: drive link automaton flawless (OOB, windows, R_RDY/R_IP/R_OK, CONT idle);
+drive firmware unreachable (no signature ever, no execution ever, in-window ALIGN replies
+rejected, mid-link offers ignored). Everything points at its IN-WINDOW qualification of our TX
+failing while its trained CDR reads us perfectly mid-link => marginal TX eye at rate-hop time.
+
+**We transmit with ZERO pre-emphasis** (no TDRV slice assigned beyond main-data, nominal currents:
+slice0 400uA + slice2 3200uA + slice3 2400uA). Pivot: TX electrical.
+- tx_boost bitstream building (all 6 slices main-data at max currents).
+- SCI channel regs dumped and partially mapped for runtime sweeps: CH_12 = slice0-3 SELs
+  (0x51 read matches params exactly; OOB gate's 0x55/0x00 burst/gap confirmed), CH_11 = slice
+  currents family. Runtime TDRV sweep possible without rebuilds once boost shows direction.
