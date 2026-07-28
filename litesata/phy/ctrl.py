@@ -105,6 +105,28 @@ class LiteSATAPHYCtrl(LiteXModule):
         if lenient_exit is None:
             lenient_exit = Signal()
 
+        # Mid-link retrain offer (runtime, absent/0 = original behaviour): a rising edge while in
+        # READY jumps straight back to SEND-ALIGN with no serdes touch, so the line carries
+        # SYNC...ALIGN with zero discontinuity. Rationale: a device whose speed-negotiation
+        # qualifier missed our in-window ALIGN reply (fresh rate-hop, untrained CDR) may accept
+        # the same ALIGN stream once its receiver has trained on our idle for a while - offering
+        # the exchange again mid-link asks it with a fully-trained RX.
+        retrain = getattr(trx, "oob_retrain", None)
+        if retrain is None:
+            retrain = Signal()
+        retrain_r = Signal()
+        self.sync += retrain_r.eq(retrain)
+
+        # Minimum SEND-ALIGN dwell (runtime, absent/0 = original behaviour): hold the ALIGN burst
+        # for ~200us regardless of the exit conditions. Without it a device that keeps ALIGN-ing
+        # (lenient exit) or SYNC-ing (retrain offer) terminates SEND-ALIGN within a few dwords and
+        # its window qualifier never sees a sustained host burst.
+        align_dwell = getattr(trx, "oob_align_dwell", None)
+        if align_dwell is None:
+            align_dwell = Signal()
+        dwell_timer = WaitTimer(int(200e-6*clk_freq))
+        self.submodules += dwell_timer
+
         # Sticky ALIGN/ALIGN_N detection (cleared with the FSM): the device's ALIGN bursts are
         # short and must not be missed while the FSM is between states.
         align_seen   = Signal()
@@ -253,6 +275,7 @@ class LiteSATAPHYCtrl(LiteXModule):
         )
         fsm.act("SEND-ALIGN",
             align_timer.wait.eq(1),
+            dwell_timer.wait.eq(1),
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
             If(sink.valid & (sink.charisk == 0b0001),
@@ -264,12 +287,14 @@ class LiteSATAPHYCtrl(LiteXModule):
                 If((sink.data[0:8] == 0x7c) |
                    ((sink.data[0:8] == 0xbc) & lenient_exit) |
                    ((sink.data[0:8] == 0xbc) if align_accept_align else 0),
-                    NextValue(align_count, align_count - 1),
+                    If(align_count != 0,
+                        NextValue(align_count, align_count - 1),
+                    )
                 ).Else(
                     NextValue(align_count, 4-1),
                 )
             ),
-            If(align_count == 0,
+            If((align_count == 0) & (dwell_timer.done | ~align_dwell),
                 NextState("READY")
             )
         )
@@ -291,6 +316,9 @@ class LiteSATAPHYCtrl(LiteXModule):
             ).Elif(misalign_flt,
                 self.rx_reset.eq(1),
                 NextState("RESET_RX")
+            ).Elif(retrain & ~retrain_r,
+                NextValue(align_count, 4-1),
+                NextState("SEND-ALIGN")
             )
         )
         fsm.act("RESET_RX",

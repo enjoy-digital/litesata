@@ -525,6 +525,8 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_d102_phase  = Signal()   # i (from ctrl): the post-COMWAKE D10.2 filler phase.
         self.oob_gen1_d102   = Signal()   # CSR: send that filler as RAW Gen1-rate D10.2 (0x33333).
         self.oob_lenient_exit = Signal()  # CSR: lenient SEND-ALIGN exit (count drive ALIGNs too).
+        self.oob_retrain     = Signal()   # CSR: rising edge in READY re-offers the ALIGN exchange.
+        self.oob_align_dwell = Signal()   # CSR: minimum ~200us SEND-ALIGN dwell.
         self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
@@ -894,6 +896,14 @@ class ECP5LiteSATAPHY(LiteXModule):
             CSRField("lenient_exit", size=1, offset=13,
                 description="Lenient SEND-ALIGN exit: count the drive's ALIGNs as well as its "
                             "SYNCs (pre-campaign-47 behaviour) for runtime A/B vs the spec exit."),
+            CSRField("retrain", size=1, offset=14,
+                description="Mid-link retrain offer: a rising edge while ctrl is in READY jumps "
+                            "back to SEND-ALIGN with no serdes touch, re-offering the ALIGN "
+                            "exchange to a device whose window qualifier missed it (its RX is "
+                            "fully trained on our idle stream by then)."),
+            CSRField("align_dwell", size=1, offset=15,
+                description="Minimum ~200us SEND-ALIGN dwell: hold the ALIGN burst regardless of "
+                            "the exit conditions so the device sees a sustained host reply."),
         ])
         self._oob_align = CSRStorage(fields=[
             CSRField("holdoff", size=16, offset=0,  reset=64,
@@ -958,6 +968,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.link_rx_blind_rrdy.eq(self._oob_txctl.fields.blind_rrdy),
             self.oob_gen1_d102.eq(self._oob_txctl.fields.gen1_d102),
             self.oob_lenient_exit.eq(self._oob_txctl.fields.lenient_exit),
+            self.oob_retrain.eq(self._oob_txctl.fields.retrain),
+            self.oob_align_dwell.eq(self._oob_txctl.fields.align_dwell),
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
             self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),
