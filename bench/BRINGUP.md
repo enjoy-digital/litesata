@@ -2803,3 +2803,20 @@ known extreme form, self-clearing only with long silence). Next: 35-min deep-sil
 one pristine Gen1-host spec-exit attempt, everything pre-armed. Fallback: overnight ultra-gentle
 autonomous hunter alternating {G2-lenient, G1-lenient, G1-spec} with identify-on-READY, plus the
 in-office items (scope TX eye, drive-in-PC sanity, real power cycle).
+
+## *** CAMPAIGN 53: FIRST SPEC-EXIT LINK - HOUR-SCALE SILENCE IS THE ENABLING VARIABLE ***
+
+Autonomous hunter result (15:30): after an HOUR-LONG parked line, a **G1-spec attempt held READY
+at 15.3s** - the first spec-exit link ever formed (the exit requires SYNC-family dwords from the
+drive; Gen2 spec exit never fired in 300s, Gen1 spec exit never in the short-park attempts, which
+all ended status 0x6). Same config 8 minutes after a previous attempt: no link, four times in a
+row. The drive's post-OOB behavior is a function of preceding line-silence duration, on exactly
+the campaign-48 self-clear timescale - latched-state theory confirmed in its essentials.
+
+Identify still timed out on that link (attempt was uninstrumented). Open question: did the drive
+send its signature X_RDY during our SEND-ALIGN (pre-core-attach) window? hunter6 now runs HOURLY
+INSTRUMENTED G1-spec attempts: fsm2==RDY signature watch armed before every PHY enable, capture
+saved on fire, identify on every held link. If the signature shows up, the endgame is the
+campaign-44 lever: answer R_RDY during SEND-ALIGN / attach the core early enough to catch it.
+`bench/test_first_contact.py` stands ready for the decisive true-power-cycle test when physical
+access returns.
