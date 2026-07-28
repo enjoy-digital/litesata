@@ -2703,3 +2703,17 @@ status 0x6) and the session is remote - no power cycle possible.
   3. In-office: scope our TX eye/amplitude at the drive connector; measure refclk ppm precisely
      (campaign-35 clock CSRs showed drive-vs-us = 140ppm, within spec, but jitter unmeasured).
   4. Sanity: the drive in a PC once (does it still enumerate).
+
+## *** CAMPAIGN 49: GEN1-RATE D10.2 KNOB + AUTONOMOUS WEDGE-RECOVERY HUNTER ***
+
+New runtime knob `_oob_txctl.gen1_d102` (bit 12): transmits the post-COMWAKE D10.2 filler as the
+RAW 0x33333 pattern = bit-doubled D10.2 = Gen1-rate (750MHz square) per the spec's
+lowest-supported-speed rule, instead of encoded Gen2-rate D10.2 (1.5GHz square). Plumbing: new
+`ctrl.d102_phase` output (asserted in early-D10.2 and AWAIT-ALIGN), wired through the PHY wrapper
+to the serdes raw-pattern path with a hard-muxed 0x33333. Regressions green, timing clean.
+
+First A/B was inconclusive: the drive had re-wedged (COMINIT-only) before the test - today's
+attempt bursts consume the time-based recovery faster than it accrues. Protocol correction:
+**`wedge_hunter.py` now runs autonomously** - 8 min parked line between SINGLE handshake attempts,
+alternating gen1_d102 off/on, IDENTIFY fired immediately on any READY, everything timestamped to
+`scratchpad/hunter.log`. This respects the drive's recovery timescale instead of fighting it.

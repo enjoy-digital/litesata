@@ -128,6 +128,8 @@ class LiteSATAPHY(LiteXModule):
             self.link_tx_sync_relax = self.phy.link_tx_sync_relax
         if hasattr(self.phy, "link_rx_blind_rrdy"):
             self.link_rx_blind_rrdy = self.phy.link_rx_blind_rrdy
+        if hasattr(self.phy, "oob_d102_phase"):
+            self.comb += self.phy.oob_d102_phase.eq(self.ctrl.d102_phase)
         if hasattr(self.phy, "oob_align_force"):
             self.comb += self.ctrl.align_force.eq(self.phy.oob_align_force)
 

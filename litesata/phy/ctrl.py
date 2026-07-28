@@ -41,6 +41,7 @@ class LiteSATAPHYCtrl(LiteXModule):
         self.rx_reset = Signal()
         self.tx_reset = Signal()
         self.rx_idle  = Signal()
+        self.d102_phase = Signal() # o: transmitting the post-COMWAKE D10.2 filler
 
         # # #
 
@@ -210,6 +211,7 @@ class LiteSATAPHYCtrl(LiteXModule):
         fsm.act("AWAIT-NO-COMWAKE",
             If(early_d102,
                 # COMWAKE is detected: start the continuous D10.2 stream now (see above).
+                self.d102_phase.eq(1),
                 source.data.eq(0x4a4a4a4a),
                 source.charisk.eq(0b0000),
             ).Else(
@@ -227,6 +229,7 @@ class LiteSATAPHYCtrl(LiteXModule):
             # ALIGNs. Measured on ECP5 with the hold effective: rx_idle 2040/2040 and all-zero
             # dwords for the entire state. Xilinx keeps the original behaviour by default.
             trx.rx_cdrhold.eq((~loopback) if align_cdr_hold else 0),
+            self.d102_phase.eq(~loopback),
             source.data.eq(Mux(loopback, primitives["ALIGN"], 0x4a4a4a4a)),  # D10.2 (ALIGN in loopback)
             source.charisk.eq(Mux(loopback, 0b0001, 0b0000)),
             align_timer.wait.eq(1),

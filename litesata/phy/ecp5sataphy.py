@@ -522,6 +522,8 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_early_d102  = Signal()   # Start continuous D10.2 on COMWAKE detection (see ctrl).
         self.link_tx_sync_relax = Signal() # Open the link TX SYNC gate after sustained RX idle.
         self.link_rx_blind_rrdy = Signal() # Offer R_RDY on sustained junk (device parked in X_RDY).
+        self.oob_d102_phase  = Signal()   # i (from ctrl): the post-COMWAKE D10.2 filler phase.
+        self.oob_gen1_d102   = Signal()   # CSR: send that filler as RAW Gen1-rate D10.2 (0x33333).
         self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
@@ -542,7 +544,12 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.comb += [
             serdes.tx_produce_pattern.eq((self.oob_zero_bus & (self.tx_idle | self.oob_ctrl_dis)
                                           & ~self.oob_align_force)
-                                         | self.oob_pat_force),
+                                         | self.oob_pat_force
+                                         # Spec: the host's post-COMWAKE D10.2 goes out at its
+                                         # LOWEST supported rate; encoded D10.2 at Gen2 is a
+                                         # 1.5GHz square, raw 0x33333 is the bit-doubled
+                                         # (Gen1-rate, 750MHz) version.
+                                         | (self.oob_d102_phase & self.oob_gen1_d102)),
             self.txelecidle.eq((self.tx_idle | self.oob_ctrl_dis)
                                & ~self.oob_pat_force & ~self.oob_align_force),
             serdes.tx_idle.eq(self.txelecidle),
@@ -675,7 +682,8 @@ class ECP5LiteSATAPHY(LiteXModule):
         # Raw serializer pattern for the zero_bus/produce_pattern path (bypass mode): the
         # oob_pattern word replicated to 20b raw symbols; e.g. 0x3333 -> 0011... repeating =
         # Gen1-rate-equivalent burst content when running at gen2.
-        self.comb += serdes.tx_pattern.eq(Cat(self.oob_pattern, self.oob_pattern[0:4]))
+        self.comb += serdes.tx_pattern.eq(Mux(self.oob_d102_phase & self.oob_gen1_d102,
+            0x33333, Cat(self.oob_pattern, self.oob_pattern[0:4])))
 
         self.comb += [
             com_gen.cominit.eq(txcominit),
@@ -878,6 +886,10 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Offer R_RDY after sustained junk reception in link RX IDLE: recovers "
                             "a device parked in X_RDY whose request was sent as CONT junk while "
                             "our RX was not yet attached."),
+            CSRField("gen1_d102", size=1, offset=12,
+                description="Transmit the post-COMWAKE D10.2 filler as RAW Gen1-rate D10.2 "
+                            "(0x33333 doubled-bit pattern, spec lowest-supported-speed rule) "
+                            "instead of encoded Gen2-rate D10.2."),
         ])
         self._oob_align = CSRStorage(fields=[
             CSRField("holdoff", size=16, offset=0,  reset=64,
@@ -940,6 +952,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_early_d102.eq(  self._oob_txctl.fields.early_d102),
             self.link_tx_sync_relax.eq(self._oob_txctl.fields.sync_relax),
             self.link_rx_blind_rrdy.eq(self._oob_txctl.fields.blind_rrdy),
+            self.oob_gen1_d102.eq(self._oob_txctl.fields.gen1_d102),
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
             self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),
