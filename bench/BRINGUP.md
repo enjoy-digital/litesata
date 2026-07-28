@@ -2717,3 +2717,30 @@ attempt bursts consume the time-based recovery faster than it accrues. Protocol 
 **`wedge_hunter.py` now runs autonomously** - 8 min parked line between SINGLE handshake attempts,
 alternating gen1_d102 off/on, IDENTIFY fired immediately on any READY, everything timestamped to
 `scratchpad/hunter.log`. This respects the drive's recovery timescale instead of fighting it.
+
+## *** CAMPAIGN 50: OUR X_RDY REACHES THE WIRE - FULL IDENTIFY FRAME EXCHANGED MID-LINK ***
+
+The campaign-43 "TX X_RDY never fires" block is solved; it was TWO stacked gates, both ours:
+
+1. **Link TX SYNC gate** (known): `LiteSATALinkTX` IDLE->RDY requires a decoded SYNC from the far
+   end; on lenient links the drive keeps ALIGN/CONT-ing so the gate never opens. Fixed by
+   `sync_relax` (txctl bit 10) - gate also opens after 8191 consecutive `from_rx.idle` cycles.
+2. **blind_rrdy sabotaged sync_relax** (new finding, stage-by-stage trace): once `blind_cnt`
+   saturates it was never cleared, so after the 8192-cycle RDY timeout the link RX FSM re-entered
+   RDY after a SINGLE idle cycle - `from_rx.idle` duty ~1/8192 - which both blocks the TX FSM
+   (needs idle high) and resets the relax counter (needs 8191 CONSECUTIVE idle cycles).
+   With RELAX|BLIND: transport presents the FIS forever (`link.tx.sink.valid=1/ready=0`,
+   identify/command/transport FSMs all correct - SEND-CMD/SEND_CMD/SEND_CTRL_CMD). RTL fix landed:
+   blind_cnt clears on RDY timeout (50% idle duty). Runtime workaround needing no rebuild:
+   RELAX without BLIND.
+
+**Shot 3 result (RELAX, no BLIND, held lenient link, X_RDY trigger at datapath.sink):** our full
+frame walks the wire mid-link: SYNC -> X_RDY(x80) -> [drive answers R_RDY] -> SOF -> scrambled
+payload (canonical keystream family, matches campaign-44 dword-exact analysis) -> EOF -> WTRM ->
+SYNC. The drive's link layer engages with a live host frame exchange on a held lenient link.
+`identify done=0` still: the drive accepts (R_RDY, presumed R_OK as in campaigns 42/44) but never
+sends PIO Setup + data. Transport-parked theory stands. Also spotted: drive RX contains
+0x5555b57c x14 - a PMREQ-family primitive (power-management request we never PMNAK).
+
+Next: pre-armed link-RX-RDY watch (fsm2==RDY armed BEFORE PHY enable) across first link-up - does
+the drive's signature-FIS X_RDY ever reach our attached link RX?

@@ -722,13 +722,6 @@ class LiteSATALinkRX(Module):
             (primitive == primitives["WTRM"])  | (primitive == primitives["SOF"])   |
             (primitive == primitives["EOF"])   | (primitive == primitives["HOLD"])  |
             (primitive == primitives["HOLDA"])))
-        self.sync += [
-            If(known_prim,
-                blind_cnt.eq(0)
-            ).Elif(sink.valid & ~blind_ok,
-                blind_cnt.eq(blind_cnt + 1)
-            ),
-        ]
         fsm.act("IDLE",
             descrambler.reset.eq(1),
             If(primitive_valid &
@@ -753,6 +746,19 @@ class LiteSATALinkRX(Module):
             ).Elif(blind_rrdy,
                 rdy_to.eq(rdy_to + 1)
             )
+        # A timed-out probe must restart the count from zero: without this, blind_cnt stays
+        # saturated after the RDY timeout and the FSM re-enters RDY after a single IDLE cycle,
+        # holding from_rx.idle low ~100% of the time - which permanently blocks our own TX
+        # (LiteSATALinkTX only leaves IDLE while from_rx.idle is high, and the sync_relax
+        # counter needs thousands of consecutive idle cycles). Kept below the fsm.act calls so
+        # ongoing("RDY") does not disturb the FSM state numbering.
+        self.sync += [
+            If(known_prim | (fsm.ongoing("RDY") & (rdy_to == 2**13-1)),
+                blind_cnt.eq(0)
+            ).Elif(sink.valid & ~blind_ok,
+                blind_cnt.eq(blind_cnt + 1)
+            ),
+        ]
         fsm.act("WAIT_FIRST",
             insert.eq(primitives["R_IP"]),
             If(data_valid,

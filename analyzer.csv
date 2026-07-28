@@ -80,8 +80,8 @@ enum,2,fsm1_state,4,HOLDA
 enum,2,fsm1_state,5,EOF
 enum,2,fsm1_state,6,WTRM
 signal,2,fsm2_state,3
-enum,2,fsm2_state,0,IDLE
-enum,2,fsm2_state,1,RDY
+enum,2,fsm2_state,0,RDY
+enum,2,fsm2_state,1,IDLE
 enum,2,fsm2_state,2,WAIT_FIRST
 enum,2,fsm2_state,3,COPY
 enum,2,fsm2_state,4,EOF
