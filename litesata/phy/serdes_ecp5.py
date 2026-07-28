@@ -466,6 +466,7 @@ class SerDesECP5(LiteXModule):
         tx_boost    = False,
         rx_los_lvl  = 4,
         rx_rate_mode = "0b0",
+        tx_rate_mode = "0b0",
         pcie_mode   = False):
         assert dual       in [0, 1]
         assert channel    in [0, 1]
@@ -827,6 +828,7 @@ class SerDesECP5(LiteXModule):
             # The FFC_ ports give dynamic control on top; the TX one is proven to change
             # the wire, the RX one appears to need the fuse set to take effect.
             p_CHX_RATE_MODE_RX      = rx_rate_mode,
+            p_CHX_RATE_MODE_TX      = tx_rate_mode,
             i_CHX_FFC_RATE_MODE_TX  = self.rate_mode_tx,
             i_CHX_FFC_RATE_MODE_RX  = self.rate_mode_rx,
             o_CHX_FFS_LS_SYNC_STATUS= rx_lsm,

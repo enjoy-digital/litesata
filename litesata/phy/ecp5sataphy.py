@@ -360,7 +360,7 @@ class ECP5LiteSATAPHY(LiteXModule):
     def __init__(self, refclk, pads, gen, clk_freq, data_width=16, dual=0, channel=0, refclk_freq=None,
         oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False, tx_boost=False,
         tx_idle_sync=True,
-        rx_los_lvl=4, rx_rate_mode="0b0"):
+        rx_los_lvl=4, rx_rate_mode="0b0", tx_rate_mode="0b0"):
         assert data_width in [16]
         assert gen in ["gen1", "gen2"]
         # Common signals
@@ -416,6 +416,12 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         linerate = {"gen1": 1.5e9, "gen2": 3.0e9}[gen]
         tx_clk_freq = linerate/20
+        # Fused half-rate TX (RATE_MODE_TX): serializer at half the PLL rate, so the TX word clock
+        # (and every count derived from it: COMGenerator burst/gap timing, oob_burst_len) halves.
+        # Used with gen2 PLL settings to make a Gen1-rate host without the native gen1 PLL config
+        # (broken on this silicon, see BRINGUP campaign 10).
+        if tx_rate_mode == "0b1":
+            tx_clk_freq = tx_clk_freq/2
 
         # PLL --------------------------------------------------------------------------------------
         # Default refclk = linerate/20, selecting the x20 DCU PLL multiplier: the x10 multiplier
@@ -440,6 +446,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             tx_boost    = tx_boost,
             rx_los_lvl  = rx_los_lvl,
             rx_rate_mode = rx_rate_mode,
+            tx_rate_mode = tx_rate_mode,
             pcie_mode   = pcie_mode,
         )
         serdes.add_stream_endpoints()
