@@ -524,6 +524,7 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.link_rx_blind_rrdy = Signal() # Offer R_RDY on sustained junk (device parked in X_RDY).
         self.oob_d102_phase  = Signal()   # i (from ctrl): the post-COMWAKE D10.2 filler phase.
         self.oob_gen1_d102   = Signal()   # CSR: send that filler as RAW Gen1-rate D10.2 (0x33333).
+        self.oob_lenient_exit = Signal()  # CSR: lenient SEND-ALIGN exit (count drive ALIGNs too).
         self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
@@ -890,6 +891,9 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Transmit the post-COMWAKE D10.2 filler as RAW Gen1-rate D10.2 "
                             "(0x33333 doubled-bit pattern, spec lowest-supported-speed rule) "
                             "instead of encoded Gen2-rate D10.2."),
+            CSRField("lenient_exit", size=1, offset=13,
+                description="Lenient SEND-ALIGN exit: count the drive's ALIGNs as well as its "
+                            "SYNCs (pre-campaign-47 behaviour) for runtime A/B vs the spec exit."),
         ])
         self._oob_align = CSRStorage(fields=[
             CSRField("holdoff", size=16, offset=0,  reset=64,
@@ -953,6 +957,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.link_tx_sync_relax.eq(self._oob_txctl.fields.sync_relax),
             self.link_rx_blind_rrdy.eq(self._oob_txctl.fields.blind_rrdy),
             self.oob_gen1_d102.eq(self._oob_txctl.fields.gen1_d102),
+            self.oob_lenient_exit.eq(self._oob_txctl.fields.lenient_exit),
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
             self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),

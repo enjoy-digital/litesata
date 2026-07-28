@@ -99,6 +99,12 @@ class LiteSATAPHYCtrl(LiteXModule):
         if early_d102 is None:
             early_d102 = Signal()
 
+        # Runtime-selectable lenient SEND-ALIGN exit (counts the drive's ALIGNs as well as its
+        # SYNCs), for A/B against the spec exit without a rebuild.
+        lenient_exit = getattr(trx, "oob_lenient_exit", None)
+        if lenient_exit is None:
+            lenient_exit = Signal()
+
         # Sticky ALIGN/ALIGN_N detection (cleared with the FSM): the device's ALIGN bursts are
         # short and must not be missed while the FSM is between states.
         align_seen   = Signal()
@@ -256,6 +262,7 @@ class LiteSATAPHYCtrl(LiteXModule):
                 # still emitting ALIGNs after speed negotiation is just as valid a confirmation
                 # that the link is established, and some devices linger on ALIGN.
                 If((sink.data[0:8] == 0x7c) |
+                   ((sink.data[0:8] == 0xbc) & lenient_exit) |
                    ((sink.data[0:8] == 0xbc) if align_accept_align else 0),
                     NextValue(align_count, align_count - 1),
                 ).Else(
