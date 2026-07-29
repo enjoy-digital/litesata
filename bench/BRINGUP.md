@@ -2820,3 +2820,27 @@ saved on fire, identify on every held link. If the signature shows up, the endga
 campaign-44 lever: answer R_RDY during SEND-ALIGN / attach the core early enough to catch it.
 `bench/test_first_contact.py` stands ready for the decisive true-power-cycle test when physical
 access returns.
+
+## *** CAMPAIGN 54 (overnight): SPEC-EXIT LINKS ARE ALSO DEGENERATE - REMOTE AVENUE EXHAUSTED ***
+
+Overnight autonomous run (hunter6): instrumented G1-spec probes with 1-2h line silences, each
+cycle replaying the exact winning sequence of the first success (brief lenient held link -> park
+from the settled state -> silence -> single gentle 20s spec probe, fsm2 signature watch armed
+before every PHY enable, identify on every held link).
+
+Statistics: **2 spec-exit links in 11 probes** (15:30 after 1h silence, READY 15.3s; 07:47 after
+2h silence, READY 19.95s); 9 no-link (status 0x6). Short-silence (8 min) G1-spec: 0/4.
+
+**The instrumented spec-exit link settles it: SIGNATURE_XRDY=False (watch armed from pre-enable)
+and identify timeout - identical to every lenient link.** Reading: these "spec-exit" links are
+not acceptance. After long silence the drive fails-negotiation-to-IDLE (parks at SYNC idle, which
+our SEND-ALIGN then harvests as its 0x7C exit); after short silence it fails-to-COMINIT-spam.
+Its firmware never reaches PhyRdy in any condition producible remotely. The long-silence variable
+selects the FAILURE MODE, not acceptance.
+
+Conclusion: the remote software avenue is exhausted. The host stack is proven at every layer
+(OOB, both-rate negotiation dance, link, transport/command, frame CRC accepted by the drive).
+What remains needs hands: (1) `bench/test_first_contact.py` after a TRUE drive power cycle - the
+first negotiation of a power session is the one thing never tested; (2) drive in a PC - does it
+still negotiate with a normal AHCI host at all (its behavior pattern would also fit a drive whose
+firmware has soft-failed); (3) scope the TX eye at the drive connector. Line left parked.
