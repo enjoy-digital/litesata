@@ -111,6 +111,7 @@ class LiteSATAPHY(LiteXModule):
                 # receiver waits through a long, PHY-local stability window.
                 stability_us         = 1,
                 align_cdr_hold       = False,
+                align_full_primitive = True,
                 # Polite host: OOB retry storms wedge this drive until power-cycled.
                 oob_retries          = 4,
                 oob_backoff          = 0.5,

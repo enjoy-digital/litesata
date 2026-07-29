@@ -3072,3 +3072,43 @@ result should no longer be used to diagnose LiteSATA. If it identifies
 normally there, the remaining ECP5 fault is the negotiation state reached
 before the intermittent strict/diagnostic link. No disk data was written in
 this campaign.
+
+## *** CAMPAIGN 61 (2026-07-29): HEALTHY TOSHIBA EXPOSES FALSE STRICT EXIT ***
+
+A Toshiba disk independently known to be healthy reached a held "strict"
+link on the first Gen2 attempt, but again emitted no startup signature.
+IDENTIFY received `R_RDY/R_IP/R_OK` with no TX error and no D2H response. A
+second strict attempt used the read-only BIST checker for one sector at LBA 0:
+the exact READ DMA EXT FIS also received `R_RDY/R_IP/R_OK`, but no data or
+status followed and the checker remained busy. Disk health, IDENTIFY
+formatting, and PIO-vs-DMA command handling are therefore exonerated.
+
+The SEND-ALIGN-to-READY capture identified why these links were misleading.
+The generic controller qualified any K-led dword whose low byte was `0x7c`.
+Immediately before READY, the ECP5 fabric decoder produced:
+
+```text
+0x7878787c/k0001
+0x7878787c/k0001
+0x7878787c/k0001
+0x7878787c/k0001
+```
+
+Those corrupted words satisfied the four-count exit even though the required
+SYNC is `0xb5b5957c/k0001`. The link layer could later exchange primitives
+and acknowledge frames, but the disk had never completed the negotiation
+that enables its ATA protocol engine.
+
+The controller now has an ECP5-only full-primitive policy: strict SEND-ALIGN
+requires four complete SYNC primitives, and the diagnostic path requires
+complete ALIGN primitives after its dwell. Existing non-ECP5 behavior is
+unchanged. Regressions explicitly reject corrupted `...7c` and `...bc`
+dwords. All 50 tests pass.
+
+The corrected BIST/analyzer image met timing at 159.54 MHz RX, 177.75 MHz TX,
+and 108.34 MHz system. On hardware it produced zero strict READY events in 35
+seconds against the healthy Toshiba, proving the previous transition was
+false. The archived true-Gen1 host image also produced no link in 30 seconds.
+The honest remaining blocker is Gen2 speed negotiation: the disk sends clean
+ALIGN but never a complete SYNC in response to the host. No write BIST ran
+and no disk data was changed.

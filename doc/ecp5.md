@@ -196,6 +196,22 @@ not specific to IDENTIFY or its PIO data phase: ATA command execution is not
 active on the lenient link. No generator was enabled and this probe did not
 write the disk.
 
+A later capture against an independently known-healthy Toshiba exposed a
+false strict exit. The ECP5 decoder produced four corrupted
+`0x7878787c/k0001` dwords; the generic low-byte test accepted them as
+K28.3-family primitives even though a complete SYNC is
+`0xb5b5957c/k0001`. ECP5 now enables full-primitive qualification: strict
+SEND-ALIGN accepts only complete SYNC, while the diagnostic exit accepts only
+complete ALIGN after its configured dwell. Existing PHY families retain
+their established low-byte behavior.
+
+With this correction, the timing-clean image produced no false READY event in
+a 35-second strict attempt. The result is less optimistic but accurate: the
+healthy disk sends ALIGN during Gen2 speed negotiation and never advances to
+complete SYNC, so the ATA command layer must not be attached. The corrected
+image met timing at 159.54 MHz SATA RX, 177.75 MHz SATA TX, and 108.34 MHz
+system. All 50 regression tests pass.
+
 Do not start the write BIST until IDENTIFY succeeds and a disposable, nonzero
 sector range has been selected. The generator intentionally overwrites its
 target range.

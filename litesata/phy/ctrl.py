@@ -31,7 +31,7 @@ class LiteSATAPHYCtrl(LiteXModule):
     def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1,
                  align_cdr_hold=True,
                  align_timeout_us=873, retry_timeout_us=10000, nocomwake_timeout_us=None, stability_us=5000,
-                 misalign_tolerance=0, align_needs_signal=True):
+                 misalign_tolerance=0, align_needs_signal=True, align_full_primitive=False):
         self.clk_freq = clk_freq
         self.ready    = Signal()
         self.sink     = sink   = stream.Endpoint(phy_description(32))
@@ -133,6 +133,14 @@ class LiteSATAPHYCtrl(LiteXModule):
         lenient_dwell_count = Signal(16)
         lenient_dwell_done  = Signal()
         self.comb += lenient_dwell_done.eq(lenient_dwell_count >= lenient_dwell)
+        strict_align_done = (
+            sink.data == primitives["SYNC"]
+            if align_full_primitive else sink.data[0:8] == 0x7c
+        )
+        lenient_align_done = (
+            sink.data == primitives["ALIGN"]
+            if align_full_primitive else sink.data[0:8] == 0xbc
+        )
         self.sync += [
             If(~fsm.ongoing("SEND-ALIGN"),
                 lenient_dwell_count.eq(0)
@@ -247,12 +255,12 @@ class LiteSATAPHYCtrl(LiteXModule):
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
             If(sink.valid & (sink.charisk == 0b0001),
-                # Strict SATA exit is a K28.3-family primitive such as SYNC.  The ECP5
-                # diagnostic CSR can additionally count ALIGN after a controlled dwell.
-                # This permits experiments that give the device time to lock to the host's
-                # ALIGN before forcing the transition to SYNC.
-                If((sink.data[0:8] == 0x7c) |
-                   ((sink.data[0:8] == 0xbc) & lenient_exit & lenient_dwell_done),
+                # Existing PHYs accept any K28.3-family primitive here. ECP5 requires a
+                # complete primitive match because its fabric decoder can produce corrupted
+                # K-led dwords during rate changes (for example 0x7878787c/k0001). Those words
+                # must not masquerade as SYNC and put the command layer on a false link.
+                If(strict_align_done |
+                   (lenient_align_done & lenient_exit & lenient_dwell_done),
                     If(align_count != 0,
                         NextValue(align_count, align_count - 1),
                     )

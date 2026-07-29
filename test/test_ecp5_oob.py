@@ -250,7 +250,10 @@ class TestECP5OOB(unittest.TestCase):
             def __init__(self):
                 self.submodules.trx  = _TRXStub()
                 self.submodules.crg  = _CRGStub()
-                self.submodules.ctrl = LiteSATAPHYCtrl(self.trx, self.crg, clk_freq)
+                self.submodules.ctrl = LiteSATAPHYCtrl(
+                    self.trx, self.crg, clk_freq,
+                    align_full_primitive=True,
+                )
 
         dut = _DUT()
 
@@ -308,7 +311,16 @@ class TestECP5OOB(unittest.TestCase):
                 (yield ctrl.fsm.state),
                 ctrl.fsm.encoding["SEND-ALIGN"],
             )
-            # Device locks and moves on to SYNC (ctrl counts 4 consecutive non-ALIGN primitives
+            # A corrupted K-led word with the SYNC low byte is not a complete SYNC and must
+            # not end SEND-ALIGN on ECP5.
+            yield ctrl.sink.data.eq(0x7878787c)
+            for _ in range(8):
+                yield
+            self.assertEqual(
+                (yield ctrl.fsm.state),
+                ctrl.fsm.encoding["SEND-ALIGN"],
+            )
+            # Device locks and moves on to SYNC (ctrl counts 4 consecutive exact SYNC primitives
             # in SEND-ALIGN before declaring the link aligned).
             yield ctrl.sink.data.eq(primitives["SYNC"])
             # Wait for ready (stability timer = 5000 cycles).
@@ -354,6 +366,7 @@ class TestECP5OOB(unittest.TestCase):
                     self.trx, self.crg, clk_freq,
                     align_timeout_us=1000,
                     stability_us=1,
+                    align_full_primitive=True,
                 )
 
         dut = _DUT()
@@ -392,6 +405,17 @@ class TestECP5OOB(unittest.TestCase):
                 dut.ctrl.fsm.encoding["SEND-ALIGN"],
             )
 
+            # A corrupted K-led word with ALIGN's low byte must not satisfy the diagnostic
+            # full-primitive policy, even after the dwell has elapsed.
+            yield dut.ctrl.sink.data.eq(0x787878bc)
+            for _ in range(24):
+                yield
+            self.assertEqual(
+                (yield dut.ctrl.fsm.state),
+                dut.ctrl.fsm.encoding["SEND-ALIGN"],
+            )
+
+            yield dut.ctrl.sink.data.eq(primitives["ALIGN"])
             yield from wait_state("READY", timeout=16)
             self.assertEqual((yield dut.ctrl.source.data), primitives["SYNC"])
 
