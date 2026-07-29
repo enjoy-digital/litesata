@@ -2965,3 +2965,41 @@ mandatory signature or executes ATA commands under this negotiation.
 
 IDENTIFY is still not complete, so destructive generator/checker BIST remains
 intentionally blocked.
+
+## *** CAMPAIGN 58 (2026-07-29): TX CURSOR SWEEP + READ-ONLY COMMAND PROBE ***
+
+The ECP5-5G DCU transmit equalization controls were exercised through SCI
+using the register map in FPGA-TN-02206. Every profile was applied while the
+lane was held in reset and verified by readback before OOB was released.
+Keeping the stock 6.0 mA steady-state drive, the sweep covered approximately
+2 dB, 4 dB, and 5 dB of post-cursor emphasis, followed by the corresponding
+three pre-cursor profiles. None made the strict SEND-ALIGN sequence observe
+device SYNC or reach READY. This closes simple host TX pre-/post-cursor
+selection as the missing negotiation step.
+
+A diagnostic 15 us lenient link was then used for one non-destructive BIST
+checker request: READ DMA EXT, one sector at LBA 0. The exact accepted H2D FIS
+was:
+
+```text
+00258027 e0000000 00000000 08000001 00000000
+```
+
+The device again returned `R_RDY/R_IP/R_OK`, with no `R_ERR` and no host TX
+error, but emitted no Data FIS or Register D2H FIS. The checker remained busy
+with its cycle counter advancing until the bounded five-second observation
+ended. No BIST generator was enabled and no disk data was written.
+
+A short lenient handoff capture also showed the host entering READY without
+an immediately preceding device SYNC: the observed receive stream around the
+transition still contained periodic ALIGN and rate-transition artifacts.
+Because this capture crosses the asynchronous diagnostic boundary, it is
+supporting evidence rather than a production-ready link criterion. Together
+with the accepted READ command, it confirms that lenient READY does not mean
+the device has reached its ATA protocol-ready state.
+
+The remaining high-value discriminator is a different known-good SATA
+device, tested first with strict OOB and then with read-only
+signature/IDENTIFY probes. Destructive BIST remains blocked until IDENTIFY
+returns a credible capacity and a disposable nonzero LBA range is explicitly
+selected.

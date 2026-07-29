@@ -180,9 +180,25 @@ signature appeared, and the subsequent IDENTIFY also received `R_OK` but no
 response. SRST therefore does not recover the missing device protocol-ready
 state.
 
-Do not start the write/check BIST until IDENTIFY succeeds and a disposable,
-nonzero sector range has been selected. The generator intentionally
-overwrites its target range.
+Readback-verified ECP5 DCU transmit-equalization experiments subsequently
+tested approximately 2 dB, 4 dB, and 5 dB of both pre- and post-cursor
+emphasis while retaining the stock 6.0 mA steady-state current. None caused a
+strict link to observe device SYNC. A read-only BIST checker probe then sent
+one-sector READ DMA EXT at LBA 0 over a held 15 us diagnostic link:
+
+```text
+00258027 e0000000 00000000 08000001 00000000
+```
+
+The frame received `R_RDY/R_IP/R_OK` and no TX error, but the device returned
+neither data nor status and the checker remained busy. Thus the failure is
+not specific to IDENTIFY or its PIO data phase: ATA command execution is not
+active on the lenient link. No generator was enabled and this probe did not
+write the disk.
+
+Do not start the write BIST until IDENTIFY succeeds and a disposable, nonzero
+sector range has been selected. The generator intentionally overwrites its
+target range.
 
 ## Regression tests
 
