@@ -31,7 +31,7 @@ class LiteSATAPHYCtrl(LiteXModule):
     def __init__(self, trx, crg, clk_freq, oob_retries=None, oob_backoff=1e-1,
                  align_cdr_hold=True,
                  align_timeout_us=873, retry_timeout_us=10000, nocomwake_timeout_us=None, stability_us=5000,
-                 misalign_tolerance=0, align_needs_signal=True, align_accept_align=False):
+                 misalign_tolerance=0, align_needs_signal=True):
         self.clk_freq = clk_freq
         self.ready    = Signal()
         self.sink     = sink   = stream.Endpoint(phy_description(32))
@@ -69,24 +69,6 @@ class LiteSATAPHYCtrl(LiteXModule):
         self.sync += crg.tx_reset.eq(self.tx_reset)
 
         # FSM.
-        # Loopback self-test support (ECP5 bench): when the PHY exposes an active echo-mask mode
-        # (TX externally looped to RX), transmit ALIGN during AWAIT-ALIGN so the handshake can
-        # complete against our own echo; a real device link transmits D10.2 there per spec.
-        loopback = getattr(trx, "oob_echo_mask", None)
-        if loopback is None:
-            loopback = Signal()
-
-        # OOB bypass (bench debug): jump straight from reset to the ALIGN exchange, skipping the
-        # whole COMRESET/COMINIT/COMWAKE handshake. A plain TX->RX loopback cannot complete a SATA
-        # OOB handshake by construction - the host transmits COMINIT only while in the COMINIT
-        # state and is silent in AWAIT-COMINIT, so it never hears its own burst - which otherwise
-        # makes the loopback useless for validating everything that happens AFTER OOB. With this
-        # set, the loopback exercises the real post-OOB path end to end: ALIGN exchange ->
-        # SEND-ALIGN -> READY -> the core's SYNC idle stream.
-        oob_bypass = getattr(trx, "oob_bypass", None)
-        if oob_bypass is None:
-            oob_bypass = Signal()
-
         # Early D10.2 (ECP5): the spec expects the host's continuous D10.2 within 533ns of the
         # device's last COMWAKE burst, and real hosts start it as soon as COMWAKE is DETECTED,
         # i.e. while it is still being received. On ECP5 the COMWAKE-end detection alone takes the
@@ -104,28 +86,6 @@ class LiteSATAPHYCtrl(LiteXModule):
         lenient_exit = getattr(trx, "oob_lenient_exit", None)
         if lenient_exit is None:
             lenient_exit = Signal()
-
-        # Mid-link retrain offer (runtime, absent/0 = original behaviour): a rising edge while in
-        # READY jumps straight back to SEND-ALIGN with no serdes touch, so the line carries
-        # SYNC...ALIGN with zero discontinuity. Rationale: a device whose speed-negotiation
-        # qualifier missed our in-window ALIGN reply (fresh rate-hop, untrained CDR) may accept
-        # the same ALIGN stream once its receiver has trained on our idle for a while - offering
-        # the exchange again mid-link asks it with a fully-trained RX.
-        retrain = getattr(trx, "oob_retrain", None)
-        if retrain is None:
-            retrain = Signal()
-        retrain_r = Signal()
-        self.sync += retrain_r.eq(retrain)
-
-        # Minimum SEND-ALIGN dwell (runtime, absent/0 = original behaviour): hold the ALIGN burst
-        # for ~200us regardless of the exit conditions. Without it a device that keeps ALIGN-ing
-        # (lenient exit) or SYNC-ing (retrain offer) terminates SEND-ALIGN within a few dwords and
-        # its window qualifier never sees a sustained host burst.
-        align_dwell = getattr(trx, "oob_align_dwell", None)
-        if align_dwell is None:
-            align_dwell = Signal()
-        dwell_timer = WaitTimer(int(200e-6*clk_freq))
-        self.submodules += dwell_timer
 
         # Sticky ALIGN/ALIGN_N detection (cleared with the FSM): the device's ALIGN bursts are
         # short and must not be missed while the FSM is between states.
@@ -183,11 +143,7 @@ class LiteSATAPHYCtrl(LiteXModule):
                 NextValue(trx.rx_polarity, 0),
                 # Alternate TX polarity on each retry.
                 NextValue(trx.tx_polarity, ~trx.tx_polarity),
-                If(oob_bypass,
-                    NextState("AWAIT-ALIGN")
-                ).Else(
-                    NextState("COMINIT")
-                )
+                NextState("COMINIT")
             )
         )
         fsm.act("COMINIT",
@@ -256,10 +212,10 @@ class LiteSATAPHYCtrl(LiteXModule):
             # holding the CDR here freezes the receiver exactly when it must acquire the device's
             # ALIGNs. Measured on ECP5 with the hold effective: rx_idle 2040/2040 and all-zero
             # dwords for the entire state. Xilinx keeps the original behaviour by default.
-            trx.rx_cdrhold.eq((~loopback) if align_cdr_hold else 0),
-            self.d102_phase.eq(~loopback),
-            source.data.eq(Mux(loopback, primitives["ALIGN"], 0x4a4a4a4a)),  # D10.2 (ALIGN in loopback)
-            source.charisk.eq(Mux(loopback, 0b0001, 0b0000)),
+            trx.rx_cdrhold.eq(1 if align_cdr_hold else 0),
+            self.d102_phase.eq(1),
+            source.data.eq(0x4a4a4a4a),  # D10.2
+            source.charisk.eq(0b0000),
             align_timer.wait.eq(1),
             # `align_needs_signal` keeps the original gate on the transceiver's rx_idle. On ECP5
             # the RLOS-derived rx_idle stays asserted right through a device's ALIGN bursts, so the
@@ -275,18 +231,13 @@ class LiteSATAPHYCtrl(LiteXModule):
         )
         fsm.act("SEND-ALIGN",
             align_timer.wait.eq(1),
-            dwell_timer.wait.eq(1),
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
             If(sink.valid & (sink.charisk == 0b0001),
-                # Loopback: our own ALIGN echo (K28.5, 0xBC) counts too; a real device answers
-                # with 0x7C-low-byte (K28.3 family) primitives.
-                # Count SYNC (K28.3, low byte 0x7C) or ALIGN (K28.5, 0xBC): a device that is
-                # still emitting ALIGNs after speed negotiation is just as valid a confirmation
-                # that the link is established, and some devices linger on ALIGN.
+                # Strict SATA exit is a K28.3-family primitive such as SYNC.  The ECP5
+                # diagnostic CSR can additionally count ALIGN for controlled A/B tests.
                 If((sink.data[0:8] == 0x7c) |
-                   ((sink.data[0:8] == 0xbc) & lenient_exit) |
-                   ((sink.data[0:8] == 0xbc) if align_accept_align else 0),
+                   ((sink.data[0:8] == 0xbc) & lenient_exit),
                     If(align_count != 0,
                         NextValue(align_count, align_count - 1),
                     )
@@ -294,7 +245,7 @@ class LiteSATAPHYCtrl(LiteXModule):
                     NextValue(align_count, 4-1),
                 )
             ),
-            If((align_count == 0) & (dwell_timer.done | ~align_dwell),
+            If(align_count == 0,
                 NextState("READY")
             )
         )
@@ -309,31 +260,17 @@ class LiteSATAPHYCtrl(LiteXModule):
             source.charisk.eq(0b0001),
             stability_timer.wait.eq(1),
             self.ready.eq(stability_timer.done),
-            # Loopback: RLOS-based rx_idle chatters through the doubly-AC-coupled loop; ignore it
-            # (a real link drop is caught by misalign and upper layers).
-            If(self.rx_idle & ~loopback,
+            If(self.rx_idle,
                 NextState("RESET"),
             ).Elif(misalign_flt,
                 self.rx_reset.eq(1),
                 NextState("RESET_RX")
-            ).Elif(retrain & ~retrain_r,
-                NextValue(align_count, 4-1),
-                NextState("SEND-ALIGN")
             )
         )
         fsm.act("RESET_RX",
             If(trx.ready,
                 NextState("READY")
             )
-        )
-
-        # Line test: continuously transmit ALIGN primitives regardless of FSM state (overrides the
-        # FSM's source drive; used to answer a device's autonomous speed-negotiation windows).
-        self.align_force = Signal()
-        self.comb += If(self.align_force,
-            source.valid.eq(1),
-            source.data.eq(primitives["ALIGN"]),
-            source.charisk.eq(0b0001),
         )
 
         # Optional polite-host retry limit: after oob_retries failed OOB attempts, hold the line

@@ -275,7 +275,7 @@ class COMChecker(LiteXModule):
 
     Runs in the sys clock domain (rx_idle must already be synchronized).
     """
-    def __init__(self, clk_freq, n_gaps=4):
+    def __init__(self, clk_freq, n_gaps=4, quiet_cycles=None):
         self.rx_idle     = Signal() # i
         self.cominit_det = Signal() # o (level)
         self.comwake_det = Signal() # o (level)
@@ -293,7 +293,9 @@ class COMChecker(LiteXModule):
 
         # Quiet threshold (runtime adjustable): line idle longer than this ends the sequence and
         # deasserts the detections (a real Xilinx detector deasserts much faster than 2us).
-        self.quiet_cycles = Signal(16, reset=int(2e-6*clk_freq))
+        if quiet_cycles is None:
+            quiet_cycles = int(2e-6*clk_freq)
+        self.quiet_cycles = Signal(16, reset=quiet_cycles)
 
         # # #
 
@@ -360,9 +362,9 @@ class ECP5LiteSATAPHY(LiteXModule):
     def __init__(self, refclk, pads, gen, clk_freq, data_width=16, dual=0, channel=0, refclk_freq=None,
         oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False, tx_boost=False,
         tx_idle_sync=True,
-        rx_los_lvl=4, rx_rate_mode="0b0", tx_rate_mode="0b0"):
+        rx_los_lvl=4):
         assert data_width in [16]
-        assert gen in ["gen1", "gen2"]
+        assert gen == "gen2"
         # Common signals
         self.data_width     = data_width
         self.clk_freq       = clk_freq
@@ -394,7 +396,7 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # Debug/Experiment controls (quasi-static, see add_oob_csr).
         self.oob_rx_sel      = Signal()  # i: RX OOB squelch source: 0 = RLOS / 1 = LDR activity.
-        self.ei_mode         = Signal()  # i: 0 = EI masked during LDR drive / 1 = EI held.
+        self.ei_mode         = Signal(reset=1)  # i: 0 = EI masked during LDR drive / 1 = EI held.
         self.oob_cdrhold_dis = Signal()  # i: 1 = ignore ctrl's rx_cdrhold request.
         self.oob_tx_test     = Signal()  # i: 1 = free-running COMWAKE generation (TX measurement).
         self.oob_toggle_div  = Signal(4) # i: OOB burst square wave half-period - 1 (tx_clk cycles).
@@ -414,14 +416,8 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # # #
 
-        linerate = {"gen1": 1.5e9, "gen2": 3.0e9}[gen]
+        linerate = 3.0e9
         tx_clk_freq = linerate/20
-        # Fused half-rate TX (RATE_MODE_TX): serializer at half the PLL rate, so the TX word clock
-        # (and every count derived from it: COMGenerator burst/gap timing, oob_burst_len) halves.
-        # Used with gen2 PLL settings to make a Gen1-rate host without the native gen1 PLL config
-        # (broken on this silicon, see BRINGUP campaign 10).
-        if tx_rate_mode == "0b1":
-            tx_clk_freq = tx_clk_freq/2
 
         # PLL --------------------------------------------------------------------------------------
         # Default refclk = linerate/20, selecting the x20 DCU PLL multiplier: the x10 multiplier
@@ -445,8 +441,6 @@ class ECP5LiteSATAPHY(LiteXModule):
             pcs_mode    = pcs_mode,
             tx_boost    = tx_boost,
             rx_los_lvl  = rx_los_lvl,
-            rx_rate_mode = rx_rate_mode,
-            tx_rate_mode = tx_rate_mode,
             pcie_mode   = pcie_mode,
         )
         serdes.add_stream_endpoints()
@@ -456,7 +450,7 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # Datapath ---------------------------------------------------------------------------------
         oob_d102_active = Signal()
-        pattern_tx      = Signal(16, reset=0x4A4A) # MultiReg'd from oob_pattern below.
+        pattern_tx      = Signal(16, reset=0xF0F0) # MultiReg'd from oob_pattern below.
         self.comb += [
             serdes.sink.data.eq(Mux(oob_d102_active, pattern_tx, self.txdata)),
             serdes.sink.ctrl.eq(Mux(oob_d102_active, 0,          self.txcharisk)),
@@ -512,29 +506,20 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.comb += self.rxdisperr.eq(0) # Not provided by the fabric 8b10b decoder (status only).
 
         # Electrical idle / CDR hold ---------------------------------------------------------------
-        self.oob_zero_bus = Signal() # Force raw zeros on the TX parallel bus during OOB phases
+        self.oob_zero_bus = Signal(reset=1) # Force raw zeros on the TX parallel bus during OOB phases
                                      # (TN-02206 8.25: required for clean electrical idle).
         self.oob_ctrl_dis = Signal() # Park ctrl: mask its OOB TX requests + force EI (silent
                                      # line for attribution-clean OOB experiments).
-        self.oob_align_force = Signal() # Line test: force continuous ALIGN primitive transmission.
-        self.oob_bypass      = Signal() # Bench debug: skip OOB, go straight to the ALIGN exchange.
         self.oob_burst_len = Signal(8, reset=round(160*tx_clk_freq/1.5e9))
         self.oob_align_holdoff = Signal(16, reset=64)
-        self.oob_align_nocomma = Signal(16, reset=64)
+        self.oob_align_nocomma = Signal(16, reset=4096)
         self.oob_align_cont    = Signal() # Continuous DCU comma alignment (vs re-arm on error).
         self.oob_gap_pattern = Signal(16) # DC pattern transmitted during gaps (de-emphasis idle).
-        self.oob_deemph_gap  = Signal()   # Enable the data-driven (de-emphasis) idle.
-        self.oob_rate_tx     = Signal()   # DCU half-rate divider: transmit Gen1 from a Gen2 PLL.
-        self.oob_rate_rx     = Signal()   # DCU half-rate divider: receive  Gen1 from a Gen2 PLL.
-        self.oob_early_d102  = Signal()   # Start continuous D10.2 on COMWAKE detection (see ctrl).
-        self.link_tx_sync_relax = Signal() # Open the link TX SYNC gate after sustained RX idle.
-        self.link_rx_blind_rrdy = Signal() # Offer R_RDY on sustained junk (device parked in X_RDY).
+        self.oob_deemph_gap  = Signal(reset=1)   # Enable the data-driven (de-emphasis) idle.
+        self.oob_early_d102  = Signal(reset=1)   # Start continuous D10.2 on COMWAKE detection (see ctrl).
         self.oob_d102_phase  = Signal()   # i (from ctrl): the post-COMWAKE D10.2 filler phase.
-        self.oob_gen1_d102   = Signal()   # CSR: send that filler as RAW Gen1-rate D10.2 (0x33333).
         self.oob_lenient_exit = Signal()  # CSR: lenient SEND-ALIGN exit (count drive ALIGNs too).
-        self.oob_retrain     = Signal()   # CSR: rising edge in READY re-offers the ALIGN exchange.
-        self.oob_align_dwell = Signal()   # CSR: minimum ~200us SEND-ALIGN dwell.
-        self.oob_pat_alt     = Signal() # Gen1-rate carrier: alternate pattern with its inverse.
+        self.oob_pat_alt     = Signal(reset=1) # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
         self.oob_sci_gap_val   = Signal(8)
@@ -543,25 +528,15 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_tx_pwdn     = Signal() # Silence the main TX driver (LDR stays alive).
         self.oob_tx_lane_rst = Signal() # Hold the TX lane in reset.
         self.oob_ei_carve  = Signal() # LDR drives continuously, EI carves the gaps.
-        self.oob_echo_mask = Signal() # Loopback: mask self-echo OOB detections while stb high.
         self.oob_pat_force = Signal() # Line test: force continuous raw-pattern transmission with
                                       # EI off (DC amplitude measurement on scope).
-        # align_force is a line test: it makes ctrl drive continuous ALIGN primitives, so it must
-        # also take the transmitter OUT of electrical idle and off the raw-pattern path, otherwise
-        # the ALIGNs never reach the wire (the ctrl FSM asserts tx_idle in every pre-ALIGN state).
-        # This is what makes a plain TX->RX loopback usable as an encoder/word-aligner oracle: the
-        # OOB handshake cannot self-complete on a loopback, so the FSM never leaves AWAIT-COMINIT.
         self.comb += [
-            serdes.tx_produce_pattern.eq((self.oob_zero_bus & (self.tx_idle | self.oob_ctrl_dis)
-                                          & ~self.oob_align_force)
-                                         | self.oob_pat_force
-                                         # Spec: the host's post-COMWAKE D10.2 goes out at its
-                                         # LOWEST supported rate; encoded D10.2 at Gen2 is a
-                                         # 1.5GHz square, raw 0x33333 is the bit-doubled
-                                         # (Gen1-rate, 750MHz) version.
-                                         | (self.oob_d102_phase & self.oob_gen1_d102)),
+            serdes.tx_produce_pattern.eq(
+                (self.oob_zero_bus & (self.tx_idle | self.oob_ctrl_dis)) |
+                self.oob_pat_force
+            ),
             self.txelecidle.eq((self.tx_idle | self.oob_ctrl_dis)
-                               & ~self.oob_pat_force & ~self.oob_align_force),
+                               & ~self.oob_pat_force),
             serdes.tx_idle.eq(self.txelecidle),
             serdes.ei_mode.eq(self.ei_mode),
             serdes.rx_cdr_hold.eq(self.rx_cdrhold & ~self.oob_cdrhold_dis),
@@ -648,11 +623,11 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_ei_trail = Signal(8)
         self.oob_wake_gap = Signal(8, reset=com_gen.wake_cycles)
         self.oob_gap_mode   = Signal()
-        self.oob_burst_mode = Signal() # 0: LDR square bursts / 1: serializer bursts (LDR off).
+        self.oob_burst_mode = Signal(reset=1) # 0: LDR square bursts / 1: serializer bursts (LDR off).
         self.oob_repeat     = Signal(2)
         self.oob_d102       = Signal() # Force a pattern on the TX datapath during OOB (Xilinx-
                                        # like serializer burst content).
-        self.oob_pattern    = Signal(16, reset=0x4A4A)
+        self.oob_pattern    = Signal(16, reset=0xF0F0)
         self.oob_probe      = Signal()
         self.oob_seq_quiet  = Signal(16)
         self.oob_kick       = Signal(2) # OOB burst word when oob_d102 is set:
@@ -692,8 +667,7 @@ class ECP5LiteSATAPHY(LiteXModule):
         # Raw serializer pattern for the zero_bus/produce_pattern path (bypass mode): the
         # oob_pattern word replicated to 20b raw symbols; e.g. 0x3333 -> 0011... repeating =
         # Gen1-rate-equivalent burst content when running at gen2.
-        self.comb += serdes.tx_pattern.eq(Mux(self.oob_d102_phase & self.oob_gen1_d102,
-            0x33333, Cat(self.oob_pattern, self.oob_pattern[0:4])))
+        self.comb += serdes.tx_pattern.eq(Cat(self.oob_pattern, self.oob_pattern[0:4]))
 
         self.comb += [
             com_gen.cominit.eq(txcominit),
@@ -735,8 +709,6 @@ class ECP5LiteSATAPHY(LiteXModule):
             serdes.tx_pattern_gap.eq(Cat(self.oob_gap_pattern, self.oob_gap_pattern[0:4])),
             serdes.tx_oob_gap.eq(com_gen.ei_req & deemph_gap_tx),
             serdes.tx_oob_deemph.eq(deemph_gap_tx),
-            serdes.rate_mode_tx.eq(self.oob_rate_tx),
-            serdes.rate_mode_rx.eq(self.oob_rate_rx),
             serdes.sci_oob_gate_en.eq(self.oob_sci_gate),
             serdes.sci_oob_burst_val.eq(self.oob_sci_burst_val),
             serdes.sci_oob_gap_val.eq(self.oob_sci_gap_val),
@@ -746,8 +718,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             # runtime equivalent of p_CHX_PCIE_MODE's permanent silence: the LDR aux driver stays
             # alive (402mV, its best amplitude) and OOB gaps need no EI request at all.
             serdes.tx_lane_rst.eq(self.oob_tx_lane_rst |
-                                  (self.oob_lane_rst_auto & self.tx_idle & ~self.oob_pat_force
-                                   & ~self.oob_align_force)),
+                                  (self.oob_lane_rst_auto & self.tx_idle & ~self.oob_pat_force)),
         ]
 
         # tx clk -> sys clk
@@ -800,17 +771,13 @@ class ECP5LiteSATAPHY(LiteXModule):
                 )
             )
         ]
-        self.com_check = com_check = COMChecker(clk_freq)
+        self.com_check = com_check = COMChecker(clk_freq, quiet_cycles=32)
         self.comb += [
             com_check.rx_idle.eq(rx_idle_flt),
             self.rxcominitdet.eq(com_check.cominit_det),
             self.rxcomwakedet.eq(com_check.comwake_det),
-            # echo_mask (loopback self-handshake): hide detections of our own TX echo while the
-            # corresponding request strobe is still high (ctrl's COMINIT exit requires
-            # ack & ~rx_cominit_stb, which an instant echo makes unsatisfiable). The echo outlives
-            # the strobe by the checker quiet window, so the AWAIT states still see it.
-            self.rx_cominit_stb.eq(self.rxcominitdet & ~(self.oob_echo_mask & self.tx_cominit_stb)),
-            self.rx_comwake_stb.eq((self.rxcomwakedet | force_wake_stb) & ~(self.oob_echo_mask & self.tx_comwake_stb)),
+            self.rx_cominit_stb.eq(self.rxcominitdet),
+            self.rx_comwake_stb.eq(self.rxcomwakedet | force_wake_stb),
         ]
 
     def add_oob_csr(self):
@@ -819,7 +786,7 @@ class ECP5LiteSATAPHY(LiteXModule):
                 ("``0b0``", "RX OOB detection from RLOS (loss of signal)."),
                 ("``0b1``", "RX OOB detection from LDR line activity.")],
             ),
-            CSRField("ei_mode", size=1, offset=1, values=[
+            CSRField("ei_mode", size=1, offset=1, reset=self.ei_mode.reset.value, values=[
                 ("``0b0``", "Electrical idle masked during LDR drive (LUNA-style)."),
                 ("``0b1``", "Electrical idle held during LDR drive.")],
             ),
@@ -834,11 +801,11 @@ class ECP5LiteSATAPHY(LiteXModule):
             ),
             CSRField("force_wake", size=1, offset=17,
                 description="Skip COMWAKE: auto-ack TX and synthesize a device COMWAKE response."),
-            CSRField("burst_mode", size=1, offset=18, values=[
+            CSRField("burst_mode", size=1, offset=18, reset=self.oob_burst_mode.reset.value, values=[
                 ("``0b0``", "OOB bursts via LDR square wave."),
                 ("``0b1``", "OOB bursts via serializer content (LDR off, EI shaping only).")],
             ),
-            CSRField("zero_bus", size=1, offset=19,
+            CSRField("zero_bus", size=1, offset=19, reset=self.oob_zero_bus.reset.value,
                 description="Force raw zeros on the TX parallel bus during OOB (clean EI, TN-02206 8.25)."),
             CSRField("repeat", size=2, offset=20,
                 description="Emit 2^repeat back-to-back OOB sequences per request (host-like sustained COMRESET)."),
@@ -852,16 +819,8 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Park ctrl: mask its OOB TX requests and force electrical idle."),
             CSRField("pat_force", size=1, offset=27,
                 description="Force continuous raw oob_pattern transmission, EI off (line test)."),
-            CSRField("echo_mask", size=1, offset=28,
-                description="Loopback: mask self-echo OOB detections while our request strobe is high."),
-            CSRField("align_force", size=1, offset=29,
-                description="Force continuous ALIGN primitive transmission (speed-negotiation answer test)."),
             CSRField("ei_carve", size=1, offset=30,
                 description="LDR drives the whole sequence; EI carves the gaps (no enable toggling)."),
-            CSRField("oob_bypass", size=1, offset=31,
-                description="Bench debug: skip the OOB handshake and go straight to the ALIGN "
-                            "exchange, so a TX->RX loopback (which cannot complete OOB by "
-                            "construction) can validate the whole post-OOB datapath."),
         ])
         self._oob_txctl = CSRStorage(fields=[
             CSRField("pwdn",     size=1, offset=0, description="Power down the main TX driver."),
@@ -872,50 +831,25 @@ class ECP5LiteSATAPHY(LiteXModule):
                 description="Make OOB gaps by powering down the main TX driver (serializer bursts)."),
             CSRField("sci_gate", size=1, offset=4,
                 description="Make OOB gaps by SCI-writing CH_12 TDRV slice select (~20ns/write)."),
-            CSRField("pat_alt", size=1, offset=5,
+            CSRField("pat_alt", size=1, offset=5, reset=self.oob_pat_alt.reset.value,
                 description="Alternate the raw TX pattern with its inverse each word: with "
                             "0xF0F0F this synthesizes the spec's Gen1-rate (375MHz) OOB carrier."),
-            CSRField("deemph_gap", size=1, offset=6,
+            CSRField("deemph_gap", size=1, offset=6, reset=self.oob_deemph_gap.reset.value,
                 description="OOB gaps = constant pattern; with post-cursor matched to main in "
                             "SCI CH_12/CH_14 the FIR cancels DC (data-driven electrical idle)."),
-            CSRField("rate_tx", size=1, offset=7,
-                description="DCU half-rate divider on TX (PLL at Gen2 -> transmit Gen1)."),
-            CSRField("rate_rx", size=1, offset=8,
-                description="DCU half-rate divider on RX (PLL at Gen2 -> receive Gen1). Lets the "
-                            "host hunt the device's speed-negotiation rate at runtime."),
-            CSRField("early_d102", size=1, offset=9,
+            CSRField("early_d102", size=1, offset=9, reset=self.oob_early_d102.reset.value,
                 description="Transmit continuous D10.2 already in AWAIT-NO-COMWAKE (i.e. from the "
                             "moment the device's COMWAKE is detected, while it is still being "
                             "received) instead of holding electrical idle. Takes the 213-427ns EI "
                             "un-mute latency out of the 533ns post-COMWAKE D10.2 budget."),
-            CSRField("sync_relax", size=1, offset=10,
-                description="Open the link TX SYNC gate after sustained RX idleness: required "
-                            "when the device idles in CONT mode and its single SYNC pair was "
-                            "missed during link-up settling."),
-            CSRField("blind_rrdy", size=1, offset=11,
-                description="Offer R_RDY after sustained junk reception in link RX IDLE: recovers "
-                            "a device parked in X_RDY whose request was sent as CONT junk while "
-                            "our RX was not yet attached."),
-            CSRField("gen1_d102", size=1, offset=12,
-                description="Transmit the post-COMWAKE D10.2 filler as RAW Gen1-rate D10.2 "
-                            "(0x33333 doubled-bit pattern, spec lowest-supported-speed rule) "
-                            "instead of encoded Gen2-rate D10.2."),
             CSRField("lenient_exit", size=1, offset=13,
                 description="Lenient SEND-ALIGN exit: count the drive's ALIGNs as well as its "
                             "SYNCs (pre-campaign-47 behaviour) for runtime A/B vs the spec exit."),
-            CSRField("retrain", size=1, offset=14,
-                description="Mid-link retrain offer: a rising edge while ctrl is in READY jumps "
-                            "back to SEND-ALIGN with no serdes touch, re-offering the ALIGN "
-                            "exchange to a device whose window qualifier missed it (its RX is "
-                            "fully trained on our idle stream by then)."),
-            CSRField("align_dwell", size=1, offset=15,
-                description="Minimum ~200us SEND-ALIGN dwell: hold the ALIGN burst regardless of "
-                            "the exit conditions so the device sees a sustained host reply."),
         ])
         self._oob_align = CSRStorage(fields=[
             CSRField("holdoff", size=16, offset=0,  reset=64,
                 description="RX cycles to wait after a word-aligner re-arm pulse."),
-            CSRField("nocomma", size=16, offset=16, reset=64,
+            CSRField("nocomma", size=16, offset=16, reset=self.oob_align_nocomma.reset.value,
                 description="Re-arm the word aligner after this many RX cycles with no K char."),
             CSRField("cont", size=1, offset=32,
                 description="1 = continuous DCU comma alignment (FFC_ENABLE_CGALIGN held), "
@@ -932,7 +866,7 @@ class ECP5LiteSATAPHY(LiteXModule):
         ])
         self._oob_burst_len = CSRStorage(8, reset=self.oob_burst_len.reset.value,
             description="OOB burst length in tx cycles (16 = 106.7ns spec nominal).")
-        self._oob_pattern = CSRStorage(16, reset=0x4A4A,
+        self._oob_pattern = CSRStorage(16, reset=self.oob_pattern.reset.value,
             description="OOB burst datapath word when d102 is set (0x4A4A=D10.2, 0x3333=Gen1-rate-equivalent).")
         self._oob_quiet = CSRStorage(16, reset=self.com_check.quiet_cycles.reset.value,
             description="RX OOB quiet threshold (sys cycles) ending a sequence / deasserting detections.")
@@ -956,9 +890,6 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_probe.eq(      self._oob_control.fields.probe),
             self.oob_ctrl_dis.eq(   self._oob_control.fields.ctrl_dis),
             self.oob_pat_force.eq(  self._oob_control.fields.pat_force),
-            self.oob_echo_mask.eq(  self._oob_control.fields.echo_mask),
-            self.oob_align_force.eq(self._oob_control.fields.align_force),
-            self.oob_bypass.eq(     self._oob_control.fields.oob_bypass),
             self.oob_ei_carve.eq(  self._oob_control.fields.ei_carve),
             self.oob_burst_len.eq( self._oob_burst_len.storage),
             self.oob_tx_pwdn.eq(     self._oob_txctl.fields.pwdn),
@@ -968,15 +899,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_sci_gate.eq(    self._oob_txctl.fields.sci_gate),
             self.oob_pat_alt.eq(     self._oob_txctl.fields.pat_alt),
             self.oob_deemph_gap.eq(  self._oob_txctl.fields.deemph_gap),
-            self.oob_rate_tx.eq(     self._oob_txctl.fields.rate_tx),
-            self.oob_rate_rx.eq(     self._oob_txctl.fields.rate_rx),
             self.oob_early_d102.eq(  self._oob_txctl.fields.early_d102),
-            self.link_tx_sync_relax.eq(self._oob_txctl.fields.sync_relax),
-            self.link_rx_blind_rrdy.eq(self._oob_txctl.fields.blind_rrdy),
-            self.oob_gen1_d102.eq(self._oob_txctl.fields.gen1_d102),
             self.oob_lenient_exit.eq(self._oob_txctl.fields.lenient_exit),
-            self.oob_retrain.eq(self._oob_txctl.fields.retrain),
-            self.oob_align_dwell.eq(self._oob_txctl.fields.align_dwell),
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
             self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),

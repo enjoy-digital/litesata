@@ -12,6 +12,7 @@ from migen.sim import run_simulation
 
 from litesata.common import primitives
 from litesata.phy.ctrl import LiteSATAPHYCtrl
+from litesata.phy.datapath import LiteSATAPHYAlignTimer
 from litesata.phy.ecp5sataphy import COMGenerator, COMChecker
 
 
@@ -301,12 +302,45 @@ class TestECP5OOB(unittest.TestCase):
             yield ctrl.sink.data.eq(primitives["ALIGN"])
             for i in range(8):
                 yield
+            # Strict SATA behavior: the device's ALIGN does not end our SEND-ALIGN
+            # response.  It must move on to a K28.3-family primitive such as SYNC.
+            self.assertEqual(
+                (yield ctrl.fsm.state),
+                ctrl.fsm.encoding["SEND-ALIGN"],
+            )
             # Device locks and moves on to SYNC (ctrl counts 4 consecutive non-ALIGN primitives
             # in SEND-ALIGN before declaring the link aligned).
             yield ctrl.sink.data.eq(primitives["SYNC"])
             # Wait for ready (stability timer = 5000 cycles).
             yield from wait_for(ctrl.ready, timeout=20000)
             self.assertEqual((yield ctrl.ready), 1)
+
+        run_simulation(dut, gen())
+
+    def test_align_timer_accepts_any_k_led_primitive(self):
+        dut = LiteSATAPHYAlignTimer(timeout=8)
+
+        def gen():
+            # Plain data does not prove that the far end is aligned.
+            yield dut.sink.valid.eq(1)
+            yield dut.sink.charisk.eq(0)
+            for _ in range(10):
+                yield
+            self.assertEqual((yield dut.timer.done), 1)
+
+            # Once negotiation ends, the far end sends SYNC rather than ALIGN.
+            # Repeated SYNC must keep the line-activity timer re-armed.
+            yield dut.sink.charisk.eq(0b0001)
+            yield dut.sink.data.eq(primitives["SYNC"])
+            yield  # WaitTimer reloads on the first non-waiting cycle.
+            for _ in range(16):
+                yield
+                self.assertEqual((yield dut.timer.done), 0)
+
+            yield dut.sink.charisk.eq(0)
+            for _ in range(10):
+                yield
+            self.assertEqual((yield dut.timer.done), 1)
 
         run_simulation(dut, gen())
 
@@ -378,7 +412,7 @@ class TestECP5OOB(unittest.TestCase):
         dut = LiteSATAPHY(
             device   = "LFE5UM5G-85F-8BG554I",
             pads     = SATAPads(),
-            gen      = "gen1",
+            gen      = "gen2",
             clk_freq = 100e6,
             refclk   = Signal(),
             dual     = 1,
@@ -386,10 +420,36 @@ class TestECP5OOB(unittest.TestCase):
             with_csr = True,
         )
         self.assertIsInstance(dut.phy, ECP5LiteSATAPHY)
+        self.assertFalse(hasattr(dut.phy, "_oob_control"))
+        self.assertEqual(dut.phy.ei_mode.reset.value, 1)
+        self.assertEqual(dut.phy.oob_burst_mode.reset.value, 1)
+        self.assertEqual(dut.phy.oob_zero_bus.reset.value, 1)
+        self.assertEqual(dut.phy.oob_pat_alt.reset.value, 1)
+        self.assertEqual(dut.phy.oob_deemph_gap.reset.value, 1)
+        self.assertEqual(dut.phy.oob_early_d102.reset.value, 1)
+        self.assertEqual(dut.phy.oob_pattern.reset.value, 0xF0F0)
+        self.assertEqual(dut.phy.oob_align_nocomma.reset.value, 4096)
+        self.assertEqual(dut.phy.com_check.quiet_cycles.reset.value, 32)
+
+        dut.phy.add_oob_csr()
+        self.assertEqual(dut.phy._oob_control.storage.reset.value, 0x000C0402)
+        self.assertEqual(dut.phy._oob_txctl.storage.reset.value, 0x00000260)
+        self.assertEqual(dut.phy._oob_pattern.storage.reset.value, 0xF0F0)
+        self.assertEqual(dut.phy._oob_align.storage.reset.value, (4096 << 16) | 64)
+        self.assertEqual(dut.phy._oob_quiet.storage.reset.value, 32)
         v = str(verilog.convert(dut, special_overrides=lattice_ecp5_special_overrides))
         self.assertIn("DCUA", v)
         for port in ["CH0_FFC_LDR_CORE2TX_EN", "CH0_LDR_CORE2TX", "CH0_LDR_RX2CORE", "CH0_FFC_EI_EN"]:
             self.assertIn(port, v)
+
+        with self.assertRaisesRegex(NotImplementedError, "Gen2 only"):
+            LiteSATAPHY(
+                device   = "LFE5UM5G-85F-8BG554I",
+                pads     = SATAPads(),
+                gen      = "gen1",
+                clk_freq = 100e6,
+                refclk   = Signal(),
+            )
 
 
 
@@ -446,6 +506,45 @@ class TestECP5OOB(unittest.TestCase):
             sym_ok = sum(1 for d0,k0,d1,k1 in tail if (d0,k0) in good and (d1,k1) in good)
             self.assertGreater(got_k, 0, f"offset {off}: no K28.5 decoded")
             self.assertGreaterEqual(sym_ok, 0.9*len(tail), f"offset {off}: {sym_ok}/{len(tail)}")
+
+    def test_bypass_word_aligner_rejects_isolated_false_comma(self):
+        from litesata.phy.serdes_ecp5 import BypassWordAligner
+
+        dut = BypassWordAligner()
+        result = {}
+
+        def comma_word(offset):
+            return 0x7c << offset
+
+        def feed(word, cycles):
+            for _ in range(cycles):
+                yield dut.sink.eq(word)
+                yield
+
+        def gen():
+            yield from feed(0, 5)
+            # Two consecutive votes establish offset 5.
+            yield from feed(comma_word(5), 6)
+            yield from feed(0, 5)
+            self.assertEqual((yield dut.slip), 5)
+            moves = (yield dut.slip_mv)
+
+            # One comma at offset 9 creates only a candidate.  A subsequent
+            # confirmation at the current offset must clear that candidate.
+            yield from feed(comma_word(9), 1)
+            yield from feed(0, 5)
+            yield from feed(comma_word(5), 1)
+            yield from feed(0, 5)
+            yield from feed(comma_word(9), 1)
+            yield from feed(0, 5)
+
+            result["slip"] = (yield dut.slip)
+            result["moves"] = (yield dut.slip_mv)
+            result["initial_moves"] = moves
+
+        run_simulation(dut, gen())
+        self.assertEqual(result["slip"], 5)
+        self.assertEqual(result["moves"], result["initial_moves"])
 
 
 if __name__ == "__main__":

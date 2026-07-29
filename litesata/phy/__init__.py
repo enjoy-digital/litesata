@@ -31,8 +31,7 @@ class LiteSATAPHY(LiteXModule):
     """
     def __init__(self, device, pads, gen, clk_freq, refclk=None, data_width=16,
                  qpll=None, gt_type="GTY", use_gtgrefclk=True, dual=0, channel=0,
-                 oob_config={"ei", "ldr_tx", "ldr_rx"}, pcs_mode="bypass", pcie_mode=False, tx_boost=False, rx_los_lvl=4, rx_rate_mode="0b0",
-                 tx_rate_mode="0b0", with_csr=True):
+                 with_csr=True):
         self.pads   = pads
         self.gen    = gen
         self.refclk = refclk
@@ -79,10 +78,13 @@ class LiteSATAPHY(LiteXModule):
 
         # ECP5.
         elif re.match("^LFE5UM5G-", device):
+            if gen != "gen2":
+                raise NotImplementedError("ECP5 SATA currently supports Gen2 only.")
             from litesata.phy.ecp5sataphy import ECP5LiteSATAPHYCRG, ECP5LiteSATAPHY
             self.phy = ECP5LiteSATAPHY(refclk, pads, gen, clk_freq, data_width, dual=dual, channel=channel,
-                oob_config=oob_config, pcs_mode=pcs_mode, pcie_mode=pcie_mode, tx_boost=tx_boost, rx_los_lvl=rx_los_lvl,
-                rx_rate_mode=rx_rate_mode, tx_rate_mode=tx_rate_mode)
+                oob_config={"ei", "ldr_tx", "ldr_rx"},
+                pcs_mode="bypass",
+                rx_los_lvl=2)
             self.crg = ECP5LiteSATAPHYCRG(self.phy)
 
         # Unknown.
@@ -101,19 +103,12 @@ class LiteSATAPHY(LiteXModule):
             ctrl_kwargs     = dict(
                 misalign_tolerance   = 512,
                 align_needs_signal   = False,
-                # Campaign 46 correction: counting the drive's own ALIGNs to leave SEND-ALIGN
-                # (align_accept_align=True, a workaround from the broken-RX era) stopped our ALIGN
-                # transmission ~1.4us into the drive's negotiation - it then kept stepping rates
-                # (post-READY RX shows its ALIGN degrading into doubled-Gen1 junk) and only settled
-                # by luck. Spec: the host transmits ALIGN until the DEVICE sends non-ALIGN.
-                align_accept_align   = False,
                 align_timeout_us     = 3000,
                 retry_timeout_us     = 50000,
                 nocomwake_timeout_us = 0.4,
-                # Attach the core the moment the ALIGN exchange completes: the device sends its
-                # signature-FIS X_RDY immediately after accepting our ALIGNs, and a long stability
-                # window leaves the core deaf to it - this drive does not retry and parks its
-                # transport (link-ACKs every later command but never executes one).
+                # Attach the core as soon as the ALIGN exchange completes. Devices can offer their
+                # signature-FIS X_RDY immediately and are not required to keep retrying it while a
+                # receiver waits through a long, PHY-local stability window.
                 stability_us         = 1,
                 align_cdr_hold       = False,
                 # Polite host: OOB retry storms wedge this drive until power-cycled.
@@ -124,14 +119,8 @@ class LiteSATAPHY(LiteXModule):
             # ALIGN window tears the link down during those, so give it far more slack.
             datapath_kwargs = dict(align_timeout=256*16*16)
         self.ctrl = LiteSATAPHYCtrl(self.phy, self.crg, clk_freq, **ctrl_kwargs)
-        if hasattr(self.phy, "link_tx_sync_relax"):
-            self.link_tx_sync_relax = self.phy.link_tx_sync_relax
-        if hasattr(self.phy, "link_rx_blind_rrdy"):
-            self.link_rx_blind_rrdy = self.phy.link_rx_blind_rrdy
         if hasattr(self.phy, "oob_d102_phase"):
             self.comb += self.phy.oob_d102_phase.eq(self.ctrl.d102_phase)
-        if hasattr(self.phy, "oob_align_force"):
-            self.comb += self.ctrl.align_force.eq(self.phy.oob_align_force)
 
         # Datapath.
         # ---------
@@ -190,5 +179,3 @@ class LiteSATAPHY(LiteXModule):
             self.comb += self._status.fields.tx_ready.eq(self.phy.ready)
             self.comb += self._status.fields.rx_ready.eq(self.phy.ready)
         self.comb += self._status.fields.ctrl_ready.eq(self.ctrl.ready)
-        if hasattr(self.phy, "add_oob_csr"):
-            self.phy.add_oob_csr()
