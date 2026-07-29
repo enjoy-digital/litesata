@@ -133,10 +133,15 @@ class LiteSATAPHYCtrl(LiteXModule):
         lenient_dwell_count = Signal(16)
         lenient_dwell_done  = Signal()
         self.comb += lenient_dwell_done.eq(lenient_dwell_count >= lenient_dwell)
-        strict_align_done = (
-            sink.data == primitives["SYNC"]
-            if align_full_primitive else sink.data[0:8] == 0x7c
-        )
+        # SATA requires three back-to-back non-ALIGN primitives. Preserve the historical
+        # four-sample low-byte policy on existing PHYs while making the ECP5 full-primitive
+        # policy match that requirement exactly.
+        align_count_reset = (3 if align_full_primitive else 4) - 1
+        valid_non_align = 0
+        for name, value in primitives.items():
+            if name not in {"ALIGN", "ALIGN_N"}:
+                valid_non_align = valid_non_align | (sink.data == value)
+        strict_align_done = valid_non_align if align_full_primitive else sink.data[0:8] == 0x7c
         lenient_align_done = (
             sink.data == primitives["ALIGN"]
             if align_full_primitive else sink.data[0:8] == 0xbc
@@ -158,7 +163,7 @@ class LiteSATAPHYCtrl(LiteXModule):
         fsm.act("AWAIT-CRG-RESET",
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
-            NextValue(align_count, 4-1),
+            NextValue(align_count, align_count_reset),
             If(trx.ready,
                 # Set RX polarity to 0 (we don't know it at this point).
                 NextValue(trx.rx_polarity, 0),
@@ -254,22 +259,28 @@ class LiteSATAPHYCtrl(LiteXModule):
             align_timer.wait.eq(1),
             source.data.eq(primitives["ALIGN"]),
             source.charisk.eq(0b0001),
-            If(sink.valid & (sink.charisk == 0b0001),
-                # Existing PHYs accept any K28.3-family primitive here. ECP5 requires a
-                # complete primitive match because its fabric decoder can produce corrupted
-                # K-led dwords during rate changes (for example 0x7878787c/k0001). Those words
-                # must not masquerade as SYNC and put the command layer on a false link.
-                If(strict_align_done |
-                   (lenient_align_done & lenient_exit & lenient_dwell_done),
-                    If(align_count != 0,
-                        NextValue(align_count, align_count - 1),
+            If(sink.valid,
+                If(sink.charisk == 0b0001,
+                    # Existing PHYs accept any K28.3-family primitive here. ECP5 requires a
+                    # complete valid non-ALIGN primitive: SATA permits SYNC, X_RDY, R_RDY, etc.
+                    # to complete negotiation, while its fabric decoder can also produce
+                    # corrupted K-led dwords during rate changes (for example
+                    # 0x7878787c/k0001). Such words must not put the command layer on a false link.
+                    If(strict_align_done |
+                       (lenient_align_done & lenient_exit & lenient_dwell_done),
+                        If(align_count == 0,
+                            NextState("READY")
+                        ).Else(
+                            NextValue(align_count, align_count - 1)
+                        )
+                    ).Else(
+                        NextValue(align_count, align_count_reset),
                     )
-                ).Else(
-                    NextValue(align_count, 4-1),
+                ).Elif(align_full_primitive,
+                    # The qualified ECP5 samples must be consecutive, so decoded data or an
+                    # invalid charisk interrupts the sequence.
+                    NextValue(align_count, align_count_reset),
                 )
-            ),
-            If(align_count == 0,
-                NextState("READY")
             )
         )
 

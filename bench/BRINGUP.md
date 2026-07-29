@@ -3099,11 +3099,15 @@ SYNC is `0xb5b5957c/k0001`. The link layer could later exchange primitives
 and acknowledge frames, but the disk had never completed the negotiation
 that enables its ATA protocol engine.
 
-The controller now has an ECP5-only full-primitive policy: strict SEND-ALIGN
-requires four complete SYNC primitives, and the diagnostic path requires
-complete ALIGN primitives after its dwell. Existing non-ECP5 behavior is
-unchanged. Regressions explicitly reject corrupted `...7c` and `...bc`
-dwords. All 50 tests pass.
+The controller now has an ECP5-only full-primitive policy. The strict
+SEND-ALIGN exit requires three consecutive complete, valid non-ALIGN
+primitives (including SYNC, X_RDY, R_RDY, and the other defined link
+primitives), matching SATA Revision 3.4's HP7 host state while preserving an
+immediate signature-FIS offer. Decoded data interrupts and resets the
+sequence. The diagnostic path requires complete ALIGN primitives after its
+dwell. Existing non-ECP5 behavior retains the historical four-sample low-byte
+test. Regressions explicitly reject corrupted `...7c` and `...bc` dwords. All
+50 tests pass.
 
 The corrected BIST/analyzer image met timing at 159.54 MHz RX, 177.75 MHz TX,
 and 108.34 MHz system. On hardware it produced zero strict READY events in 35
@@ -3112,3 +3116,37 @@ false. The archived true-Gen1 host image also produced no link in 30 seconds.
 The honest remaining blocker is Gen2 speed negotiation: the disk sends clean
 ALIGN but never a complete SYNC in response to the host. No write BIST ran
 and no disk data was changed.
+
+## *** CAMPAIGN 62 (2026-07-29): VALID PRIMITIVE EXIT + HEALTHY-DISK STRICT/LENIENT A/B ***
+
+The SATA Revision 3.4 host initialization state machine (HP7) requires three
+back-to-back non-ALIGN primitives, not specifically SYNC. Requiring complete
+SYNC would reject a device that immediately offers its signature frame with
+X_RDY. The ECP5 qualifier was therefore refined to accept three consecutive
+complete, defined non-ALIGN primitives while still rejecting
+`0x7878787c/k0001`; decoded data resets the count. Existing PHY behavior is
+unchanged. The focused 18-test ECP5 suite and the complete 50-test suite pass.
+
+The first timing-clean hardware image with complete-valid-primitive
+qualification met 154.25 MHz RX, 171.00 MHz TX, and 101.36 MHz system timing.
+Against the known-healthy Toshiba:
+
+- strict qualification produced no READY in 60 seconds and issued no command;
+- a diagnostic complete-ALIGN exit after a 20 us host ALIGN dwell eventually
+  held READY for five seconds, after 103 earlier READY drops;
+- no startup signature was observed;
+- the exact IDENTIFY frame
+  `00ec8027 a0000000 00000000 08000000 00000000` traversed the wire;
+- the device returned `R_RDY/R_IP/R_OK` with zero TX errors but no PIO Setup,
+  Data, or Register D2H FIS.
+
+This known-healthy-device result is decisive about semantics: the diagnostic
+ALIGN exit can create a link-layer-capable state without completing the
+device's ATA protocol initialization. It must not be promoted to the
+production exit. The remaining work is the Gen2 in-window negotiation/TX
+qualification itself. No write BIST ran and the line was parked in every
+`finally` path.
+
+The final three-primitive build met 161.73 MHz RX, 162.07 MHz TX, and
+102.43 MHz system timing. Its exact artifact repeated the strict result:
+zero READY events in 30 seconds, no command issued, and a final parked line.

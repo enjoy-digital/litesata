@@ -320,9 +320,25 @@ class TestECP5OOB(unittest.TestCase):
                 (yield ctrl.fsm.state),
                 ctrl.fsm.encoding["SEND-ALIGN"],
             )
-            # Device locks and moves on to SYNC (ctrl counts 4 consecutive exact SYNC primitives
-            # in SEND-ALIGN before declaring the link aligned).
-            yield ctrl.sink.data.eq(primitives["SYNC"])
+            # A device may start with any valid non-ALIGN primitive. In particular, it may offer
+            # its signature frame immediately with X_RDY instead of first idling in SYNC.
+            yield ctrl.sink.data.eq(primitives["X_RDY"])
+            for _ in range(2):
+                yield
+            self.assertEqual(
+                (yield ctrl.fsm.state),
+                ctrl.fsm.encoding["SEND-ALIGN"],
+            )
+            # Decoded data interrupts the required three-back-to-back sequence.
+            yield ctrl.sink.charisk.eq(0)
+            yield
+            yield ctrl.sink.charisk.eq(0b0001)
+            for _ in range(2):
+                yield
+            self.assertEqual(
+                (yield ctrl.fsm.state),
+                ctrl.fsm.encoding["SEND-ALIGN"],
+            )
             # Wait for ready (stability timer = 5000 cycles).
             yield from wait_for(ctrl.ready, timeout=20000)
             self.assertEqual((yield ctrl.ready), 1)

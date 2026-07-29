@@ -200,10 +200,13 @@ A later capture against an independently known-healthy Toshiba exposed a
 false strict exit. The ECP5 decoder produced four corrupted
 `0x7878787c/k0001` dwords; the generic low-byte test accepted them as
 K28.3-family primitives even though a complete SYNC is
-`0xb5b5957c/k0001`. ECP5 now enables full-primitive qualification: strict
-SEND-ALIGN accepts only complete SYNC, while the diagnostic exit accepts only
-complete ALIGN after its configured dwell. Existing PHY families retain
-their established low-byte behavior.
+`0xb5b5957c/k0001`. ECP5 now enables full-primitive qualification: the strict
+exit accepts three consecutive complete, valid non-ALIGN primitives (SYNC,
+X_RDY, R_RDY, and the other defined link primitives), which follows the SATA
+host initialization state machine and preserves an immediate signature-FIS
+offer. Decoded data interrupts and resets that sequence. The diagnostic exit
+accepts only complete ALIGN after its configured dwell. Existing PHY families
+retain their established four-sample low-byte behavior.
 
 With this correction, the timing-clean image produced no false READY event in
 a 35-second strict attempt. The result is less optimistic but accurate: the
@@ -211,6 +214,20 @@ healthy disk sends ALIGN during Gen2 speed negotiation and never advances to
 complete SYNC, so the ATA command layer must not be attached. The corrected
 image met timing at 159.54 MHz SATA RX, 177.75 MHz SATA TX, and 108.34 MHz
 system. All 50 regression tests pass.
+
+A follow-up known-healthy-disk run separated strict and diagnostic behavior.
+The complete-valid-primitive strict path produced no link in 60 seconds. A
+20 us diagnostic exit based on complete ALIGN eventually held READY after
+multiple drops, but no startup signature arrived. The exact IDENTIFY frame was
+accepted at the link layer with `R_RDY/R_IP/R_OK` and zero TX errors, yet no
+PIO Setup, data, or Register D2H response followed. Thus forcing READY after
+ALIGN can create a functioning link-layer exchange without completing the
+device's ATA protocol initialization; it is not an acceptable production
+link-up criterion.
+
+The final three-primitive build met timing at 161.73 MHz SATA RX, 162.07 MHz
+SATA TX, and 102.43 MHz system. A final 30-second strict run on that exact
+artifact produced no READY event, issued no command, and parked the line.
 
 Do not start the write BIST until IDENTIFY succeeds and a disposable, nonzero
 sector range has been selected. The generator intentionally overwrites its
