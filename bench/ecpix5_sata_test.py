@@ -320,9 +320,9 @@ def make_analyzer(regs, analyzer_csv):
     )
 
 
-def arm_analyzer(analyzer, group, condition):
+def arm_analyzer(analyzer, group, condition, subsampler=1):
     analyzer.configure_group(group)
-    analyzer.configure_subsampler(1)
+    analyzer.configure_subsampler(subsampler)
     analyzer.add_trigger(cond=condition)
     analyzer.run(offset=128, length=1024)
 
@@ -353,6 +353,25 @@ def analyzer_link_fsms(path, group=2):
             f"tx={tx}, rx={rx}"
         )
     return tx[0], rx[0]
+
+
+def analyzer_ctrl_fsm(path, group=0):
+    enums = {}
+    with pathlib.Path(path).open(newline="", encoding="utf-8") as source:
+        for row in csv.reader(source):
+            if len(row) < 5 or row[0] != "enum" or int(row[1]) != group:
+                continue
+            enums.setdefault(row[2], set()).add(row[4])
+    matches = [
+        name for name, states in enums.items()
+        if {"COMINIT", "COMWAKE", "AWAIT-ALIGN", "SEND-ALIGN", "READY"} <= states
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"could not uniquely locate PHY controller FSM in analyzer group {group}: "
+            f"matches={matches}"
+        )
+    return matches[0]
 
 
 def summarize_link_capture(path, tx_fsm, rx_fsm):
@@ -509,9 +528,11 @@ def run(args):
     csr_csv = pathlib.Path(args.csr_csv).resolve()
     analyzer_csv = None if args.no_analyzer else pathlib.Path(args.analyzer_csv).resolve()
     bitstream = None if args.reuse_bitstream else pathlib.Path(args.bitstream).resolve()
-    link_tx_fsm = link_rx_fsm = None
+    link_tx_fsm = link_rx_fsm = ctrl_fsm = None
     if analyzer_csv is not None:
         link_tx_fsm, link_rx_fsm = analyzer_link_fsms(analyzer_csv)
+        if args.oob_capture:
+            ctrl_fsm = analyzer_ctrl_fsm(analyzer_csv)
 
     result.data["metadata"] = {
         "source": capture_git_state(result.output_dir),
@@ -523,6 +544,7 @@ def run(args):
         "analyzer_csv_sha256": None if analyzer_csv is None else file_sha256(analyzer_csv),
         "analyzer_link_tx_fsm": link_tx_fsm,
         "analyzer_link_rx_fsm": link_rx_fsm,
+        "analyzer_ctrl_fsm": ctrl_fsm,
     }
     result.data["configuration"] = {
         "generation": "gen2",
@@ -544,6 +566,7 @@ def run(args):
         "align_nocomma": 4096,
         "soft_reset_requested": args.soft_reset,
         "post_reset_delay_s": args.post_reset_delay,
+        "oob_capture_subsampler": args.oob_subsampler,
     }
     result.flush()
 
@@ -566,11 +589,24 @@ def run(args):
         result.data["parked_baseline"] = phy_snapshot(regs)
         result.flush()
 
+        oob_analyzer = None
         signature_analyzer = None
         if analyzer_csv is not None:
-            signature_analyzer = make_analyzer(regs, analyzer_csv)
-            arm_analyzer(signature_analyzer, 2, {link_rx_fsm: "0b001"})
-            result.event("signature_watch_armed")
+            if args.oob_capture:
+                oob_analyzer = make_analyzer(regs, analyzer_csv)
+                # Capture the transition into AWAIT-ALIGN, including the independently sequenced
+                # RX CDR/PCS reset signals and the first device ALIGN words.
+                arm_analyzer(
+                    oob_analyzer,
+                    0,
+                    {ctrl_fsm: "0b1010"},
+                    subsampler=args.oob_subsampler,
+                )
+                result.event("oob_watch_armed")
+            else:
+                signature_analyzer = make_analyzer(regs, analyzer_csv)
+                arm_analyzer(signature_analyzer, 2, {link_rx_fsm: "0b001"})
+                result.event("signature_watch_armed")
 
         configure_attempt(
             regs,
@@ -608,6 +644,16 @@ def run(args):
                     recorded_ready_drops += 1
                 stable_since = None
             time.sleep(args.poll_interval)
+
+        if oob_analyzer is not None:
+            oob_capture_seen = bool(oob_analyzer.done())
+            result.data["oob_capture_seen"] = oob_capture_seen
+            if oob_capture_seen:
+                oob_path = result.output_dir / "oob-await-align.csv"
+                save_analyzer(oob_analyzer, oob_path)
+                result.data["oob_capture"] = {"path": str(oob_path)}
+            result.event("oob_watch_complete", seen=oob_capture_seen)
+
         if stable_since is None or time.monotonic() - stable_since < args.link_hold:
             result.data["outcome"] = (
                 "link_timeout" if link_first_s is None else "link_unstable"
@@ -780,6 +826,17 @@ def parse_args(argv=None):
     parser.add_argument("--csr-csv", required=True, help="CSR map matching the bitstream.")
     parser.add_argument("--analyzer-csv", help="Analyzer map matching the bitstream.")
     parser.add_argument("--no-analyzer", action="store_true", help="Run without LiteScope captures.")
+    parser.add_argument(
+        "--oob-capture",
+        action="store_true",
+        help="Diagnostic: capture group 0 on entry to AWAIT-ALIGN instead of watching signature.",
+    )
+    parser.add_argument(
+        "--oob-subsampler",
+        default=32,
+        type=int,
+        help="OOB diagnostic capture subsampler (default: 32, about 360us at 90MHz).",
+    )
     parser.add_argument("--output-dir", help="Artifact directory (default: timestamped directory under /tmp).")
     parser.add_argument("--port", default=1234, type=int)
     parser.add_argument("--program-timeout", default=60.0, type=float)
@@ -812,6 +869,10 @@ def parse_args(argv=None):
     args = parser.parse_args(argv)
     if not args.no_analyzer and not args.analyzer_csv:
         parser.error("--analyzer-csv is required unless --no-analyzer is used")
+    if args.no_analyzer and args.oob_capture:
+        parser.error("--oob-capture requires an analyzer")
+    if args.oob_subsampler <= 0:
+        parser.error("--oob-subsampler must be greater than zero")
     if args.poll_interval <= 0:
         parser.error("--poll-interval must be greater than zero")
     if args.post_reset_delay < 0:

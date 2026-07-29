@@ -3,7 +3,7 @@
 #
 # Vendored from LiteICLink @ 2da8e8b (liteiclink/serdes/serdes_ecp5.py) with SATA OOB support.
 # Modifications are marked with "# OOB:" comments:
-# - SerdesInit: split tx_ready/rx_ready, no rx_los exit from READY (line is idle during OOB).
+# - SerdesInit: independent TX PLL/TX PCS/RX CDR/RX PCS sequencing for SATA OOB.
 # - TX electrical idle: direct FFC_EI_EN port (SCI pcie_ei_en path removed, too slow).
 # - LDR (low data rate) direct-drive OOB path: TX burst generation / RX line observation.
 #
@@ -98,9 +98,9 @@ class BypassWordAligner(Module):
     aligns in the fabric: scan a 40-bit sliding window over consecutive raw words for the K28.5
     comma7 (serial 0011111 = 0x7C read LSB-first, or its complement 0x03) at all 20 bit offsets,
     and barrel-shift the datapath to the symbol boundary. Bit 0 of `sink` must be the earliest bit
-    on the wire. Pipelined in three stages (comparators / priority encode / shift) to close timing
-    in the 150MHz rx word-clock domain. Latency 3 cycles; `slip` is quasi-static once locked so
-    the inter-stage vintage skew at re-lock only garbles the word in flight.
+    on the wire. The compare, priority-encode/vote, and barrel-shift paths are registered to close
+    timing in the 150MHz rx word-clock domain. `slip` is quasi-static once locked so the
+    inter-stage vintage skew at re-lock only garbles the word in flight.
     """
     def __init__(self):
         self.enable  = Signal(reset=1) # i
@@ -117,6 +117,9 @@ class BypassWordAligner(Module):
         hits   = Signal(20)
         found  = Signal()
         slip_n = Signal(5)
+        enable_r = Signal()
+        found_r  = Signal()
+        slip_n_r = Signal(5)
         shift  = Signal(40)
 
         self.comb += win.eq(Cat(prev, self.sink)) # bit 0 = oldest on the wire
@@ -126,7 +129,9 @@ class BypassWordAligner(Module):
             win_r.eq(win),
             hits.eq(Cat(*[(win[k:k+7] == 0x7C) | (win[k:k+7] == 0x03) for k in range(20)])),
         ]
-        # Stage B: priority encode (lowest offset wins), registered slip.
+        # Stage B: priority encode (lowest offset wins). Register the result before voting: without
+        # this boundary nextpnr can place the priority chain and candidate/slip update as one long
+        # RX-domain path, which does not reliably meet 150MHz.
         self.comb += [
             found.eq(hits != 0),
             slip_n.eq(self.slip),
@@ -146,15 +151,18 @@ class BypassWordAligner(Module):
         # Stage C: barrel shift with the (quasi-static) slip, registered output.
         self.comb += shift.eq(win_r >> self.slip)
         self.sync += [
-            If(self.enable & found,
-                If(slip_n == self.slip,
+            enable_r.eq(self.enable),
+            found_r.eq(found),
+            slip_n_r.eq(slip_n),
+            If(enable_r & found_r,
+                If(slip_n_r == self.slip,
                     cand_ok.eq(0),                     # confirmed at current offset
-                ).Elif(cand_ok & (slip_n == cand),
-                    self.slip.eq(slip_n),              # second consecutive vote -> adopt
+                ).Elif(cand_ok & (slip_n_r == cand),
+                    self.slip.eq(slip_n_r),            # second consecutive vote -> adopt
                     self.slip_mv.eq(self.slip_mv + 1),
                     cand_ok.eq(0),
                 ).Else(
-                    cand.eq(slip_n),                   # first vote for a new offset
+                    cand.eq(slip_n_r),                 # first vote for a new offset
                     cand_ok.eq(1),
                 ),
             ),
@@ -380,16 +388,21 @@ class SerDesECP5SCIReconfig(LiteXModule):
 # SerdesInit ---------------------------------------------------------------------------------------
 
 class SerdesInit(LiteXModule):
-    def __init__(self, tx_lol, rx_lol, rx_los):
-        self.rst      = Signal()
-        self.tx_rst   = Signal()
-        self.rx_rst   = Signal()
-        self.pcs_rst  = Signal()
-        # OOB: split ready in tx_ready/rx_ready (registered/sticky): the TX side must be usable
-        # (COMGenerator running, EI/LDR controllable) while RX has no lock/signal, since the SATA
-        # OOB sequence precedes any RX alignment.
-        self.tx_ready = Signal()
-        self.rx_ready = Signal()
+    def __init__(self, tx_lol, rx_lol, rx_los,
+        startup_cycles   = 1024,
+        reset_cycles     = 8,
+        tx_lock_cycles   = 1024,
+        rx_signal_cycles = 64,
+        rx_lock_cycles   = 64):
+        self.rst          = Signal()
+        self.tx_pll_rst   = Signal(reset=1)
+        self.tx_pcs_rst   = Signal(reset=1)
+        self.rx_cdr_rst   = Signal(reset=1)
+        self.rx_pcs_rst   = Signal(reset=1)
+        # OOB: the TX side must be usable (COMGenerator running, EI/LDR controllable) while RX has
+        # no high-speed signal. SATA OOB necessarily precedes RX CDR/PCS qualification.
+        self.tx_ready     = Signal()
+        self.rx_ready     = Signal()
 
         # # #
 
@@ -400,55 +413,140 @@ class SerdesInit(LiteXModule):
         self.specials += MultiReg(rx_lol, _rx_lol)
         self.specials += MultiReg(rx_los, _rx_los)
 
-        timer = WaitTimer(1024)
-        self.submodules += timer
-        self.comb += timer.wait.eq(~self.rst)
+        # ECP5 requires cascaded PLL/CDR/PCS reset sequencing. In particular, TX PCS must be
+        # released only after TX PLL lock, and RX PCS only after the recovered clock is stable.
+        # Keeping the four reset controls independent also lets SATA OOB run before high-speed RX
+        # acquisition. See Lattice TN1261 / FPGA-PB-02001 and LUNA's ECP5 reset sequencer.
+        startup_timer = WaitTimer(startup_cycles)
+        reset_timer   = WaitTimer(reset_cycles)
+        tx_lock_timer = WaitTimer(tx_lock_cycles)
+        rx_sig_timer  = WaitTimer(rx_signal_cycles)
+        rx_lock_timer = WaitTimer(rx_lock_cycles)
+        self.submodules += startup_timer, reset_timer, tx_lock_timer, rx_sig_timer, rx_lock_timer
 
         fsm = FSM(reset_state="RESET-ALL")
         fsm = ResetInserter()(fsm)
         self.fsm = fsm
         self.comb += fsm.reset.eq(self.rst)
+
         fsm.act("RESET-ALL",
-            # Reset TX Serdes, RX Serdes and PCS.
-            self.tx_rst.eq(1),
-            self.rx_rst.eq(1),
-            self.pcs_rst.eq(1),
+            NextValue(self.tx_pll_rst, 1),
+            NextValue(self.tx_pcs_rst, 1),
+            NextValue(self.rx_cdr_rst, 1),
+            NextValue(self.rx_pcs_rst, 1),
             NextValue(self.tx_ready, 0),
             NextValue(self.rx_ready, 0),
-            If(timer.done,
-                timer.wait.eq(0),
-                NextState("RESET-RX-PCS-WAIT-TX-PLL-LOCK")
+            startup_timer.wait.eq(1),
+            If(startup_timer.done,
+                NextState("WAIT-TX-PLL-LOCK")
             )
         )
-        fsm.act("RESET-RX-PCS-WAIT-TX-PLL-LOCK",
-            # Reset RX Serdes and PCS, wait for TX PLL lock.
-            self.rx_rst.eq(1),
-            self.pcs_rst.eq(1),
+        fsm.act("WAIT-TX-PLL-LOCK",
+            NextValue(self.tx_pll_rst, 0),
+            NextValue(self.tx_pcs_rst, 1),
+            NextValue(self.rx_cdr_rst, 1),
+            NextValue(self.rx_pcs_rst, 1),
+            NextValue(self.tx_ready, 0),
             NextValue(self.rx_ready, 0),
-            If(timer.done & ~_tx_lol,
-                timer.wait.eq(0),
-                NextValue(self.tx_ready, 1),
-                NextState("RESET-PCS-WAIT-RX-CDR-LOCK")
+            tx_lock_timer.wait.eq(~_tx_lol),
+            If(tx_lock_timer.done,
+                NextState("APPLY-TX-PCS-RESET")
             )
         )
-        fsm.act("RESET-PCS-WAIT-RX-CDR-LOCK",
-            # Reset PCS, wait for RX CDR lock.
-            self.pcs_rst.eq(1),
-            If(timer.done & ~_rx_lol,
-                timer.wait.eq(0),
-                NextValue(self.rx_ready, 1),
+        fsm.act("APPLY-TX-PCS-RESET",
+            NextValue(self.tx_pll_rst, 0),
+            NextValue(self.tx_pcs_rst, 1),
+            NextValue(self.rx_cdr_rst, 1),
+            NextValue(self.rx_pcs_rst, 1),
+            NextValue(self.tx_ready, 0),
+            NextValue(self.rx_ready, 0),
+            reset_timer.wait.eq(1),
+            If(_tx_lol,
+                NextState("RESET-ALL")
+            ).Elif(reset_timer.done,
+                NextState("WAIT-RX-SIGNAL")
+            )
+        )
+        fsm.act("WAIT-RX-SIGNAL",
+            # Release TX PCS early enough that the complete high-speed transmit path is settled
+            # before COMRESET. Release RX CDR so LOS can observe the later continuous ALIGN stream,
+            # while retaining RX PCS reset until recovered-clock lock is qualified.
+            NextValue(self.tx_pll_rst, 0),
+            NextValue(self.tx_pcs_rst, 0),
+            NextValue(self.rx_cdr_rst, 0),
+            NextValue(self.rx_pcs_rst, 1),
+            NextValue(self.tx_ready, 1),
+            NextValue(self.rx_ready, 0),
+            rx_sig_timer.wait.eq(~_rx_los),
+            If(_tx_lol,
+                NextState("RESET-ALL")
+            ).Elif(rx_sig_timer.done,
+                NextState("APPLY-RX-CDR-RESET")
+            )
+        )
+        fsm.act("APPLY-RX-CDR-RESET",
+            NextValue(self.tx_pll_rst, 0),
+            NextValue(self.tx_pcs_rst, 0),
+            NextValue(self.rx_cdr_rst, 1),
+            NextValue(self.rx_pcs_rst, 1),
+            NextValue(self.tx_ready, 1),
+            NextValue(self.rx_ready, 0),
+            reset_timer.wait.eq(1),
+            If(_tx_lol,
+                NextState("RESET-ALL")
+            ).Elif(reset_timer.done,
+                NextState("WAIT-RX-CDR-LOCK")
+            )
+        )
+        fsm.act("WAIT-RX-CDR-LOCK",
+            NextValue(self.tx_pll_rst, 0),
+            NextValue(self.tx_pcs_rst, 0),
+            NextValue(self.rx_cdr_rst, 0),
+            NextValue(self.rx_pcs_rst, 1),
+            NextValue(self.tx_ready, 1),
+            NextValue(self.rx_ready, 0),
+            rx_lock_timer.wait.eq(~_rx_los & ~_rx_lol),
+            If(_tx_lol,
+                NextState("RESET-ALL")
+            ).Elif(_rx_los,
+                NextState("WAIT-RX-SIGNAL")
+            ).Elif(rx_lock_timer.done,
+                NextState("APPLY-RX-PCS-RESET")
+            )
+        )
+        fsm.act("APPLY-RX-PCS-RESET",
+            NextValue(self.tx_pll_rst, 0),
+            NextValue(self.tx_pcs_rst, 0),
+            NextValue(self.rx_cdr_rst, 0),
+            NextValue(self.rx_pcs_rst, 1),
+            NextValue(self.tx_ready, 1),
+            NextValue(self.rx_ready, 0),
+            reset_timer.wait.eq(1),
+            If(_tx_lol,
+                NextState("RESET-ALL")
+            ).Elif(_rx_los | _rx_lol,
+                NextState("WAIT-RX-SIGNAL")
+            ).Elif(reset_timer.done,
                 NextState("READY")
             )
         )
         fsm.act("READY",
-            # OOB: no rx_los exit here: during OOB/idle phases the line is electrically idle by
-            # design (rx_los asserted); leaving READY on rx_los would reset the RX path in a loop
-            # and prevent the OOB sequence from ever completing. rx_los remains a status signal.
+            NextValue(self.tx_pll_rst, 0),
+            NextValue(self.tx_pcs_rst, 0),
+            NextValue(self.rx_cdr_rst, 0),
+            NextValue(self.rx_pcs_rst, 0),
+            NextValue(self.tx_ready, 1),
+            # Do not restart on LOS alone: SATA can legitimately be electrically idle while the
+            # PHY controller retries OOB. A CDR loss-of-lock still re-runs only the RX sequence.
             If(_tx_lol,
+                NextValue(self.rx_ready, 0),
                 NextState("RESET-ALL")
-            ),
-            If(_rx_lol,
-                NextState("RESET-RX-PCS-WAIT-TX-PLL-LOCK")
+            ).Elif(_rx_lol,
+                NextValue(self.rx_ready, 0),
+                NextState("WAIT-RX-SIGNAL")
+            ).Else(
+                # Assert ready on the same edge that releases RX PCS reset.
+                NextValue(self.rx_ready, 1)
             )
         )
 
@@ -741,8 +839,8 @@ class SerDesECP5(LiteXModule):
             i_CHX_FFC_RXPWDNB       = 1,
 
             # CHX RX — reset
-            i_CHX_FFC_RRST          = ~self.rx_enable | init.rx_rst,
-            i_CHX_FFC_LANE_RX_RST   = ~self.rx_enable | init.pcs_rst,
+            i_CHX_FFC_RRST          = ~self.rx_enable | init.rx_cdr_rst,
+            i_CHX_FFC_LANE_RX_RST   = ~self.rx_enable | init.rx_pcs_rst,
 
             # CHX RX — input
             i_CHX_HDINP             = rx_pads.p,
@@ -857,8 +955,8 @@ class SerDesECP5(LiteXModule):
             i_CHX_FFC_TXPWDNB       = ~self.tx_pwdn,
 
             # CHX TX — reset
-            i_D_FFC_TRST            = ~self.tx_enable | init.tx_rst,
-            i_CHX_FFC_LANE_TX_RST   = ~self.tx_enable | init.pcs_rst | self.tx_lane_rst,
+            i_D_FFC_TRST            = ~self.tx_enable | init.tx_pll_rst,
+            i_CHX_FFC_LANE_TX_RST   = ~self.tx_enable | init.tx_pcs_rst | self.tx_lane_rst,
 
             # CHX TX - output
             o_CHX_HDOUTP            = tx_pads.p,

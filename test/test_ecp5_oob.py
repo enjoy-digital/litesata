@@ -14,6 +14,7 @@ from litesata.common import primitives
 from litesata.phy.ctrl import LiteSATAPHYCtrl
 from litesata.phy.datapath import LiteSATAPHYAlignTimer
 from litesata.phy.ecp5sataphy import COMGenerator, COMChecker
+from litesata.phy.serdes_ecp5 import SerdesInit
 
 
 def runs(trace):
@@ -28,6 +29,135 @@ def runs(trace):
 
 
 class TestECP5OOB(unittest.TestCase):
+    # SerDesInit ---------------------------------------------------------------------------------
+    @staticmethod
+    def make_serdes_init():
+        tx_lol = Signal(reset=1)
+        rx_lol = Signal(reset=1)
+        rx_los = Signal(reset=1)
+        dut = SerdesInit(
+            tx_lol, rx_lol, rx_los,
+            startup_cycles   = 2,
+            reset_cycles     = 2,
+            tx_lock_cycles   = 2,
+            rx_signal_cycles = 3,
+            rx_lock_cycles   = 3,
+        )
+        return dut, tx_lol, rx_lol, rx_los
+
+    def test_serdes_init_cascaded_startup(self):
+        dut, tx_lol, rx_lol, rx_los = self.make_serdes_init()
+
+        def gen():
+            # A reset request holds every ECP5 reset input asserted.
+            yield dut.rst.eq(1)
+            for _ in range(3):
+                yield
+                self.assertEqual((yield dut.tx_pll_rst), 1)
+                self.assertEqual((yield dut.tx_pcs_rst), 1)
+                self.assertEqual((yield dut.rx_cdr_rst), 1)
+                self.assertEqual((yield dut.rx_pcs_rst), 1)
+                self.assertEqual((yield dut.tx_ready), 0)
+                self.assertEqual((yield dut.rx_ready), 0)
+            yield dut.rst.eq(0)
+
+            # TX PLL lock is qualified before TX PCS is pulsed and released. RX PCS remains held
+            # while the SATA line is electrically idle, but TX is now available for COMRESET.
+            yield tx_lol.eq(0)
+            for _ in range(32):
+                yield
+                if (yield dut.tx_ready):
+                    break
+            else:
+                self.fail("TX never became ready after PLL lock")
+            self.assertEqual((yield dut.tx_pll_rst), 0)
+            self.assertEqual((yield dut.tx_pcs_rst), 0)
+            self.assertEqual((yield dut.rx_cdr_rst), 0)
+            self.assertEqual((yield dut.rx_pcs_rst), 1)
+            self.assertEqual((yield dut.rx_ready), 0)
+
+            # A one-cycle signal indication is too short to start RX CDR/PCS sequencing.
+            yield rx_los.eq(0)
+            yield
+            yield rx_los.eq(1)
+            for _ in range(10):
+                yield
+                self.assertEqual((yield dut.rx_cdr_rst), 0)
+                self.assertEqual((yield dut.rx_ready), 0)
+
+            # Continuous signal and CDR lock cause an RX CDR reset pulse, lock qualification, then
+            # an RX PCS reset pulse. TX must remain fully released throughout.
+            yield rx_los.eq(0)
+            yield rx_lol.eq(0)
+            saw_rx_cdr_reset = False
+            saw_rx_pcs_reset = False
+            for _ in range(64):
+                yield
+                self.assertEqual((yield dut.tx_ready), 1)
+                self.assertEqual((yield dut.tx_pll_rst), 0)
+                self.assertEqual((yield dut.tx_pcs_rst), 0)
+                saw_rx_cdr_reset |= bool((yield dut.rx_cdr_rst))
+                saw_rx_pcs_reset |= saw_rx_cdr_reset and bool((yield dut.rx_pcs_rst))
+                if (yield dut.rx_ready):
+                    break
+            else:
+                self.fail("RX never became ready after signal/CDR lock")
+            self.assertTrue(saw_rx_cdr_reset)
+            self.assertTrue(saw_rx_pcs_reset)
+            self.assertEqual((yield dut.rx_cdr_rst), 0)
+            self.assertEqual((yield dut.rx_pcs_rst), 0)
+
+        run_simulation(dut, gen())
+
+    def test_serdes_init_rx_recovery_preserves_tx(self):
+        dut, tx_lol, rx_lol, rx_los = self.make_serdes_init()
+
+        def gen():
+            yield tx_lol.eq(0)
+            yield rx_lol.eq(0)
+            yield rx_los.eq(0)
+            for _ in range(64):
+                yield
+                if (yield dut.rx_ready):
+                    break
+            else:
+                self.fail("initial startup never completed")
+
+            # An RX-only loss of lock must restart only the RX CDR/PCS sequence.
+            yield rx_lol.eq(1)
+            saw_rx_not_ready = False
+            for _ in range(20):
+                yield
+                saw_rx_not_ready |= not bool((yield dut.rx_ready))
+                self.assertEqual((yield dut.tx_ready), 1)
+                self.assertEqual((yield dut.tx_pll_rst), 0)
+                self.assertEqual((yield dut.tx_pcs_rst), 0)
+            self.assertTrue(saw_rx_not_ready)
+
+            yield rx_lol.eq(0)
+            for _ in range(64):
+                yield
+                self.assertEqual((yield dut.tx_ready), 1)
+                if (yield dut.rx_ready):
+                    break
+            else:
+                self.fail("RX did not recover after loss of lock")
+
+            # TX PLL loss is the condition that restarts the complete sequence.
+            yield tx_lol.eq(1)
+            for _ in range(8):
+                yield
+                if not (yield dut.tx_ready):
+                    break
+            else:
+                self.fail("TX loss of lock did not clear TX ready")
+            self.assertEqual((yield dut.tx_pll_rst), 1)
+            self.assertEqual((yield dut.tx_pcs_rst), 1)
+            self.assertEqual((yield dut.rx_cdr_rst), 1)
+            self.assertEqual((yield dut.rx_pcs_rst), 1)
+
+        run_simulation(dut, gen())
+
     # COMGenerator -------------------------------------------------------------------------------
     def com_generator_test(self, tx_clk_freq, com, burst_cycles, gap_cycles):
         dut = COMGenerator(tx_clk_freq)

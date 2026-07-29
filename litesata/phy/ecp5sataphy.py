@@ -446,7 +446,10 @@ class ECP5LiteSATAPHY(LiteXModule):
         serdes.add_stream_endpoints()
 
         # Ready ------------------------------------------------------------------------------------
-        self.comb += self.ready.eq(serdes.tx_ready & serdes.rx_ready)
+        # SATA OOB must start before a continuous high-speed receive clock exists. SerdesInit
+        # releases/qualifies TX first, then brings RX CDR/PCS up when the device starts ALIGN.
+        # The outer LiteSATAPHY.ready still requires ctrl.ready before exposing a completed link.
+        self.comb += self.ready.eq(serdes.tx_ready)
 
         # Datapath ---------------------------------------------------------------------------------
         oob_d102_active = Signal()

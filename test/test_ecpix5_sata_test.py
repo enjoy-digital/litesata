@@ -224,6 +224,25 @@ def test_analyzer_link_fsms_are_discovered_by_states(tmp_path):
     )
 
 
+def test_analyzer_ctrl_fsm_is_discovered_by_states(tmp_path):
+    analyzer = tmp_path / "analyzer.csv"
+    analyzer.write_text(
+        "\n".join([
+            "signal,0,fsm5_state,3",
+            "enum,0,fsm5_state,0,RESET-ALL",
+            "enum,0,fsm5_state,1,WAIT-TX-PLL-LOCK",
+            "signal,0,fsm0_state,4",
+            "enum,0,fsm0_state,0,SEND-ALIGN",
+            "enum,0,fsm0_state,3,COMINIT",
+            "enum,0,fsm0_state,7,COMWAKE",
+            "enum,0,fsm0_state,10,AWAIT-ALIGN",
+            "enum,0,fsm0_state,11,READY",
+        ]) + "\n"
+    )
+
+    assert ecpix5_sata_test.analyzer_ctrl_fsm(analyzer) == "fsm0_state"
+
+
 def test_link_capture_summary(tmp_path):
     capture = tmp_path / "capture.csv"
     capture.write_text(
@@ -348,3 +367,17 @@ def test_cli_requires_explicit_analyzer_map():
     assert args.reuse_bitstream
     assert args.no_analyzer
     assert args.poll_interval == 0.05
+    assert args.oob_subsampler == 32
+
+    try:
+        ecpix5_sata_test.parse_args([
+            "--reuse-bitstream",
+            "--csr-csv",
+            "csr.csv",
+            "--no-analyzer",
+            "--oob-capture",
+        ])
+    except SystemExit as error:
+        assert error.code == 2
+    else:
+        raise AssertionError("--oob-capture was accepted without an analyzer")

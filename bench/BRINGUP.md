@@ -3231,3 +3231,61 @@ ALIGN and continue speed search.
 The capture is `/tmp/litesata-known-healthy-align-window.csv` with SHA256
 `0d6d583219b838bc878ec212925ecd3708001418d1a66ac2f392ff303b77c698`.
 No ATA command or write BIST ran, and the line was parked after the capture.
+
+## *** CAMPAIGN 65 (2026-07-29): CASCADED ECP5 RESET SEQUENCE IS STABLE, NOT THE BLOCKER ***
+
+The common ECP5 TX/RX reset sequence was split into the four controls required
+by the DCU: TX PLL, TX PCS, RX CDR, and RX PCS. TX PLL lock is now qualified
+before pulsing/releasing TX PCS, making the complete transmit path stable
+before SATA OOB begins. RX CDR is released while RX PCS remains reset; after a
+continuous receive signal, RX CDR reset is pulsed, recovered-clock lock is
+qualified, then RX PCS reset is pulsed and released. An RX-only relock no
+longer resets the healthy TX path. `ECP5LiteSATAPHY.ready` exposes TX readiness
+to the OOB controller; the outer PHY `ready` still requires controller READY.
+This follows the same independent-reset structure used by LUNA on ECPIX-5 and
+avoids waiting for a continuous high-speed RX stream before COMRESET can run.
+
+Two focused simulations cover startup ordering, short-signal rejection,
+RX-only recovery, and full restart on TX PLL loss. The bounded hardware runner
+can also make a long group-0 OOB capture on AWAIT-ALIGN, and discovers the
+controller FSM from analyzer enums instead of relying on generated names.
+The focused ECP5/command/runner suite passes 38 tests.
+
+The first analyzer build exposed a real pre-existing RX timing problem: the
+fabric aligner's comment described a registered priority encoder, but its
+priority/vote/update controls were one combinational path. The initial image
+reached only 119.47MHz RX. Registering the priority result and its enable
+control preserved all aligner simulations and produced a timing-clean image:
+
+```text
+RX   182.32MHz (required 150.01MHz)
+TX   186.15MHz (required 150.01MHz)
+sys  108.84MHz (required  90.00MHz)
+
+c82c2eeb781581a0b73e4ecea890b70fc1924e692d8bd5e6430173cc879a1914  bitstream
+5805a24b709fe5750b65ad8b51a7efe177dedef176f5adeee75f1f81bdefc185  csr.csv
+9092409914212e7906ed465d5ee43ee58d374027b8747a27c791b0a0cf6f8931  analyzer.csv
+```
+
+The exact pre-change baseline and the new image both produced no strict READY
+against the known-healthy Toshiba. The new image ended at status `0x6`
+(TX ready + RX ready, controller not ready), proving the former reset
+dependency is gone but negotiation still stops above SerDes initialization.
+
+A 32x-subsampled group-0 capture spans 362.7us around AWAIT-ALIGN. SerDes init
+is READY for every qualified sample, TX/RX LOL remain zero, and none of the
+four reset controls reasserts. The drive first emits the known doubled-rate
+`0xa01c` family, then supplies a clean Gen2 ALIGN window from about +55us to
++108us. The capture contains 87 `0x4abc/k01` and 62 `0x7b4a/k00` half-words
+with no invalid decode in the clean center. The host enters SEND-ALIGN and its
+DCU input is exactly alternating `0x4abc/k01` and `0x7b4a/k00`. The drive
+still emits no SYNC or other valid non-ALIGN primitive and steps away.
+
+The capture is
+`/tmp/litesata-ecp5-reset-seq-oob-capture-32/oob-await-align.csv` with SHA256
+`b055a2bd2340a939c4e550c2d22254285645c5efa0ec6725693b2cc1c41b97d7`.
+This rules out common reset release, RX CDR relock, and RX PCS reset chatter as
+the reason the healthy disk rejects startup ALIGN. The next bounded
+discriminator is the ECPIX-5/LUNA CMU/DCO/SSC configuration, followed by
+serialized-eye/refclk-jitter measurement. No ATA command or write BIST ran,
+and the line was parked after every attempt.
