@@ -2878,3 +2878,39 @@ Asked the user for a cable reseat; reseat_watch.py running (12s attempts / 8s pa
 "DRIVE HEARS US" on first gapmin<15, auto-IDENTIFY on held link). Lesson re-learned the hard
 way: RemoteClient/LiteScopeAnalyzerDriver MUST get explicit csr_csv (stale csr.csv in
 scratchpad CWD broke the first watcher launch).
+
+## *** CAMPAIGN 56 (2026-07-29): EXACT IDENTIFY FIS + ACCEPTED SOFTWARE RESET ***
+
+The command-path analyzer now captures the unscrambled link payload only on
+`valid & ready`, and the runner qualifies away LiteScope's duplicated
+`scope_clk=0` export rows. This gives a definitive five-dword transaction:
+
+```text
+00ec8027 a0000000 00000000 08000000 00000000
+```
+
+The IDENTIFY FIS matches Linux/libata taskfile defaults (`device=0xa0`,
+`control=0x08`), receives `R_RDY/R_IP/R_OK`, and has `tx_error=0`. The drive
+still sends no PIO Setup, Data, Register D2H, or signature FIS. The earlier
+`device=0xe0/control=0` form was also accepted, so taskfile defaults are not
+the missing response.
+
+A command-layer software-reset path and bounded BIST CSR sequencer then sent
+the C=0 control FIS pair:
+
+```text
+00000027 00000000 00000000 0c000000 00000000
+00000027 00000000 00000000 08000000 00000000
+```
+
+Both complete frames received `R_OK`; the assertion interval was 6us and the
+link stayed READY. No post-reset signature followed. After one second the
+drive stopped replying `R_RDY` to IDENTIFY and remained in that state across
+an FPGA reload, fresh COMRESET, and 30 seconds electrically parked: host TX
+sat in `X_RDY`, while the drive continued sending idle `SYNC`.
+
+Next physical action: power-cycle the SATA drive, then run the bounded
+lenient IDENTIFY first without reset. If it again accepts the command but does
+not answer, run exactly one `--soft-reset --post-reset-delay 30` attempt with
+the post-reset signature watch. BIST writes remain blocked until IDENTIFY
+returns capacity and a disposable nonzero LBA range is explicitly chosen.

@@ -32,6 +32,10 @@ Build the instrumented ECPIX-5 image:
 ./bench/ecpix5.py --with-bist --with-analyzer --build
 ```
 
+The Trellis build defaults to placement seed 3, the first seed that met all
+three timing constraints with the command-path analyzer enabled. Override it
+with `--seed` when screening a materially changed image.
+
 The default Trellis build produces:
 
 ```text
@@ -86,6 +90,17 @@ python3 bench/ecpix5_sata_test.py \
 
 Do not enable this switch in a claimed production configuration.
 
+To issue the standard two-FIS ATA software reset before IDENTIFY, add:
+
+```sh
+    --soft-reset --post-reset-delay 30
+```
+
+The hardware asserts SRST for 6 us, clears it with a second Register H2D FIS
+while the device can still be busy, and completes each internal command so the
+crossbar grant is released. The runner separately captures the reset traffic,
+watches for the post-reset signature, and bounds reset recovery.
+
 ## Current hardware result
 
 On 2026-07-29, the reduced ECPIX-5 build routed with timing met:
@@ -111,20 +126,37 @@ framing failure for that attempt. It does not prove that the device accepted or
 executed the command FIS. The open problem is now above successful link-layer
 delivery, or in the exact FIS observed by the device.
 
-The next useful experiment should therefore capture and decode the
-unscrambled five-dword host-to-device register FIS at the transport/link
-boundary, checking:
+The transport/link-boundary capture has since closed the exact-FIS question.
+The accepted IDENTIFY Register H2D FIS is:
 
-- FIS type `0x27`;
-- command/control bit set;
-- command `0xec` (IDENTIFY DEVICE);
-- port, feature, LBA, device, count, ICC, and control fields all as expected;
-- exactly one accepted link transaction per command request; and
-- whether a different known-good drive emits its initial signature and an
-  error D2H FIS for the same command.
+```text
+00ec8027 a0000000 00000000 08000000 00000000
+```
 
-This is a much narrower test than changing OOB waveforms or assuming the
-ECPIX-5 hardware is faulty.
+It is exactly five dwords with type `0x27`, C=1, command `0xec`, device
+`0xa0`, control `0x08`, and all other taskfile fields zero. The device returns
+`R_OK` and the host reports no TX error, but no PIO Setup, Data, Register D2H,
+or initial signature FIS follows.
+
+An ATA software-reset discriminator was also exercised. The host emitted:
+
+```text
+00000027 00000000 00000000 0c000000 00000000
+00000027 00000000 00000000 08000000 00000000
+```
+
+Both C=0 control FISes were accepted with `R_OK`, and the PHY remained READY.
+No post-reset signature appeared. One second later the drive no longer
+answered the IDENTIFY `X_RDY` with `R_RDY`; reloading the FPGA, issuing a new
+COMRESET, and parking the line for 30 seconds did not clear that drive state.
+A true drive power cycle is therefore required before the next IDENTIFY
+attempt. This is a device-state recovery requirement, not evidence of a dead
+ECPIX-5 TX path: the same drive had just accepted the complete IDENTIFY and
+both reset frames.
+
+Do not start the write/check BIST until IDENTIFY succeeds and a disposable,
+nonzero sector range has been selected. The generator intentionally
+overwrites its target range.
 
 ## Regression tests
 
@@ -134,13 +166,15 @@ Run the focused ECP5 and acceptance tests with:
 python3 -m pytest -q \
     test/test_ecp5_oob.py \
     test/test_command_signature.py \
+    test/test_soft_reset.py \
     test/test_ecpix5_sata_test.py
 ```
 
 The ECP5 tests cover OOB timing/detection, strict SEND-ALIGN behavior, sticky
 ALIGN detection, fabric word alignment, production defaults/API selection, and
-the bounded runner. The command regression covers consumption of a non-error
-unsolicited register D2H signature.
+the bounded runner. The command regressions cover consumption of a non-error
+unsolicited register D2H signature, Linux-compatible IDENTIFY taskfile
+defaults, and the bounded assert/hold/deassert soft-reset sequence.
 
 ## Suggested upstream split
 
