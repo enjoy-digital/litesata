@@ -579,6 +579,8 @@ class SerDesECP5(LiteXModule):
         tx_lol     = Signal()
         self.rx_bus_dbg = Signal(24)   # raw DCU RX parallel bus (debug observation)
         self.rx_lol_dbg = Signal()     # CDR loss-of-lock (debug observation)
+        self.tx_data_dbg = Signal(20)  # registered encoded word presented to the DCU
+        self.tx_bus_dbg  = Signal(24)  # complete DCU TX parallel bus, including EI controls
         tx_data    = Signal(20)
         tx_data_r  = Signal(20) # tx_data registered in the tx domain (DCU TX bus setup, see below).
         tx_bus     = Signal(24)
@@ -1052,6 +1054,8 @@ class SerDesECP5(LiteXModule):
         # Debug observation taps (see bench analyzer group 0).
         self.comb += self.rx_bus_dbg.eq(rx_bus)
         self.comb += self.rx_lol_dbg.eq(rx_lol)
+        self.comb += self.tx_data_dbg.eq(tx_data_r)
+        self.comb += self.tx_bus_dbg.eq(tx_bus)
 
         # TX/RX Datapaths (and PRBS in bypass mode) ------------------------------------------------
         if pcs_mode in ["bypass", "pcie_bypass", "hybrid"]:

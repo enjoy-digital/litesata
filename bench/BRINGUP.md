@@ -3150,3 +3150,56 @@ qualification itself. No write BIST ran and the line was parked in every
 The final three-primitive build met 161.73 MHz RX, 162.07 MHz TX, and
 102.43 MHz system timing. Its exact artifact repeated the strict result:
 zero READY events in 30 seconds, no command issued, and a final parked line.
+
+## *** CAMPAIGN 63 (2026-07-29): HOST ALIGN IS CLEAN AT THE DCU TX BUS ***
+
+The independently known-healthy Toshiba was retained and the ECP5 serializer
+input was observed directly. Two analyzer taps expose the registered 20-bit
+8b/10b word and the complete 24-bit DCU TX bus, including the per-byte
+electrical-idle controls. The system-clocked analyzer build met timing at
+155.13 MHz RX, 178.99 MHz TX, and 113.49 MHz system. Its qualified artifacts
+are:
+
+```text
+b1ff2f4f4df2e5aac9272e3a757ed0d597c538b7a3c7541e711bb1f646b55bea  bitstream
+9029b6e2ca12007698087e6de994c2f38b0c75b2a50579de0457af60fc7ab37d  csr.csv
+998acde6cda00672f340634f4bc65d8f6ccae1c4e8ef98f3a489edc61c808346  analyzer.csv
+```
+
+One bounded strict attempt captured 900 qualified system-clock samples in
+SEND-ALIGN. After the initial D10.2 pipeline boundary, every sampled DCU bus
+word was one of:
+
+```text
+0x2aa17c  = 8b10b(0x4abc/k01)
+0x0e42aa  = 8b10b(0x7b4a/k00)
+```
+
+These are exactly the two LiteX encoder outputs predicted for the alternating
+16-bit halves of `0x7b4a4abc/k0001`. The sequence preserves running disparity.
+The DCU electrical-idle and reserved bits were zero in every SEND-ALIGN
+sample. The asynchronous pre-encoder and 20-bit observation taps contain
+expected torn transition samples; critically, the complete 24-bit DCU bus
+contains no third pattern or electrical-idle assertion during steady ALIGN.
+The receive trace first contains a clean device ALIGN half around sample 113,
+the controller enters SEND-ALIGN at sample 120, and encoded host ALIGN reaches
+the DCU bus at sample 129. The response is therefore about 0.1--0.2us after
+device ALIGN detection, leaving essentially all of the 54.6us speed window.
+The capture is
+`/tmp/litesata-known-healthy-host-align-txbus.csv` with SHA256
+`08ede19bf6d14755b8b967aa813305afff7163c0ff54b622096c3ccdd9e7cb10`.
+
+The earlier pre/post-cursor sweep preserved about 6.0mA total drive. A final
+verified SCI sweep tested main-data-only settings of approximately 2.4mA,
+3.2mA, and 3.6mA for 15 seconds each. All three produced zero READY events,
+just like stock amplitude. The result is
+`/tmp/litesata-known-healthy-tx-main-sweep.json` with SHA256
+`6e9b3a41d14ffb09f4244d459152685b5f1f224eca70253fe7eb1f6fd01b7ae0`.
+
+The attempt again produced no valid non-ALIGN response and no READY event.
+This rules out fabric encoder, running-disparity, TX pipeline, DCU bus packing,
+accidental electrical idle, response latency, and simple TX amplitude/cursor
+selection as the reason the healthy disk does not answer host ALIGN. The
+remaining high-value discriminator is a proper eye measurement of the
+serialized waveform at the drive connector, including PLL jitter. No ATA
+command or write BIST ran, and the line was parked after every experiment.

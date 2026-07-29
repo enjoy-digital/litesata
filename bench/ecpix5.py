@@ -189,6 +189,8 @@ class SATATestSoC(SoCMini):
         if with_analyzer:
             phy    = self.sata_phy.phy
             serdes = phy.serdes
+            identify = (self.sata_bist.identify.bist_identify
+                if with_bist else self.sata_bist.identify)
 
             # Stable names for the unscrambled link input. Sampling valid & ready here records
             # exactly the FIS dwords accepted by the CRC/scrambler pipeline, independently of
@@ -247,6 +249,8 @@ class SATATestSoC(SoCMini):
                         phy.sink.valid,
                         phy.sink.data,
                         phy.sink.charisk,
+                        *([serdes.tx_data_dbg, serdes.tx_bus_dbg]
+                          if hasattr(serdes, "tx_data_dbg") else []),
                         self.sata_phy.ctrl.rx_idle,
                         self.sata_phy.ctrl.misalign,
                         phy.rxnotintable,
@@ -282,7 +286,7 @@ class SATATestSoC(SoCMini):
                     ],
                     # Group 3: command-path trace (identify pulse stage-by-stage).
                     3: [
-                        self.sata_bist.identify.bist_identify.fsm,
+                        identify.fsm,
                         self.sata_core.command.tx.fsm,
                         self.sata_core.command.rx.fsm,
                         self.sata_core.transport.tx.fsm,
@@ -307,6 +311,8 @@ class SATATestSoC(SoCMini):
                         phy.com_gen.active,
                         serdes.sink.data,
                         serdes.sink.ctrl,
+                        *([serdes.tx_data_dbg, serdes.tx_bus_dbg]
+                          if hasattr(serdes, "tx_data_dbg") else []),
                     ],
                 }
             if analyzer_domain == "rx":
