@@ -140,7 +140,13 @@ class SATATestSoC(SoCMini):
         # stops answering and the link tears down ~41us later. with_bist only gates the BIST CSRs.
         self.sata_core     = LiteSATACore(self.sata_phy)
         self.sata_crossbar = LiteSATACrossbar(self.sata_core)
-        self.sata_bist     = LiteSATABIST(self.sata_crossbar, with_csr=with_bist)
+        self.sata_bist     = LiteSATABIST(
+            self.sata_crossbar,
+            with_csr         = with_bist,
+            # ATA requires SRST asserted for at least 5us. Use 6us so the
+            # interval remains comfortably above the minimum after rounding.
+            soft_reset_cycles = int(sys_clk_freq*6e-6),
+        )
 
         # Timing constraints
         platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
@@ -183,6 +189,21 @@ class SATATestSoC(SoCMini):
         if with_analyzer:
             phy    = self.sata_phy.phy
             serdes = phy.serdes
+
+            # Stable names for the unscrambled link input. Sampling valid & ready here records
+            # exactly the FIS dwords accepted by the CRC/scrambler pipeline, independently of
+            # any later wire-level decoding.
+            self.link_tx_payload_valid = Signal()
+            self.link_tx_payload_ready = Signal()
+            self.link_tx_payload_last  = Signal()
+            self.link_tx_payload_data  = Signal(32)
+            self.comb += [
+                self.link_tx_payload_valid.eq(self.sata_core.link.sink.valid),
+                self.link_tx_payload_ready.eq(self.sata_core.link.sink.ready),
+                self.link_tx_payload_last.eq(self.sata_core.link.sink.last),
+                self.link_tx_payload_data.eq(self.sata_core.link.sink.data),
+            ]
+
             if analyzer_domain == "sys":
                 analyzer_signals = {
                     # Group 0: OOB/ctrl bring-up.
@@ -246,6 +267,10 @@ class SATATestSoC(SoCMini):
                         self.sata_core.link.tx.from_rx.primitive_valid,
                         self.sata_core.link.tx.from_rx.primitive,
                         self.sata_core.link.tx.error,
+                        self.link_tx_payload_valid,
+                        self.link_tx_payload_ready,
+                        self.link_tx_payload_last,
+                        self.link_tx_payload_data,
                         self.sata_core.link.tx_align.source.valid,
                         self.sata_core.link.tx_align.source.data,
                         self.sata_core.link.tx_align.source.charisk,
@@ -309,6 +334,7 @@ def main():
     parser.add_argument("--load",            action="store_true", help="Load bitstream (to SRAM).")
     parser.add_argument("--toolchain",       default="trellis",   help="FPGA toolchain: trellis (default) or diamond.")
     parser.add_argument("--device",          default="85F",       help="FPGA device (85F or 45F).")
+    parser.add_argument("--seed",            default=3, type=int, help="nextpnr placement seed (default: 3).")
     parser.add_argument("--sys-clk-freq",    default=90e6, type=float, help="System clock frequency (default: 90MHz).")
     parser.add_argument("--with-bist",       action="store_true", help="Add SATA Core/Crossbar/BIST.")
     parser.add_argument("--with-analyzer",   action="store_true", help="Add LiteScope Analyzer.")
@@ -325,7 +351,8 @@ def main():
         analyzer_domain = args.analyzer_domain,
     )
     builder = Builder(soc, csr_csv="csr.csv")
-    builder.build(run=args.build)
+    build_kwargs = {"seed": args.seed} if args.toolchain == "trellis" else {}
+    builder.build(run=args.build, **build_kwargs)
 
     if args.load:
         prog = soc.platform.create_programmer()

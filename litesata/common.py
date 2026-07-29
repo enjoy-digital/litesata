@@ -240,11 +240,13 @@ reg_d2h_status = {
 
 def command_tx_description(dw):
     param_layout = [
-        ("write",    1),
-        ("read",     1),
-        ("identify", 1),
-        ("sector",  48),
-        ("count",   16)
+        ("write",      1),
+        ("read",       1),
+        ("identify",   1),
+        ("soft_reset", 1),
+        ("control",    8),
+        ("sector",    48),
+        ("count",     16)
     ]
     payload_layout = [("data", dw)]
     return EndpointDescription(payload_layout, param_layout)

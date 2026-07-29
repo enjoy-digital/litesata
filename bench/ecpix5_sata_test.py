@@ -290,6 +290,23 @@ def run_identify(regs, timeout):
     return words, "complete"
 
 
+def run_soft_reset(regs, timeout, settle=0.01):
+    start = getattr(regs, "sata_bist_soft_reset_start", None)
+    done = getattr(regs, "sata_bist_soft_reset_done", None)
+    if start is None or done is None:
+        return "unsupported"
+
+    start.write(1)
+    # The hardware transaction takes only a few microseconds, so a remote CSR
+    # client can legitimately miss the low (busy) phase of done.
+    time.sleep(settle)
+    if done.read():
+        return "complete"
+    if wait_until(done.read, timeout=timeout, interval=1e-3):
+        return "complete"
+    return "timeout"
+
+
 def make_analyzer(regs, analyzer_csv):
     from litescope import LiteScopeAnalyzerDriver
 
@@ -342,13 +359,23 @@ def summarize_link_capture(path, tx_fsm, rx_fsm):
     if len(rows) < 3:
         return {}
     header = [field.strip() for field in rows[0]]
+    sample_rows = rows[2:]
+    if "scope_clk" in header:
+        scope_clk_index = header.index("scope_clk")
+        qualified = [
+            fields for fields in sample_rows
+            if fields[scope_clk_index].strip()
+            and int(fields[scope_clk_index].strip(), 2)
+        ]
+        if qualified:
+            sample_rows = qualified
 
     def state_occupancy(signal, names):
         if signal not in header:
             return {}
         index = header.index(signal)
         occupancy = Counter()
-        for fields in rows[2:]:
+        for fields in sample_rows:
             value = fields[index].strip()
             if not value:
                 continue
@@ -371,7 +398,7 @@ def summarize_link_capture(path, tx_fsm, rx_fsm):
         data_index = header.index(data_name)
         valid_index = header.index(valid_name)
         occupancy = Counter()
-        for fields in rows[2:]:
+        for fields in sample_rows:
             data = fields[data_index].strip()
             valid = fields[valid_index].strip()
             if not data or not valid or int(valid, 2) != 1:
@@ -395,10 +422,68 @@ def summarize_link_capture(path, tx_fsm, rx_fsm):
         error_index = header.index(tx_error)
         summary["tx_error_samples"] = sum(
             int(fields[error_index].strip(), 2)
-            for fields in rows[2:]
+            for fields in sample_rows
             if fields[error_index].strip()
         )
+
+    payload_names = {
+        field: unique_suffix(f"link_tx_payload_{field}")
+        for field in ["valid", "ready", "last", "data"]
+    }
+    if all(payload_names.values()):
+        indexes = {field: header.index(name) for field, name in payload_names.items()}
+        packets = []
+        packet = []
+        for fields in sample_rows:
+            values = {
+                field: fields[index].strip()
+                for field, index in indexes.items()
+            }
+            if not values["valid"] or not values["ready"]:
+                continue
+            if not (int(values["valid"], 2) and int(values["ready"], 2)):
+                continue
+            packet.append(int(values["data"], 2))
+            if values["last"] and int(values["last"], 2):
+                packets.append(packet)
+                packet = []
+        summary["tx_link_packets"] = [
+            [f"0x{word:08x}" for word in packet_words]
+            for packet_words in packets
+        ]
+        if packet:
+            summary["tx_link_incomplete_packet"] = [
+                f"0x{word:08x}" for word in packet
+            ]
+        summary["tx_h2d_register_fis"] = [
+            decode_h2d_register_fis(packet_words)
+            for packet_words in packets
+            if packet_words and (packet_words[0] & 0xFF) == 0x27
+        ]
     return summary
+
+
+def decode_h2d_register_fis(words):
+    if len(words) != 5:
+        return {
+            "valid_length": False,
+            "dwords": [f"0x{word:08x}" for word in words],
+        }
+    return {
+        "valid_length": True,
+        "type": words[0] & 0xFF,
+        "pm_port": (words[0] >> 8) & 0xF,
+        "command_control": (words[0] >> 15) & 1,
+        "command": (words[0] >> 16) & 0xFF,
+        "features": ((words[2] >> 24) << 8) | ((words[0] >> 24) & 0xFF),
+        "lba": (words[1] & 0xFFFFFF) | ((words[2] & 0xFFFFFF) << 24),
+        "device": (words[1] >> 24) & 0xFF,
+        "count": words[3] & 0xFFFF,
+        "icc": (words[3] >> 16) & 0xFF,
+        "control": (words[3] >> 24) & 0xFF,
+        "reserved": words[4],
+        "dwords": [f"0x{word:08x}" for word in words],
+    }
 
 
 def program_bitstream(path, timeout=60):
@@ -453,6 +538,8 @@ def run(args):
         "wake_gap_cycles": 16,
         "align_holdoff": 64,
         "align_nocomma": 4096,
+        "soft_reset_requested": args.soft_reset,
+        "post_reset_delay_s": args.post_reset_delay,
     }
     result.flush()
 
@@ -544,6 +631,81 @@ def run(args):
             result.data["signature_seen"] = signature_seen
             result.event("signature_watch_complete", seen=signature_seen)
 
+        if args.soft_reset:
+            reset_analyzer = None
+            if analyzer_csv is not None:
+                reset_analyzer = make_analyzer(regs, analyzer_csv)
+                arm_analyzer(reset_analyzer, 2, {link_tx_fsm: "0b001"})
+                result.event("soft_reset_watch_armed")
+
+            result.event("soft_reset_start")
+            soft_reset_state = run_soft_reset(regs, args.soft_reset_timeout)
+            result.data["soft_reset_state"] = soft_reset_state
+
+            if reset_analyzer is not None:
+                capture_seen = bool(wait_until(
+                    reset_analyzer.done, args.analyzer_timeout, 0.01
+                ))
+                result.data["soft_reset_capture_seen"] = capture_seen
+                if capture_seen:
+                    reset_path = result.output_dir / "soft-reset-link.csv"
+                    save_analyzer(reset_analyzer, reset_path)
+                    result.data["soft_reset_capture"] = {
+                        "path": str(reset_path),
+                        **summarize_link_capture(
+                            reset_path, link_tx_fsm, link_rx_fsm
+                        ),
+                    }
+
+            if soft_reset_state != "complete":
+                result.data["outcome"] = f"soft_reset_{soft_reset_state}"
+                result.data["final_snapshot"] = phy_snapshot(regs)
+                result.event(result.data["outcome"])
+                return 5
+
+            post_reset_analyzer = None
+            if analyzer_csv is not None:
+                post_reset_analyzer = make_analyzer(regs, analyzer_csv)
+                arm_analyzer(post_reset_analyzer, 2, {link_rx_fsm: "0b001"})
+                result.event("post_reset_signature_watch_armed")
+
+            reset_wait_started = time.monotonic()
+            post_reset_signature_seen = False
+            if post_reset_analyzer is not None:
+                post_reset_signature_seen = bool(wait_until(
+                    post_reset_analyzer.done,
+                    args.post_reset_delay,
+                    min(0.01, args.poll_interval),
+                ))
+                if post_reset_signature_seen:
+                    signature_path = result.output_dir / "post-reset-signature.csv"
+                    save_analyzer(post_reset_analyzer, signature_path)
+                    result.data["post_reset_signature_capture"] = {
+                        "path": str(signature_path),
+                        **summarize_link_capture(
+                            signature_path, link_tx_fsm, link_rx_fsm
+                        ),
+                    }
+            remaining_delay = (
+                args.post_reset_delay -
+                (time.monotonic() - reset_wait_started)
+            )
+            if remaining_delay > 0:
+                time.sleep(remaining_delay)
+            result.data["post_reset_signature_seen"] = post_reset_signature_seen
+
+            reset_snapshot = phy_snapshot(regs)
+            result.data["post_reset_snapshot"] = reset_snapshot
+            result.event(
+                "soft_reset_complete",
+                signature_seen=post_reset_signature_seen,
+                snapshot=reset_snapshot,
+            )
+            if not (reset_snapshot.get("sata_phy_status", 0) & 1):
+                result.data["outcome"] = "soft_reset_link_lost"
+                result.event("soft_reset_link_lost")
+                return 6
+
         identify_analyzer = None
         if analyzer_csv is not None:
             identify_analyzer = make_analyzer(regs, analyzer_csv)
@@ -624,6 +786,13 @@ def parse_args(argv=None):
         help="Diagnostic only: permit ALIGN as well as SYNC to exit SEND-ALIGN.",
     )
     parser.add_argument("--signature-timeout", default=1.0, type=float)
+    parser.add_argument(
+        "--soft-reset",
+        action="store_true",
+        help="Issue an ATA software reset before IDENTIFY.",
+    )
+    parser.add_argument("--soft-reset-timeout", default=1.0, type=float)
+    parser.add_argument("--post-reset-delay", default=1.0, type=float)
     parser.add_argument("--identify-timeout", default=5.0, type=float)
     parser.add_argument("--analyzer-timeout", default=1.0, type=float)
     args = parser.parse_args(argv)
@@ -631,6 +800,8 @@ def parse_args(argv=None):
         parser.error("--analyzer-csv is required unless --no-analyzer is used")
     if args.poll_interval <= 0:
         parser.error("--poll-interval must be greater than zero")
+    if args.post_reset_delay < 0:
+        parser.error("--post-reset-delay cannot be negative")
     return args
 
 

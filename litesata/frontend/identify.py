@@ -91,3 +91,82 @@ class LiteSATAIdentifyCSR(Module, AutoCSR):
             self._source_data.status.eq(bist_identify.source.data),
             bist_identify.source.ready.eq(self._source_ready.wr_data & self._source_ready.wr_stb)
         ]
+
+# LiteSATASoftReset --------------------------------------------------------------------------------
+
+class LiteSATASoftReset(Module):
+    """Issue the two control FISes of the ATA software-reset protocol."""
+    def __init__(self, user_port, reset_cycles):
+        if reset_cycles < 1:
+            raise ValueError("reset_cycles must be greater than zero")
+
+        self.start = Signal()
+        self.done  = Signal()
+
+        # # #
+
+        source, sink = user_port.sink, user_port.source
+        count = Signal(max=reset_cycles)
+
+        self.comb += [
+            source.last.eq(1),
+            source.soft_reset.eq(1),
+        ]
+
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+            self.done.eq(1),
+            NextValue(count, 0),
+            If(self.start,
+                NextState("SEND-ASSERT")
+            )
+        )
+        fsm.act("SEND-ASSERT",
+            source.valid.eq(1),
+            source.control.eq(0x0c),  # nIEN | SRST.
+            If(source.valid & source.ready,
+                NextState("WAIT-ASSERT-ACK")
+            )
+        )
+        fsm.act("WAIT-ASSERT-ACK",
+            sink.ready.eq(1),
+            If(sink.valid & sink.last & sink.end,
+                NextState("HOLD")
+            )
+        )
+        fsm.act("HOLD",
+            If(count == (reset_cycles - 1),
+                NextState("SEND-DEASSERT")
+            ).Else(
+                NextValue(count, count + 1)
+            )
+        )
+        fsm.act("SEND-DEASSERT",
+            source.valid.eq(1),
+            source.control.eq(0x08),  # nIEN, SRST cleared.
+            If(source.valid & source.ready,
+                NextState("WAIT-DEASSERT-ACK")
+            )
+        )
+        fsm.act("WAIT-DEASSERT-ACK",
+            sink.ready.eq(1),
+            If(sink.valid & sink.last & sink.end,
+                NextState("IDLE")
+            )
+        )
+
+# LiteSATASoftResetCSR -----------------------------------------------------------------------------
+
+class LiteSATASoftResetCSR(Module, AutoCSR):
+    def __init__(self, soft_reset):
+        self._start = CSR()
+        self._done  = CSRStatus()
+
+        # # #
+
+        self.soft_reset = soft_reset
+        self.submodules += soft_reset
+        self.comb += [
+            soft_reset.start.eq(self._start.wr_data & self._start.wr_stb),
+            self._done.status.eq(soft_reset.done),
+        ]

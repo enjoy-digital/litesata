@@ -7,7 +7,12 @@
 
 from litesata.common import *
 from litesata.core.link import Scrambler
-from litesata.frontend.identify import LiteSATAIdentify, LiteSATAIdentifyCSR
+from litesata.frontend.identify import (
+    LiteSATAIdentify,
+    LiteSATAIdentifyCSR,
+    LiteSATASoftReset,
+    LiteSATASoftResetCSR,
+)
 
 from litex.soc.interconnect.csr import *
 
@@ -243,14 +248,21 @@ class LiteSATABISTUnitCSR(Module, AutoCSR):
 # LiteSATABIST --------------------------------------------------------------------------
 
 class LiteSATABIST(Module, AutoCSR):
-    def __init__(self, crossbar, with_csr=False, count_width=32):
+    def __init__(self, crossbar, with_csr=False, count_width=32, soft_reset_cycles=None):
         generator = LiteSATABISTGenerator(crossbar.get_port(), count_width)
         checker   = LiteSATABISTChecker(crossbar.get_port(), count_width)
         identify  = LiteSATAIdentify(crossbar.get_port())
+        soft_reset = None
+        if soft_reset_cycles is not None:
+            soft_reset = LiteSATASoftReset(crossbar.get_port(), soft_reset_cycles)
         if with_csr:
             generator = LiteSATABISTUnitCSR(generator)
             checker   = LiteSATABISTUnitCSR(checker)
             identify  = LiteSATAIdentifyCSR(identify)
+            if soft_reset is not None:
+                soft_reset = LiteSATASoftResetCSR(soft_reset)
         self.submodules.generator = generator
         self.submodules.checker   = checker
         self.submodules.identify  = identify
+        if soft_reset is not None:
+            self.submodules.soft_reset = soft_reset

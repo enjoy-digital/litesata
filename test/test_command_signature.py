@@ -9,13 +9,96 @@ from migen.sim import run_simulation
 
 from litex.soc.interconnect import stream
 
-from litesata.common import fis_types, transport_rx_description
-from litesata.core.command import LiteSATACommandRX
+from litesata.common import fis_types, regs, transport_rx_description, transport_tx_description
+from litesata.core.command import LiteSATACommandRX, LiteSATACommandTX
 
 
 class TransportStub(Module):
     def __init__(self):
         self.source = stream.Endpoint(transport_rx_description(32))
+
+
+class TransportTXStub(Module):
+    def __init__(self):
+        self.sink = stream.Endpoint(transport_tx_description(32))
+
+
+def test_identify_uses_ata_taskfile_defaults():
+    class DUT(Module):
+        def __init__(self):
+            self.submodules.transport = TransportTXStub()
+            self.submodules.command = LiteSATACommandTX(self.transport)
+
+    dut = DUT()
+
+    def stimulus():
+        yield dut.command.sink.valid.eq(1)
+        yield dut.command.sink.identify.eq(1)
+        yield dut.transport.sink.ready.eq(1)
+        for _ in range(8):
+            if (yield dut.transport.sink.valid):
+                assert (yield dut.transport.sink.type) == fis_types["REG_H2D"]
+                assert (yield dut.transport.sink.c) == 1
+                assert (yield dut.transport.sink.command) == regs["IDENTIFY_DEVICE"]
+                assert (yield dut.transport.sink.device) == 0xA0
+                assert (yield dut.transport.sink.control) == 0x08
+                return
+            yield
+        raise AssertionError("IDENTIFY taskfile was not presented to transport")
+
+    run_simulation(dut, stimulus())
+
+
+def test_soft_reset_uses_control_fis_without_command_bit():
+    class DUT(Module):
+        def __init__(self):
+            self.submodules.transport = TransportTXStub()
+            self.submodules.command = LiteSATACommandTX(self.transport)
+
+    dut = DUT()
+
+    def stimulus():
+        yield dut.command.sink.valid.eq(1)
+        yield dut.command.sink.soft_reset.eq(1)
+        yield dut.command.sink.control.eq(0x0c)
+        yield dut.transport.sink.ready.eq(1)
+        for _ in range(8):
+            if (yield dut.transport.sink.valid):
+                assert (yield dut.transport.sink.type) == fis_types["REG_H2D"]
+                assert (yield dut.transport.sink.c) == 0
+                assert (yield dut.transport.sink.command) == 0
+                assert (yield dut.transport.sink.device) == 0
+                assert (yield dut.transport.sink.control) == 0x0c
+                return
+            yield
+        raise AssertionError("soft-reset control FIS was not presented to transport")
+
+    run_simulation(dut, stimulus())
+
+
+def test_soft_reset_completes_after_transport_accepts_fis():
+    class DUT(Module):
+        def __init__(self):
+            self.submodules.transport = TransportStub()
+            self.submodules.command = LiteSATACommandRX(self.transport)
+
+    dut = DUT()
+
+    def stimulus():
+        yield dut.command.source.ready.eq(1)
+        yield dut.command.from_tx.soft_reset.eq(1)
+        yield
+        yield dut.command.from_tx.soft_reset.eq(0)
+        for _ in range(8):
+            if (yield dut.command.source.valid):
+                assert (yield dut.command.source.last)
+                assert (yield dut.command.source.end)
+                assert not (yield dut.command.source.failed)
+                return
+            yield
+        raise AssertionError("soft-reset command did not complete")
+
+    run_simulation(dut, stimulus())
 
 
 def test_identify_consumes_multibeat_signature_and_keeps_waiting_for_pio():

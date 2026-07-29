@@ -45,6 +45,8 @@ class FakeRegs:
             "sata_bist_identify_source_valid",
             "sata_bist_identify_source_data",
             "sata_bist_identify_source_ready",
+            "sata_bist_soft_reset_start",
+            "sata_bist_soft_reset_done",
         ]:
             setattr(self, name, FakeRegister())
 
@@ -133,6 +135,23 @@ def test_wait_until_is_bounded():
     assert len(calls) == 3
 
 
+def test_soft_reset_is_bounded_and_uses_dedicated_csr(monkeypatch):
+    regs = FakeRegs()
+    regs.sata_bist_soft_reset_done.value = 1
+    monkeypatch.setattr(ecpix5_sata_test.time, "sleep", lambda _: None)
+
+    state = ecpix5_sata_test.run_soft_reset(regs, timeout=0.1)
+
+    assert state == "complete"
+    assert regs.sata_bist_soft_reset_start.writes == [1]
+
+
+def test_soft_reset_reports_unsupported_map():
+    state = ecpix5_sata_test.run_soft_reset(SimpleNamespace(), timeout=0.1)
+
+    assert state == "unsupported"
+
+
 def test_result_is_incremental(tmp_path):
     result = ecpix5_sata_test.Result(tmp_path)
     result.event("stage", value=3)
@@ -208,18 +227,24 @@ def test_link_capture_summary(tmp_path):
         "\n".join([
             "tx_fsm,rx_fsm,datapath_sink_sink_payload_data,datapath_sink_sink_payload_charisk,"
             "linktx_from_rx_payload_primitive,linktx_from_rx_payload_primitive_valid,"
-            "litesatalinktx_error",
-            "3,3,32,4,32,1,1",
+            "litesatalinktx_error,link_tx_payload_valid,link_tx_payload_ready,"
+            "link_tx_payload_last,link_tx_payload_data",
+            "3,3,32,4,32,1,1,1,1,1,32",
             "001,000,01010111010101111011010101111100,0001,"
-            "01001010010010101001010101111100,1,0",
+            "01001010010010101001010101111100,1,0,1,1,0,"
+            "00000000111011001000000000100111",
             "001,000,01010111010101111011010101111100,0001,"
-            "00000000000000000000000000000000,0,0",
+            "00000000000000000000000000000000,0,0,1,1,0,"
+            "11100000000000000000000000000000",
             "010,000,00110111001101111011010101111100,0001,"
-            "00000000000000000000000000000000,0,0",
+            "00000000000000000000000000000000,0,0,1,1,0,"
+            "00000000000000000000000000000000",
             "011,000,00000000000000000000000000000000,0000,"
-            "00000000000000000000000000000000,0,0",
+            "00000000000000000000000000000000,0,0,1,1,0,"
+            "00000000000000000000000000000000",
             "110,000,01011000010110001011010101111100,0001,"
-            "00110101001101011011010101111100,1,0",
+            "00110101001101011011010101111100,1,0,1,1,1,"
+            "00000000000000000000000000000000",
         ]) + "\n"
     )
 
@@ -231,7 +256,72 @@ def test_link_capture_summary(tmp_path):
         "tx_wire_primitives": {"X_RDY": 2, "SOF": 1, "WTRM": 1},
         "rx_wire_primitives": {"R_RDY": 1, "R_OK": 1},
         "tx_error_samples": 0,
+        "tx_link_packets": [[
+            "0x00ec8027",
+            "0xe0000000",
+            "0x00000000",
+            "0x00000000",
+            "0x00000000",
+        ]],
+        "tx_h2d_register_fis": [{
+            "valid_length": True,
+            "type": 0x27,
+            "pm_port": 0,
+            "command_control": 1,
+            "command": 0xEC,
+            "features": 0,
+            "lba": 0,
+            "device": 0xE0,
+            "count": 0,
+            "icc": 0,
+            "control": 0,
+            "reserved": 0,
+            "dwords": [
+                "0x00ec8027",
+                "0xe0000000",
+                "0x00000000",
+                "0x00000000",
+                "0x00000000",
+            ],
+        }],
     }
+
+
+def test_link_capture_qualifies_duplicated_scope_clock_rows(tmp_path):
+    capture = tmp_path / "capture.csv"
+    header = [
+        "tx_fsm",
+        "rx_fsm",
+        "link_tx_payload_valid",
+        "link_tx_payload_ready",
+        "link_tx_payload_last",
+        "link_tx_payload_data",
+        "scope_clk",
+    ]
+    words = [0x00EC8027, 0xE0000000, 0, 0, 0]
+    rows = [",".join(header), "3,3,1,1,1,32,1"]
+    for index, word in enumerate(words):
+        last = int(index == len(words) - 1)
+        for scope_clk in [1, 0]:
+            rows.append(
+                f"011,000,1,1,{last},{word:032b},{scope_clk}"
+            )
+    capture.write_text("\n".join(rows) + "\n")
+
+    summary = ecpix5_sata_test.summarize_link_capture(
+        capture, "tx_fsm", "rx_fsm"
+    )
+
+    assert summary["tx_states"] == {"COPY": 5}
+    assert summary["tx_link_packets"] == [[
+        "0x00ec8027",
+        "0xe0000000",
+        "0x00000000",
+        "0x00000000",
+        "0x00000000",
+    ]]
+    assert summary["tx_h2d_register_fis"][0]["valid_length"]
+    assert summary["tx_h2d_register_fis"][0]["command"] == 0xEC
 
 
 def test_cli_requires_explicit_analyzer_map():

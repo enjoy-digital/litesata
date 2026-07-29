@@ -10,10 +10,11 @@ from litesata.common import *
 # Layouts ------------------------------------------------------------------------------------------
 
 tx_to_rx = [
-    ("write",    1),
-    ("read",     1),
-    ("identify", 1),
-    ("count",    16)
+    ("write",      1),
+    ("read",       1),
+    ("identify",   1),
+    ("soft_reset", 1),
+    ("count",     16)
 ]
 
 rx_to_tx = [
@@ -31,21 +32,27 @@ class LiteSATACommandTX(Module):
 
         # # #
 
-        self.comb += [
-            transport.sink.pm_port.eq(0),
-            transport.sink.features.eq(0),
-            transport.sink.lba.eq(sink.sector),
-            transport.sink.device.eq(0xe0),
-            transport.sink.count.eq(sink.count),
-            transport.sink.icc.eq(0),
-            transport.sink.control.eq(0),
-            transport.sink.data.eq(sink.data)
-        ]
-
         is_write       = Signal()
         is_read        = Signal()
         is_identify    = Signal()
+        is_soft_reset  = Signal()
+        control        = Signal(8)
         dwords_counter = Signal(max=fis_max_dwords)
+
+        self.comb += [
+            transport.sink.pm_port.eq(0),
+            transport.sink.features.eq(0),
+            transport.sink.lba.eq(Mux(is_soft_reset, 0, sink.sector)),
+            # Match the ATA taskfile defaults used by conventional hosts:
+            # bits 7/5 are obsolete-but-set, and the LBA bit is meaningful for
+            # reads/writes but not IDENTIFY DEVICE.
+            transport.sink.device.eq(Mux(is_soft_reset, 0,
+                Mux(is_identify, 0xa0, 0xe0))),
+            transport.sink.count.eq(Mux(is_soft_reset, 0, sink.count)),
+            transport.sink.icc.eq(0),
+            transport.sink.control.eq(Mux(is_soft_reset, control, 0x08)),
+            transport.sink.data.eq(sink.data)
+        ]
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
@@ -62,12 +69,14 @@ class LiteSATACommandTX(Module):
                 is_write.eq(sink.write),
                 is_read.eq(sink.read),
                 is_identify.eq(sink.identify),
+                is_soft_reset.eq(sink.soft_reset),
+                control.eq(sink.control),
             )
 
         fsm.act("SEND_CMD",
             transport.sink.valid.eq(sink.valid),
             transport.sink.last.eq(1),
-            transport.sink.c.eq(1),
+            transport.sink.c.eq(~is_soft_reset),
             If(transport.sink.valid & transport.sink.ready,
                 If(is_write,
                     NextState("WAIT_DMA_ACTIVATE")
@@ -104,7 +113,9 @@ class LiteSATACommandTX(Module):
                 transport.sink.type.eq(fis_types["DATA"]),
             ).Else(
                 transport.sink.type.eq(fis_types["REG_H2D"]),
-                If(is_write,
+                If(is_soft_reset,
+                    transport.sink.command.eq(0)
+                ).Elif(is_write,
                     transport.sink.command.eq(regs["WRITE_DMA_EXT"])
                 ).Elif(is_read,
                     transport.sink.command.eq(regs["READ_DMA_EXT"]),
@@ -118,7 +129,16 @@ class LiteSATACommandTX(Module):
                 to_rx.read.eq(sink.read),
                 to_rx.identify.eq(sink.identify),
                 to_rx.count.eq(sink.count)
-            )
+            ),
+            # A software reset has no device response associated with the
+            # individual control FIS. Complete it only after transport has
+            # handed the complete five-dword FIS to the link layer.
+            to_rx.soft_reset.eq(
+                is_soft_reset &
+                fsm.ongoing("SEND_CMD") &
+                transport.sink.valid &
+                transport.sink.ready
+            ),
         ]
 
 # LiteSATA Command RX ------------------------------------------------------------------------------
@@ -193,6 +213,8 @@ class LiteSATACommandRX(Module):
                 NextState("WAIT_READ_DATA_OR_REG_D2H"),
             ).Elif(from_tx.identify,
                 NextState("WAIT_PIO_SETUP_D2H"),
+            ).Elif(from_tx.soft_reset,
+                NextState("PRESENT_SOFT_RESET_RESPONSE"),
             )
         )
         self.sync += \
@@ -217,6 +239,14 @@ class LiteSATACommandRX(Module):
             source.write.eq(1),
             source.end.eq(1),
             source.failed.eq(transport.source.error | d2h_error),
+            If(source.valid & source.ready,
+                NextState("IDLE")
+            )
+        )
+        fsm.act("PRESENT_SOFT_RESET_RESPONSE",
+            source.valid.eq(1),
+            source.last.eq(1),
+            source.end.eq(1),
             If(source.valid & source.ready,
                 NextState("IDLE")
             )
