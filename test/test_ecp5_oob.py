@@ -224,6 +224,72 @@ class TestECP5OOB(unittest.TestCase):
             self.assertIn(1, data)
         run_simulation(dut, gen())
 
+    def test_com_generator_post_idle_delays_finish_outside_oob(self):
+        dut = COMGenerator(150e6)
+        post_cycles = 150
+        observed = {}
+
+        def gen():
+            yield dut.post_idle.eq(post_cycles)
+            yield dut.comwake.eq(1)
+            yield
+            yield dut.comwake.eq(0)
+            saw_active = False
+            inactive_before_finish = 0
+            for _ in range(4096):
+                active = (yield dut.active)
+                finish = (yield dut.finish)
+                saw_active |= bool(active)
+                if saw_active and not active and not finish:
+                    inactive_before_finish += 1
+                if finish:
+                    observed["finish_active"] = active
+                    break
+                yield
+            else:
+                self.fail("COMGenerator never finished")
+            observed["inactive_before_finish"] = inactive_before_finish
+
+        run_simulation(dut, gen())
+        self.assertEqual(observed["inactive_before_finish"], post_cycles)
+        self.assertEqual(observed["finish_active"], 0)
+
+    def test_com_generator_final_gap_can_use_genuine_idle(self):
+        dut = COMGenerator(150e6)
+        active_runs = []
+
+        def gen():
+            yield dut.final_ei.eq(1)
+            yield dut.comwake.eq(1)
+            yield
+            yield dut.comwake.eq(0)
+            in_sequence = False
+            current = None
+            length = 0
+            for _ in range(4096):
+                active = (yield dut.active)
+                finish = (yield dut.finish)
+                if active:
+                    in_sequence = True
+                if in_sequence and active != current:
+                    if current is not None:
+                        active_runs.append((current, length))
+                    current = active
+                    length = 0
+                if in_sequence:
+                    length += 1
+                if finish:
+                    active_runs.append((current, length))
+                    break
+                yield
+            else:
+                self.fail("COMGenerator never finished")
+
+        run_simulation(dut, gen())
+        # The generator remains active through all inner burst/gap pairs, then drops active for
+        # the complete final gap and keeps it low on TXCOMFINISH.
+        self.assertEqual(active_runs, [(1, 1 + 6*(16 + 16) - 16), (0, 16 + 1)])
+
     # COMChecker ---------------------------------------------------------------------------------
     @staticmethod
     def drive(dut, sequence):
@@ -274,6 +340,31 @@ class TestECP5OOB(unittest.TestCase):
         # 106.7ns gaps @ 100MHz = 11 cycles -> COMWAKE.
         seq = self.com_sequence(burst=11, gap=11)
         self.com_checker_test(seq, expect_cominit=0, expect_comwake=1)
+
+    def test_com_checker_runtime_match_count(self):
+        for match_gaps, supplied_gaps, expected in [
+            (3, 3, 1),
+            (4, 3, 0),
+            (5, 4, 0),
+            (5, 5, 1),
+        ]:
+            dut = COMChecker(100e6)
+            result = {}
+
+            def gen():
+                yield dut.match_gaps.eq(match_gaps)
+                # Each next burst closes/classifies the preceding gap, so N supplied gaps need
+                # N+1 bursts in this truncated diagnostic sequence.
+                for value, cycles in self.com_sequence(
+                    burst=11, gap=11, n=supplied_gaps + 1
+                ):
+                    yield dut.rx_idle.eq(value)
+                    for _ in range(cycles):
+                        yield
+                result["det"] = (yield dut.comwake_det)
+
+            run_simulation(dut, gen())
+            self.assertEqual(result["det"], expected)
 
     def test_com_checker_windows(self):
         # Boundary values @ 100MHz: COMWAKE [6..17], COMINIT [18..52].
@@ -677,10 +768,13 @@ class TestECP5OOB(unittest.TestCase):
         self.assertEqual(dut.phy.oob_pat_alt.reset.value, 1)
         self.assertEqual(dut.phy.oob_deemph_gap.reset.value, 1)
         self.assertEqual(dut.phy.oob_early_d102.reset.value, 1)
+        self.assertEqual(dut.phy.oob_final_ei.reset.value, 0)
         self.assertEqual(dut.phy.oob_pattern.reset.value, 0xF0F0)
         self.assertEqual(dut.phy.oob_align_nocomma.reset.value, 4096)
         self.assertEqual(dut.phy.oob_lenient_dwell.reset.value, 0)
+        self.assertEqual(dut.phy.oob_post_idle.reset.value, 0)
         self.assertEqual(dut.phy.com_check.quiet_cycles.reset.value, 32)
+        self.assertEqual(dut.phy.com_check.match_gaps.reset.value, 4)
 
         dut.phy.add_oob_csr()
         self.assertEqual(dut.phy._oob_control.storage.reset.value, 0x000C0402)
@@ -688,7 +782,9 @@ class TestECP5OOB(unittest.TestCase):
         self.assertEqual(dut.phy._oob_pattern.storage.reset.value, 0xF0F0)
         self.assertEqual(dut.phy._oob_align.storage.reset.value, (4096 << 16) | 64)
         self.assertEqual(dut.phy._oob_lenient_dwell.storage.reset.value, 0)
+        self.assertEqual(dut.phy._oob_post_idle.storage.reset.value, 0)
         self.assertEqual(dut.phy._oob_quiet.storage.reset.value, 32)
+        self.assertEqual(dut.phy._oob_match.storage.reset.value, 4)
         v = str(verilog.convert(dut, special_overrides=lattice_ecp5_special_overrides))
         self.assertIn("DCUA", v)
         for port in ["CH0_FFC_LDR_CORE2TX_EN", "CH0_LDR_CORE2TX", "CH0_LDR_RX2CORE", "CH0_FFC_EI_EN"]:

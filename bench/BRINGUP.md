@@ -3439,3 +3439,94 @@ safe programmable TX clock/termination discriminators are exhausted. The
 next useful evidence must come from an external serialized-eye/refclock
 phase-noise measurement or a golden SATA receiver. No write BIST ran, no disk
 data changed, the 50-ohm setting was restored, and the line was parked.
+
+## *** CAMPAIGN 69 (2026-07-29): XILINX OOB-TO-DATA BOUNDARY A/B TESTS ARE NEUTRAL ***
+
+The generic LiteSATA startup controller and the Xilinx PHY wrappers were
+re-audited before changing the ECP5 transition. They use the same handshake:
+the controller holds `tx_comwake_stb` and electrical idle in COMWAKE until
+the PHY asserts `tx_comwake_ack`; the Xilinx wrappers generate that ACK from
+the vendor `TXCOMFINISH` pulse. The controller then waits for
+`RXCOMWAKEDET`, enters AWAIT-NO-COMWAKE, and starts the ECP5-only early D10.2
+stream. Xilinx instead keeps `TXELECIDLE` asserted until RXCOMWAKEDET drops
+and starts D10.2 in AWAIT-ALIGN. There is no ECP5-only controller-state skip
+or reversed transition. The material implementation difference remains that
+Xilinx generates and detects OOB inside the transceiver, while ECP5 must
+synthesize the envelope and compensate for the slow `FFC_EI_EN` path.
+
+Observation-only TX flags were synchronized into the 90MHz analyzer so the
+complete boundary could be captured without storing LiteScope at 150MHz. A
+direct TX-domain analyzer image reached only approximately 126MHz and was
+not loaded. The system-domain seed-3 image closed timing:
+
+```text
+RX   175.10MHz (required 150.01MHz)
+TX   150.72MHz (required 150.01MHz)
+sys  104.09MHz (required  90.00MHz)
+
+d63868b7a985dcae6b16a7fb9acbb70e554d4af51a72efd5d83da188cdbe3c34  bitstream
+66fc96e90b01b5a1f3f8d7bb4355a3842b8a38bd0b06a28e653d890dbe180304  csr.csv
+f344b7c99549fd8eeb07e60eb758d090cc960cd9c28df0849b5fc130b2f78c05  analyzer.csv
+```
+
+The baseline COMWAKE-finish capture shows six complete synthetic gaps. On
+the finish pulse the ECP5 generator exits synthetic mode, asserts genuine
+electrical idle, and the controller advances to AWAIT-COMWAKE on the next
+90MHz cycle. Thus the baseline already requests genuine idle immediately
+after the final synthetic gap; merely delaying `TXCOMFINISH` does not create
+a new wire-level quiet interval. A 1us genuine-idle delay before ACK changed
+the controller timing exactly as requested but still ended at status `0x6`.
+
+A second control makes the final 106.7ns COMWAKE gap genuine electrical idle
+while retaining synthetic inner gaps, and can add the same 1us settling
+interval before ACK. The capture proves `FFC_EI_EN` is requested at the start
+of that final gap and stays requested through ACK. It also produced no READY
+event. This rules out the final synthetic gap and immediate ACK boundary as
+sufficient explanations for the disk rejecting host startup.
+
+The corrected D10.2-triggered capture resolves the receive-to-transmit
+handoff. LiteScope's CSV exporter duplicates each sample for its display
+clock, so the row offsets below are converted back to 90MHz cycles:
+
+```text
+event                                      relative delay
+device RXCOMWAKEDET asserts                0 cycles
+AWAIT-NO-COMWAKE + d102_phase              1 cycle  = 11.1ns
+TX electrical-idle request deasserts       5 cycles = 55.6ns
+encoded 20-bit bus becomes 0xaaaaa         9 cycles = 100.0ns
+```
+
+The last step is continuous encoded D10.2 (`0xaaaaa`, with the corresponding
+24-bit bypass bus `0x2aa2aa`). The earlier scope measurements still place the
+physical DCU unmute 213-427ns after its control request, making the four-gap
+detector borderline against SATA's 533ns post-COMWAKE budget. The COM
+detector was therefore made runtime-selectable from one through seven
+qualifying gaps while retaining four as the production reset value. Three
+gaps moves the handoff approximately one 106.7ns COMWAKE gap earlier; five
+moves it one gap later. Strict attempts at three gaps, five gaps, and the
+combined three-gap + genuine-final-gap + 1us-post-idle setting all remained
+at status `0x6`, with no READY transition:
+
+```text
+95ce3278ce915aadc956743a6e56b20249a85c2a44464d85d0bb984e458c87e7  baseline result
+5709972b04fcde03eb9d4b5b3e023ac3444c194bebba49e7a18523a52b47f365  1us post-idle result
+ca05cbeb9d98fcd5061fbb3922b169578b86f33ac2b67b2f6a1b1c96ee08417f  genuine-final-gap result
+99c9f2f24c8e14c2ea2dcaaa84ab5ee946c8ed56dfd3e85aaa9031627ce5f3ba  three-gap result
+d19ad23b6564a29d0c7375c58ca01adbd8c6287aeadd7ad92b6fcaabbc55bdae  five-gap result
+a74f6b62d2b865920ae015473ba1f31f0e98323f5e94a525a7138a11c8ef0a38  combined result
+```
+
+The definitive baseline D10.2 capture is
+`/tmp/litesata-ecp5-oob-d102-boundary/oob-d102.csv` with SHA256
+`57462ae0ef63d52efd3f76b0fbaad269a81545434cbebee2fff1930de9cb8f86`.
+It again ends at status `0x6`. The result record SHA256 is
+`2060b72e468b26bc4c4a233c780ca70e37d0140f6aa9bf3ca3b162912d529b66`.
+
+These tests close the accessible digital OOB-final-gap, ACK-order, and
+COMWAKE-detection-latency branches. They do not prove the serialized analog
+waveform is compliant: the six short inner gaps remain data-driven because
+ECP5 cannot engage and release genuine electrical idle within 106.7ns. The
+strongest remaining discriminator is therefore an external serialized-eye
+and OOB-envelope capture, or a golden SATA receiver observing the ECPIX-5 TX.
+No ATA command or write BIST ran, no disk data changed, and the line was
+parked after every attempt.

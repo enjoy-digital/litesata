@@ -717,6 +717,8 @@ class SerDesECP5(LiteXModule):
         tx_idle_tx = Signal()
         ei_mode_tx = Signal()
         ei_en      = Signal()
+        self.tx_idle_tx_dbg = Signal()
+        self.tx_ei_en_dbg   = Signal()
         self.specials += [
             MultiReg(self.tx_idle, tx_idle_tx, "tx"),
             MultiReg(self.ei_mode, ei_mode_tx, "tx"),
@@ -736,6 +738,8 @@ class SerDesECP5(LiteXModule):
             # window. Masked here, in the tx domain, so it holds for both EI modes.
             ei_en.eq(Mux(ei_mode_tx, ei_shaped, ei_legacy)
                      & ~(self.tx_oob_deemph & self.tx_oob_active)),
+            self.tx_idle_tx_dbg.eq(tx_idle_tx),
+            self.tx_ei_en_dbg.eq(ei_en),
         ]
 
         self.specials += [

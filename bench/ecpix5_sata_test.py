@@ -55,6 +55,7 @@ CTRL_DISABLE = 1 << 26
 
 PAT_ALT       = 1 << 5
 DEEMPH_GAP    = 1 << 6
+FINAL_EI      = 1 << 7
 EARLY_D102    = 1 << 9
 LENIENT_EXIT  = 1 << 13
 
@@ -219,11 +220,20 @@ def park(regs):
     regs.sata_phy_enable.write(1)
 
 
-def configure_attempt(regs, lenient_exit=False, lenient_dwell_cycles=0):
+def configure_attempt(
+    regs,
+    lenient_exit=False,
+    lenient_dwell_cycles=0,
+    post_idle_cycles=0,
+    final_ei=False,
+    match_gaps=4,
+):
     regs.sata_phy_enable.write(0)
     time.sleep(1e-3)
     regs.sata_phy_phy_oob_txctl.write(
-        OOB_TXCTL | (LENIENT_EXIT if lenient_exit else 0)
+        OOB_TXCTL
+        | (LENIENT_EXIT if lenient_exit else 0)
+        | (FINAL_EI if final_ei else 0)
     )
     regs.sata_phy_phy_oob_pattern.write(0xF0F0)
     regs.sata_phy_phy_oob_gap_pattern.write(0x0000)
@@ -232,6 +242,8 @@ def configure_attempt(regs, lenient_exit=False, lenient_dwell_cycles=0):
     regs.sata_phy_phy_oob_ei_shape.write(16 << 13)
     regs.sata_phy_phy_oob_align.write((4096 << 16) | 64)
     regs.sata_phy_phy_oob_lenient_dwell.write(lenient_dwell_cycles)
+    regs.sata_phy_phy_oob_post_idle.write(post_idle_cycles)
+    regs.sata_phy_phy_oob_match.write(match_gaps)
     regs.sata_phy_phy_oob_control.write(OOB_CONTROL)
 
 
@@ -425,6 +437,66 @@ def analyzer_ctrl_fsm(path, group=0):
     return matches[0]
 
 
+def analyzer_com_fsm(path, group=0):
+    enums = {}
+    with pathlib.Path(path).open(newline="", encoding="utf-8") as source:
+        for row in csv.reader(source):
+            if len(row) < 5 or row[0] != "enum" or int(row[1]) != group:
+                continue
+            enums.setdefault(row[2], set()).add(row[4])
+    matches = [
+        name for name, states in enums.items()
+        if {"IDLE", "PRE", "BURST", "GAP", "FINISH"} <= states
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"could not uniquely locate OOB COM generator FSM in analyzer group {group}: "
+            f"matches={matches}"
+        )
+    return matches[0]
+
+
+def analyzer_state_value(path, signal, state, group=0):
+    width = None
+    value = None
+    with pathlib.Path(path).open(newline="", encoding="utf-8") as source:
+        for row in csv.reader(source):
+            if len(row) >= 4 and row[0] == "signal" and int(row[1]) == group and row[2] == signal:
+                width = int(row[3])
+            if (
+                len(row) >= 5
+                and row[0] == "enum"
+                and int(row[1]) == group
+                and row[2] == signal
+                and row[4] == state
+            ):
+                value = int(row[3])
+    if width is None or value is None:
+        raise ValueError(
+            f"could not locate state {state!r} for {signal!r} in analyzer group {group}"
+        )
+    return f"0b{value:0{width}b}"
+
+
+def analyzer_signal(path, suffix, group=0):
+    matches = []
+    with pathlib.Path(path).open(newline="", encoding="utf-8") as source:
+        for row in csv.reader(source):
+            if (
+                len(row) >= 4
+                and row[0] == "signal"
+                and int(row[1]) == group
+                and row[2].endswith(suffix)
+            ):
+                matches.append(row[2])
+    if len(matches) != 1:
+        raise ValueError(
+            f"could not uniquely locate analyzer signal ending in {suffix!r} "
+            f"in group {group}: matches={matches}"
+        )
+    return matches[0]
+
+
 def summarize_link_capture(path, tx_fsm, rx_fsm):
     with pathlib.Path(path).open(newline="", encoding="utf-8") as source:
         rows = [row for row in csv.reader(source) if row]
@@ -580,10 +652,45 @@ def run(args):
     analyzer_csv = None if args.no_analyzer else pathlib.Path(args.analyzer_csv).resolve()
     bitstream = None if args.reuse_bitstream else pathlib.Path(args.bitstream).resolve()
     link_tx_fsm = link_rx_fsm = ctrl_fsm = None
+    oob_trigger_condition = None
     if analyzer_csv is not None:
-        link_tx_fsm, link_rx_fsm = analyzer_link_fsms(analyzer_csv)
         if args.oob_capture:
-            ctrl_fsm = analyzer_ctrl_fsm(analyzer_csv)
+            if args.oob_trigger == "await-align":
+                ctrl_fsm = analyzer_ctrl_fsm(analyzer_csv)
+                oob_trigger_condition = {
+                    ctrl_fsm: analyzer_state_value(
+                        analyzer_csv, ctrl_fsm, "AWAIT-ALIGN"
+                    )
+                }
+            elif args.oob_trigger == "comwake-finish":
+                try:
+                    com_fsm = analyzer_com_fsm(analyzer_csv)
+                except ValueError:
+                    # Timing-clean sys analyzer: use the synchronized TXCOMFINISH handshake.
+                    comwake_ack = analyzer_signal(
+                        analyzer_csv, "tx_comwake_ack"
+                    )
+                    oob_trigger_condition = {comwake_ack: "0b1"}
+                else:
+                    is_wake = analyzer_signal(analyzer_csv, "is_wake")
+                    oob_trigger_condition = {
+                        com_fsm: analyzer_state_value(
+                            analyzer_csv, com_fsm, "FINISH"
+                        ),
+                        is_wake: "0b1",
+                    }
+            else:
+                try:
+                    d102_active = analyzer_signal(
+                        analyzer_csv, "d102_phase"
+                    )
+                except ValueError:
+                    d102_active = analyzer_signal(
+                        analyzer_csv, "oob_d102_active"
+                    )
+                oob_trigger_condition = {d102_active: "0b1"}
+        else:
+            link_tx_fsm, link_rx_fsm = analyzer_link_fsms(analyzer_csv)
 
     result.data["metadata"] = {
         "source": capture_git_state(result.output_dir),
@@ -596,6 +703,8 @@ def run(args):
         "analyzer_link_tx_fsm": link_tx_fsm,
         "analyzer_link_rx_fsm": link_rx_fsm,
         "analyzer_ctrl_fsm": ctrl_fsm,
+        "oob_trigger": args.oob_trigger if args.oob_capture else None,
+        "oob_trigger_condition": oob_trigger_condition,
     }
     result.data["configuration"] = {
         "generation": "gen2",
@@ -605,9 +714,17 @@ def run(args):
         "lenient_send_align_exit_requested": args.lenient_exit,
         "lenient_send_align_dwell_us": args.lenient_dwell_us,
         "lenient_send_align_dwell_cycles": round(args.lenient_dwell_us*SYS_CLK_FREQ/1e6),
+        "post_oob_idle_us": args.post_oob_idle_us,
+        "post_oob_idle_cycles": round(args.post_oob_idle_us*150),
+        "final_oob_gap_genuine_ei": args.final_oob_ei,
+        "oob_match_gaps": args.oob_match_gaps,
         "bitstream_policy_verified_by_runner": False,
         "oob_control": OOB_CONTROL,
-        "oob_txctl": OOB_TXCTL | (LENIENT_EXIT if args.lenient_exit else 0),
+        "oob_txctl": (
+            OOB_TXCTL
+            | (LENIENT_EXIT if args.lenient_exit else 0)
+            | (FINAL_EI if args.final_oob_ei else 0)
+        ),
         "pattern": 0xF0F0,
         "gap_pattern": 0,
         "burst_cycles": 16,
@@ -646,12 +763,10 @@ def run(args):
         if analyzer_csv is not None:
             if args.oob_capture:
                 oob_analyzer = make_analyzer(regs, analyzer_csv)
-                # Capture the transition into AWAIT-ALIGN, including the independently sequenced
-                # RX CDR/PCS reset signals and the first device ALIGN words.
                 arm_analyzer(
                     oob_analyzer,
                     0,
-                    {ctrl_fsm: "0b1010"},
+                    oob_trigger_condition,
                     subsampler=args.oob_subsampler,
                 )
                 result.event("oob_watch_armed")
@@ -664,6 +779,9 @@ def run(args):
             regs,
             lenient_exit=args.lenient_exit,
             lenient_dwell_cycles=round(args.lenient_dwell_us*SYS_CLK_FREQ/1e6),
+            post_idle_cycles=round(args.post_oob_idle_us*150),
+            final_ei=args.final_oob_ei,
+            match_gaps=args.oob_match_gaps,
         )
         if args.tx_rterm_ohms is not None:
             # The SCI FSM is held in reset while sata_phy_enable is low. Start
@@ -717,7 +835,7 @@ def run(args):
             oob_capture_seen = bool(oob_analyzer.done())
             result.data["oob_capture_seen"] = oob_capture_seen
             if oob_capture_seen:
-                oob_path = result.output_dir / "oob-await-align.csv"
+                oob_path = result.output_dir / f"oob-{args.oob_trigger}.csv"
                 save_analyzer(oob_analyzer, oob_path)
                 result.data["oob_capture"] = {"path": str(oob_path)}
             result.event("oob_watch_complete", seen=oob_capture_seen)
@@ -905,6 +1023,12 @@ def parse_args(argv=None):
         type=int,
         help="OOB diagnostic capture subsampler (default: 32, about 360us at 90MHz).",
     )
+    parser.add_argument(
+        "--oob-trigger",
+        default="await-align",
+        choices=["await-align", "comwake-finish", "d102"],
+        help="OOB diagnostic trigger (default: await-align).",
+    )
     parser.add_argument("--output-dir", help="Artifact directory (default: timestamped directory under /tmp).")
     parser.add_argument("--port", default=1234, type=int)
     parser.add_argument("--program-timeout", default=60.0, type=float)
@@ -923,6 +1047,24 @@ def parse_args(argv=None):
         default=0.0,
         type=float,
         help="Diagnostic SEND-ALIGN dwell before --lenient-exit can count device ALIGNs.",
+    )
+    parser.add_argument(
+        "--post-oob-idle-us",
+        default=0.0,
+        type=float,
+        help="Diagnostic genuine-EI delay before TXCOMFINISH (tx-clock microseconds).",
+    )
+    parser.add_argument(
+        "--final-oob-ei",
+        action="store_true",
+        help="Diagnostic: use genuine electrical idle for the final OOB gap.",
+    )
+    parser.add_argument(
+        "--oob-match-gaps",
+        default=4,
+        choices=range(1, 8),
+        type=int,
+        help="Diagnostic COM detector match count (historical default: 4 gaps).",
     )
     parser.add_argument("--signature-timeout", default=1.0, type=float)
     parser.add_argument(
@@ -953,6 +1095,10 @@ def parse_args(argv=None):
         parser.error("--post-reset-delay cannot be negative")
     if args.lenient_dwell_us < 0:
         parser.error("--lenient-dwell-us cannot be negative")
+    if args.post_oob_idle_us < 0:
+        parser.error("--post-oob-idle-us cannot be negative")
+    if round(args.post_oob_idle_us*150) > 0xffff:
+        parser.error("--post-oob-idle-us exceeds the 16-bit hardware counter")
     if round(args.lenient_dwell_us*SYS_CLK_FREQ/1e6) > 0xffff:
         parser.error("--lenient-dwell-us exceeds the 16-bit hardware counter")
     if args.lenient_dwell_us and not args.lenient_exit:

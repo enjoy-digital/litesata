@@ -128,6 +128,10 @@ class COMGenerator(LiteXModule):
         self.seq_quiet = Signal(16)                  # i: probe mode: inter-sequence quiet (tx
                                                      #    cycles) isolating sequences so the drive
                                                      #    cannot chain gaps across the boundary.
+        self.post_idle = Signal(16)                  # i: genuine-EI settling cycles after the
+                                                     #    final gap, before finish is acknowledged.
+        self.final_ei  = Signal()                    # i: make the final gap genuine EI instead of
+                                                     #    the synthetic data-driven gap.
         self.ei_req   = Signal()                     # o
 
         # Square wave generation -------------------------------------------------------------------
@@ -163,12 +167,15 @@ class COMGenerator(LiteXModule):
         count   = Signal(8)
         loops   = Signal(3)
         seqs    = Signal(8)
-        is_wake = Signal()
+        self.is_wake = Signal()
+        post_count = Signal(16)
+        last_gap = Signal()
+        self.comb += last_gap.eq((loops == 0) & (seqs == 0))
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(self.cominit | self.comwake,
-                NextValue(is_wake, self.comwake & ~self.cominit),
+                NextValue(self.is_wake, self.comwake & ~self.cominit),
                 NextValue(count, self.ei_trail),
                 NextValue(loops, 6 - 1),
                 NextValue(seqs, (1 << self.repeat) - 1),
@@ -199,13 +206,16 @@ class COMGenerator(LiteXModule):
                     # Probe mode: COMINIT-length gaps except gap #3 (loops==2) = wake_gap.
                     NextValue(count, Mux(loops == 2, self.wake_gap - 1, init_cycles - 1)),
                 ).Else(
-                    NextValue(count, Mux(is_wake, self.wake_gap - 1, init_cycles - 1)),
+                    NextValue(count, Mux(self.is_wake, self.wake_gap - 1, init_cycles - 1)),
                 ),
                 NextState("GAP")
             )
         )
         fsm.act("GAP",
-            self.active.eq(1),
+            # Inner gaps must remain synthetic: the ECP5 EI pipeline cannot release quickly
+            # enough for another 106.7ns COMWAKE burst. The final gap has no following burst, so
+            # it can safely leave synthetic OOB mode and use genuine electrical idle.
+            self.active.eq(~(self.final_ei & last_gap)),
             self.tx_idle.eq(1),
             in_gap.eq(1),
             # Degauss kick: during the first `kick` cycles of the gap, keep the LDR driving with
@@ -222,7 +232,12 @@ class COMGenerator(LiteXModule):
             If(count == 0,
                 If(loops == 0,
                     If(seqs == 0,
-                        NextState("FINISH")
+                        If(self.post_idle != 0,
+                            NextValue(post_count, self.post_idle - 1),
+                            NextState("POST")
+                        ).Else(
+                            NextState("FINISH")
+                        )
                     ).Else(
                         # Back-to-back sequence repeat (continuous COMRESET/COMWAKE assertion).
                         NextValue(seqs, seqs - 1),
@@ -237,11 +252,24 @@ class COMGenerator(LiteXModule):
                 )
             )
         )
+        fsm.act("POST",
+            # Leave the synthetic, data-driven OOB gap mode before reporting TXCOMFINISH. With
+            # active low, SerDesECP5 falls back to ctrl's still-asserted tx_idle and therefore
+            # requests genuine electrical idle for the complete programmable settling interval.
+            NextValue(post_count, post_count - 1),
+            If(post_count == 0,
+                NextState("FINISH")
+            )
+        )
         qcount = Signal(16)
         fsm.act("FINISH",
-            self.active.eq(1),
-            self.tx_idle.eq(1),
-            self.ei_req.eq(1),
+            # Preserve the historical zero-delay waveform. A non-zero POST interval must not
+            # briefly re-enter synthetic-gap mode on the finish pulse.
+            If((self.post_idle == 0) & ~self.final_ei,
+                self.active.eq(1),
+                self.tx_idle.eq(1),
+                self.ei_req.eq(1),
+            ),
             self.finish.eq(1),
             If(self.probe & (self.seq_quiet != 0),
                 NextValue(qcount, self.seq_quiet),
@@ -279,6 +307,7 @@ class COMChecker(LiteXModule):
         self.rx_idle     = Signal() # i
         self.cominit_det = Signal() # o (level)
         self.comwake_det = Signal() # o (level)
+        self.match_gaps  = Signal(3, reset=n_gaps) # i: qualifying gaps required (1..7).
 
         # Detection windows (in sys_clk cycles, runtime adjustable, reset = SATA spec).
         self.comwake_gap_min = Signal(16, reset=ceil( 55e-9*clk_freq))
@@ -318,19 +347,21 @@ class COMChecker(LiteXModule):
         # Gap classification on Idle -> Burst transition.
         comwake_gap = Signal()
         cominit_gap = Signal()
+        match_gaps  = Signal(3)
         self.comb += [
             comwake_gap.eq((self.gap_count >= self.comwake_gap_min) & (self.gap_count <= self.comwake_gap_max)),
             cominit_gap.eq((self.gap_count >= self.cominit_gap_min) & (self.gap_count <= self.cominit_gap_max)),
+            match_gaps.eq(Mux(self.match_gaps == 0, 1, self.match_gaps)),
         ]
         self.sync += [
             If(gap_end,
                 If(comwake_gap,
-                    If(self.comwake_gaps != (n_gaps - 1),
+                    If(self.comwake_gaps != 7,
                         self.comwake_gaps.eq(self.comwake_gaps + 1)
                     ),
                     self.cominit_gaps.eq(0),
                 ).Elif(cominit_gap,
-                    If(self.cominit_gaps != (n_gaps - 1),
+                    If(self.cominit_gaps != 7,
                         self.cominit_gaps.eq(self.cominit_gaps + 1)
                     ),
                     self.comwake_gaps.eq(0),
@@ -348,10 +379,10 @@ class COMChecker(LiteXModule):
                 self.comwake_gaps.eq(0),
             ),
             # Assert detections when enough qualifying gaps have been seen.
-            If(gap_end & comwake_gap & (self.comwake_gaps == (n_gaps - 1)),
+            If(gap_end & comwake_gap & (self.comwake_gaps >= (match_gaps - 1)),
                 self.comwake_det.eq(1)
             ),
-            If(gap_end & cominit_gap & (self.cominit_gaps == (n_gaps - 1)),
+            If(gap_end & cominit_gap & (self.cominit_gaps >= (match_gaps - 1)),
                 self.cominit_det.eq(1)
             ),
         ]
@@ -452,11 +483,11 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.comb += self.ready.eq(serdes.tx_ready)
 
         # Datapath ---------------------------------------------------------------------------------
-        oob_d102_active = Signal()
+        self.oob_d102_active = Signal()
         pattern_tx      = Signal(16, reset=0xF0F0) # MultiReg'd from oob_pattern below.
         self.comb += [
-            serdes.sink.data.eq(Mux(oob_d102_active, pattern_tx, self.txdata)),
-            serdes.sink.ctrl.eq(Mux(oob_d102_active, 0,          self.txcharisk)),
+            serdes.sink.data.eq(Mux(self.oob_d102_active, pattern_tx, self.txdata)),
+            serdes.sink.ctrl.eq(Mux(self.oob_d102_active, 0,          self.txcharisk)),
             self.rxdata.eq(serdes.source.data),
             self.rxcharisk.eq(serdes.source.ctrl),
         ]
@@ -594,6 +625,8 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # Optional COMWAKE launch delay (device-calibration-window experiment).
         self.oob_wake_delay = Signal(20) # sys cycles; 0 = immediate.
+        self.oob_post_idle   = Signal(16) # tx cycles of genuine EI before TXCOMFINISH.
+        self.oob_final_ei    = Signal()   # final OOB gap uses genuine EI.
         wake_delay_cnt      = Signal(20)
         self.sync += [
             self.txcomwake.eq(0),
@@ -648,6 +681,8 @@ class ECP5LiteSATAPHY(LiteXModule):
         burst_mode_tx = Signal()
         probe_tx      = Signal()
         seq_quiet_tx  = Signal(16)
+        post_idle_tx  = Signal(16)
+        final_ei_tx   = Signal()
         kick_tx       = Signal(2)
         repeat_tx     = Signal(2)
         d102_tx       = Signal()
@@ -666,6 +701,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             MultiReg(self.oob_pattern,    pattern_tx,    "tx"),
             MultiReg(self.oob_probe,      probe_tx,      "tx"),
             MultiReg(self.oob_seq_quiet,  seq_quiet_tx,  "tx"),
+            MultiReg(self.oob_post_idle,  post_idle_tx,  "tx"),
+            MultiReg(self.oob_final_ei,   final_ei_tx,   "tx"),
             MultiReg(self.oob_kick,       kick_tx,       "tx"),
         ]
         # Raw serializer pattern for the zero_bus/produce_pattern path (bypass mode): the
@@ -687,6 +724,8 @@ class ECP5LiteSATAPHY(LiteXModule):
             com_gen.probe.eq(probe_tx),
             com_gen.seq_quiet.eq(seq_quiet_tx),
             com_gen.kick.eq(kick_tx),
+            com_gen.post_idle.eq(post_idle_tx),
+            com_gen.final_ei.eq(final_ei_tx),
             serdes.tx_oob_en.eq(com_gen.tx_oob_en & ~burst_mode_tx),
             serdes.tx_oob_data.eq(com_gen.tx_oob_data),
             serdes.tx_oob_idle.eq(com_gen.tx_idle & ~deemph_gap_tx),
@@ -727,6 +766,25 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # tx clk -> sys clk
         self.submodules += _PulseSynchronizer(com_gen.finish, "tx", self.txcomfinish, "sys")
+        # Synchronized, observation-only boundary flags. These let the timing-clean sys-domain
+        # analyzer resolve the OOB-to-data handoff at 11ns without putting LiteScope storage on
+        # the 150MHz TX clock (the latter does not meet timing on ECPIX-5).
+        self.oob_active_sys_dbg = Signal()
+        self.oob_is_wake_sys_dbg = Signal()
+        self.oob_ei_req_sys_dbg = Signal()
+        self.oob_gap_sys_dbg = Signal()
+        self.oob_d102_sys_dbg = Signal()
+        self.tx_idle_tx_sys_dbg = Signal()
+        self.tx_ei_en_sys_dbg = Signal()
+        self.specials += [
+            MultiReg(com_gen.active,       self.oob_active_sys_dbg, "sys"),
+            MultiReg(com_gen.is_wake,      self.oob_is_wake_sys_dbg, "sys"),
+            MultiReg(com_gen.ei_req,        self.oob_ei_req_sys_dbg, "sys"),
+            MultiReg(serdes.tx_oob_gap,     self.oob_gap_sys_dbg, "sys"),
+            MultiReg(self.oob_d102_active,  self.oob_d102_sys_dbg, "sys"),
+            MultiReg(serdes.tx_idle_tx_dbg, self.tx_idle_tx_sys_dbg, "sys"),
+            MultiReg(serdes.tx_ei_en_dbg,   self.tx_ei_en_sys_dbg, "sys"),
+        ]
         # OOB burst/gap level for the SCI slice gate (1 = burst). Outside a sequence the slices
         # stay enabled so the normal data path is untouched.
         self.specials += MultiReg(~com_gen.active | ~com_gen.ei_req,
@@ -734,7 +792,7 @@ class ECP5LiteSATAPHY(LiteXModule):
 
         # D10.2 OOB burst content (Xilinx-like): force the serializer datapath to D10.2 while the
         # OOB sequence is active (tx domain).
-        self.comb += oob_d102_active.eq(d102_tx & com_gen.active)
+        self.comb += self.oob_d102_active.eq(d102_tx & com_gen.active)
 
         # RX OOB (COMINIT/COMWAKE detection) -------------------------------------------------------
         # Source A (default): RLOS squelch (serdes.rx_idle, already synchronized to sys).
@@ -841,6 +899,9 @@ class ECP5LiteSATAPHY(LiteXModule):
             CSRField("deemph_gap", size=1, offset=6, reset=self.oob_deemph_gap.reset.value,
                 description="OOB gaps = constant pattern; with post-cursor matched to main in "
                             "SCI CH_12/CH_14 the FIR cancels DC (data-driven electrical idle)."),
+            CSRField("final_ei", size=1, offset=7,
+                description="Make the final OOB gap genuine electrical idle; inner gaps remain "
+                            "data-driven so COMWAKE timing is reachable."),
             CSRField("early_d102", size=1, offset=9, reset=self.oob_early_d102.reset.value,
                 description="Transmit continuous D10.2 already in AWAIT-NO-COMWAKE (i.e. from the "
                             "moment the device's COMWAKE is detected, while it is still being "
@@ -877,8 +938,14 @@ class ECP5LiteSATAPHY(LiteXModule):
             description="OOB burst datapath word when d102 is set (0x4A4A=D10.2, 0x3333=Gen1-rate-equivalent).")
         self._oob_quiet = CSRStorage(16, reset=self.com_check.quiet_cycles.reset.value,
             description="RX OOB quiet threshold (sys cycles) ending a sequence / deasserting detections.")
+        self._oob_match = CSRStorage(3, reset=self.com_check.match_gaps.reset.value,
+            description="Consecutive qualifying gaps required for COM detection "
+                        "(historical default: 4).")
         self._oob_seq_quiet = CSRStorage(16,
             description="Probe mode: inter-sequence TX quiet (tx cycles, 0 = back-to-back).")
+        self._oob_post_idle = CSRStorage(16,
+            description="Genuine electrical-idle settling interval after the final OOB gap and "
+                        "before TXCOMFINISH, in tx cycles (0 = historical immediate finish).")
         self._oob_wake_delay = CSRStorage(20,
             description="COMWAKE launch delay after ctrl request (sys cycles).")
         self.comb += [
@@ -906,6 +973,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_sci_gate.eq(    self._oob_txctl.fields.sci_gate),
             self.oob_pat_alt.eq(     self._oob_txctl.fields.pat_alt),
             self.oob_deemph_gap.eq(  self._oob_txctl.fields.deemph_gap),
+            self.oob_final_ei.eq(    self._oob_txctl.fields.final_ei),
             self.oob_early_d102.eq(  self._oob_txctl.fields.early_d102),
             self.oob_lenient_exit.eq(self._oob_txctl.fields.lenient_exit),
             self.oob_lenient_dwell.eq(self._oob_lenient_dwell.storage),
@@ -916,9 +984,11 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_sci_burst_val.eq(self._oob_sci_vals.fields.burst),
             self.oob_sci_gap_val.eq(  self._oob_sci_vals.fields.gap),
             self.oob_seq_quiet.eq(  self._oob_seq_quiet.storage),
+            self.oob_post_idle.eq(  self._oob_post_idle.storage),
             self.oob_kick.eq(       self._oob_control.fields.kick),
             self.oob_pattern.eq(    self._oob_pattern.storage),
             self.com_check.quiet_cycles.eq(self._oob_quiet.storage),
+            self.com_check.match_gaps.eq(self._oob_match.storage),
             self.oob_wake_delay.eq( self._oob_wake_delay.storage),
         ]
 

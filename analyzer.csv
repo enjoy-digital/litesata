@@ -1,5 +1,5 @@
-config,None,data_width,222
-config,None,storage_width,222
+config,None,data_width,231
+config,None,storage_width,231
 config,None,depth,1024
 config,None,samplerate,90000000
 config,None,subsampler_width,16
@@ -41,6 +41,7 @@ signal,0,sata_phy_phy_tx_cominit_stb,1
 signal,0,sata_phy_phy_tx_cominit_ack,1
 signal,0,sata_phy_phy_tx_comwake_stb,1
 signal,0,sata_phy_phy_tx_comwake_ack,1
+signal,0,sata_phy_phy_txcomfinish,1
 signal,0,sata_phy_phy_rx_cominit_stb,1
 signal,0,sata_phy_phy_rx_comwake_stb,1
 signal,0,sata_phy_phy_rx_idle0,1
@@ -50,6 +51,14 @@ signal,0,sata_phy_phy_cominit_gaps,3
 signal,0,sata_phy_phy_comwake_gaps,3
 signal,0,sata_phy_phy_tx_polarity,1
 signal,0,sata_phy_phy_rx_polarity,1
+signal,0,sata_phy_phy_oob_active_sys_dbg,1
+signal,0,sata_phy_phy_oob_is_wake_sys_dbg,1
+signal,0,sata_phy_phy_oob_ei_req_sys_dbg,1
+signal,0,sata_phy_phy_oob_gap_sys_dbg,1
+signal,0,sata_phy_phy_oob_d102_sys_dbg,1
+signal,0,sata_phy_ctrl_d102_phase,1
+signal,0,sata_phy_phy_tx_idle_tx_sys_dbg,1
+signal,0,sata_phy_phy_tx_ei_en_sys_dbg,1
 signal,0,long_activity,1
 signal,0,sata_phy_phy_serdesecp5_rx_bus_dbg,24
 signal,0,sata_phy_phy_serdesecp5_bp_src_dbg,20

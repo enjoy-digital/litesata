@@ -40,6 +40,8 @@ class FakeRegs:
             "sata_phy_phy_oob_ei_shape",
             "sata_phy_phy_oob_align",
             "sata_phy_phy_oob_lenient_dwell",
+            "sata_phy_phy_oob_post_idle",
+            "sata_phy_phy_oob_match",
             "sata_phy_phy_oob_rec",
             "sata_bist_identify_start",
             "sata_bist_identify_done",
@@ -67,6 +69,8 @@ def test_canonical_configuration_and_park(monkeypatch):
     assert regs.sata_phy_phy_oob_ei_shape.value == 16 << 13
     assert regs.sata_phy_phy_oob_align.value == (4096 << 16) | 64
     assert regs.sata_phy_phy_oob_lenient_dwell.value == 0
+    assert regs.sata_phy_phy_oob_post_idle.value == 0
+    assert regs.sata_phy_phy_oob_match.value == 4
 
     ecpix5_sata_test.park(regs)
     assert regs.sata_phy_enable.writes[-2:] == [0, 1]
@@ -74,11 +78,22 @@ def test_canonical_configuration_and_park(monkeypatch):
         ecpix5_sata_test.OOB_CONTROL | ecpix5_sata_test.CTRL_DISABLE
     )
 
-    ecpix5_sata_test.configure_attempt(regs, lenient_exit=True, lenient_dwell_cycles=3600)
+    ecpix5_sata_test.configure_attempt(
+        regs,
+        lenient_exit=True,
+        lenient_dwell_cycles=3600,
+        post_idle_cycles=150,
+        final_ei=True,
+        match_gaps=5,
+    )
     assert regs.sata_phy_phy_oob_txctl.value == (
-        ecpix5_sata_test.OOB_TXCTL | ecpix5_sata_test.LENIENT_EXIT
+        ecpix5_sata_test.OOB_TXCTL
+        | ecpix5_sata_test.LENIENT_EXIT
+        | ecpix5_sata_test.FINAL_EI
     )
     assert regs.sata_phy_phy_oob_lenient_dwell.value == 3600
+    assert regs.sata_phy_phy_oob_post_idle.value == 150
+    assert regs.sata_phy_phy_oob_match.value == 5
 
 
 def test_phy_snapshot_can_reuse_sampled_status():
@@ -272,6 +287,39 @@ def test_analyzer_ctrl_fsm_is_discovered_by_states(tmp_path):
     assert ecpix5_sata_test.analyzer_ctrl_fsm(analyzer) == "fsm0_state"
 
 
+def test_tx_analyzer_com_fsm_state_and_signal_are_discovered(tmp_path):
+    analyzer = tmp_path / "analyzer.csv"
+    analyzer.write_text(
+        "\n".join([
+            "signal,0,fsm3_state,3",
+            "enum,0,fsm3_state,0,IDLE",
+            "enum,0,fsm3_state,1,PRE",
+            "enum,0,fsm3_state,2,BURST",
+            "enum,0,fsm3_state,3,GAP",
+            "enum,0,fsm3_state,4,POST",
+            "enum,0,fsm3_state,5,FINISH",
+            "signal,0,sata_phy_phy_comgenerator_is_wake,1",
+            "signal,0,sata_phy_phy_oob_d102_active,1",
+        ]) + "\n"
+    )
+
+    assert ecpix5_sata_test.analyzer_com_fsm(analyzer) == "fsm3_state"
+    assert (
+        ecpix5_sata_test.analyzer_state_value(
+            analyzer, "fsm3_state", "FINISH"
+        )
+        == "0b101"
+    )
+    assert (
+        ecpix5_sata_test.analyzer_signal(analyzer, "is_wake")
+        == "sata_phy_phy_comgenerator_is_wake"
+    )
+    assert (
+        ecpix5_sata_test.analyzer_signal(analyzer, "oob_d102_active")
+        == "sata_phy_phy_oob_d102_active"
+    )
+
+
 def test_link_capture_summary(tmp_path):
     capture = tmp_path / "capture.csv"
     capture.write_text(
@@ -397,6 +445,9 @@ def test_cli_requires_explicit_analyzer_map():
     assert args.no_analyzer
     assert args.poll_interval == 0.05
     assert args.oob_subsampler == 32
+    assert args.post_oob_idle_us == 0
+    assert not args.final_oob_ei
+    assert args.oob_match_gaps == 4
     assert args.tx_rterm_ohms is None
 
     args = ecpix5_sata_test.parse_args([

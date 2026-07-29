@@ -229,6 +229,23 @@ The final three-primitive build met timing at 161.73 MHz SATA RX, 162.07 MHz
 SATA TX, and 102.43 MHz system. A final 30-second strict run on that exact
 artifact produced no READY event, issued no command, and parked the line.
 
+A subsequent Xilinx/ECP5 transition audit found no controller-state
+divergence: both implementations hold COMWAKE until `TXCOMFINISH`, wait for
+device COMWAKE, then move toward the D10.2 phase. Runtime diagnostics tested a
+1us genuine-idle interval before `TXCOMFINISH`, a genuine-electrical-idle
+final COMWAKE gap, and device COMWAKE qualification after three, four, or five
+gaps. Cycle-accurate capture also confirmed that the ECP5 controller requests
+D10.2 11ns after detecting device COMWAKE, drops its TX-idle request by 56ns,
+and presents continuous encoded D10.2 to the DCU by 100ns. Every strict A/B
+still ended at status `0x6`, so a digital state-transition error at this
+boundary is no longer the leading explanation.
+
+The remaining implementation difference is electrical: Xilinx transceivers
+generate true OOB internally, whereas the ECP5 path uses data-driven inner
+gaps because `FFC_EI_EN` cannot engage and release within a 106.7ns COMWAKE
+gap. An external OOB-envelope/serialized-eye capture or a golden SATA
+receiver is now the useful next discriminator.
+
 Do not start the write BIST until IDENTIFY succeeds and a disposable, nonzero
 sector range has been selected. The generator intentionally overwrites its
 target range.
