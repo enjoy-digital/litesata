@@ -3003,3 +3003,38 @@ device, tested first with strict OOB and then with read-only
 signature/IDENTIFY probes. Destructive BIST remains blocked until IDENTIFY
 returns a credible capacity and a disposable nonzero LBA range is explicitly
 selected.
+
+## *** CAMPAIGN 59 (2026-07-29): THIRD DRIVE CONFIRMS MISSING DEVICE COMWAKE ***
+
+A third SATA drive was connected and tested with a fresh load of the
+timing-clean configurable-dwell image. Strict negotiation produced no READY
+event in 25 seconds. The 20 us diagnostic ALIGN exit also produced no READY
+event in 30 seconds, so neither attempt reached signature or IDENTIFY.
+
+This drive was clearly distinct from the previous replacement: it emitted
+approximately 430 detected OOB bursts per second instead of approximately
+12/s. A group-0 capture nevertheless showed the same one-way failure:
+
+```text
+AWAIT-COMINIT      127 samples
+AWAIT-NO-COMINIT    80 samples
+CALIBRATE            1 sample
+COMWAKE             122 samples
+AWAIT-COMWAKE       690 samples
+
+host tx_comwake_stb 122 samples, ack seen
+device rx_cominit    80 samples
+device rx_comwake     0 samples
+```
+
+The host therefore detects the device's COMINIT, transmits its own COMWAKE,
+and waits, but the device never returns COMWAKE. The earlier replacement had
+the same missing reply even with the archived maximum-TDRV image. Two
+electrically distinct replacement drives now fail in the shared
+board-TX-to-cable-to-drive-RX direction, while the original drive previously
+heard this host well enough to accept complete frames with `R_OK`.
+
+The next action is physical: power down the drive and reseat both ends of the
+SATA data cable, preferably replacing or reversing the cable. No ATA command
+was reached in this campaign and no disk data was written. The line was
+parked after every attempt.
