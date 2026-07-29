@@ -9,7 +9,7 @@
 # LiteSATA bench on LambdaConcept ECPIX-5 (ECP5-5G), SATA connector on DCU1/CH0.
 #
 # Build/Use:
-# ./ecpix5.py --gen 1 --with-analyzer --build --load
+# ./ecpix5.py --with-bist --with-analyzer --build --load
 # litex_server --uart --uart-port=/dev/ttyUSB2 --uart-baudrate=1000000
 # ./test_init.py
 # litescope_cli (see --help)
@@ -92,21 +92,14 @@ class _CRG(LiteXModule):
 # SATATestSoC --------------------------------------------------------------------------------------
 
 class SATATestSoC(SoCMini):
-    def __init__(self, platform, sys_clk_freq=int(100e6), gen="gen1",
+    def __init__(self, platform, sys_clk_freq=int(90e6),
         with_bist       = False,
         with_analyzer   = False,
         analyzer_domain = "sys",
-        oob_config      = {"ei", "ldr_tx", "ldr_rx"},
-        pcs_mode        = "bypass",
-        pcie_mode       = False,
-        tx_boost        = False,
-        rx_los_lvl      = 4,
-        rx_rate_mode    = "0b0",
-        tx_rate_mode    = "0b0",
     ):
-        assert gen in ["gen1", "gen2"]
         assert analyzer_domain in ["sys", "tx", "rx"]
-        sata_clk_freq = {"gen1": 75e6, "gen2": 150e6}[gen]
+        gen = "gen2"
+        sata_clk_freq = 150e6
         # The 16->32 RX StrideConverter requires sys_clk > sata_rx_clk/2 (see acorn.py).
         min_sys_clk_freq = sata_clk_freq*16/32
         assert sys_clk_freq >= min_sys_clk_freq, \
@@ -132,14 +125,10 @@ class SATATestSoC(SoCMini):
             data_width = 16,
             dual       = 1,
             channel    = 0,
-            oob_config = oob_config,
-            pcs_mode   = pcs_mode,
-            pcie_mode  = pcie_mode,
-            tx_boost   = tx_boost,
-            rx_los_lvl = rx_los_lvl,
-            rx_rate_mode = rx_rate_mode,
-            tx_rate_mode = tx_rate_mode,
         )
+        # ECPIX-5 bring-up controls/counters are intentionally bench-only; the
+        # production ECP5 PHY comes up with the evidence-backed Gen2 defaults.
+        self.sata_phy.phy.add_oob_csr()
 
         # SerDes TX/RX word clock measurement (debug).
         self.sata_phy.phy.serdes.add_clock_cycles()
@@ -254,6 +243,9 @@ class SATATestSoC(SoCMini):
                         self.sata_core.link.rx.fsm,
                         self.sata_core.link.tx.from_rx.idle,
                         self.sata_core.link.tx.from_rx.insert,
+                        self.sata_core.link.tx.from_rx.primitive_valid,
+                        self.sata_core.link.tx.from_rx.primitive,
+                        self.sata_core.link.tx.error,
                         self.sata_core.link.tx_align.source.valid,
                         self.sata_core.link.tx_align.source.data,
                         self.sata_core.link.tx_align.source.charisk,
@@ -317,43 +309,20 @@ def main():
     parser.add_argument("--load",            action="store_true", help="Load bitstream (to SRAM).")
     parser.add_argument("--toolchain",       default="trellis",   help="FPGA toolchain: trellis (default) or diamond.")
     parser.add_argument("--device",          default="85F",       help="FPGA device (85F or 45F).")
-    parser.add_argument("--sys-clk-freq",    default=100e6, type=float, help="System clock frequency (default: 100MHz).")
-    parser.add_argument("--gen",             default="1", choices=["1", "2"], help="SATA generation (default: 1).")
+    parser.add_argument("--sys-clk-freq",    default=90e6, type=float, help="System clock frequency (default: 90MHz).")
     parser.add_argument("--with-bist",       action="store_true", help="Add SATA Core/Crossbar/BIST.")
     parser.add_argument("--with-analyzer",   action="store_true", help="Add LiteScope Analyzer.")
     parser.add_argument("--analyzer-domain", default="sys", choices=["sys", "tx", "rx"],
         help="LiteScope Analyzer clock domain/probe set (default: sys).")
-    parser.add_argument("--oob-config", default="ei,ldr_tx,ldr_rx",
-        help="DCU OOB hookups to enable (comma list of ei/ldr_tx/ldr_rx, empty for none).")
-    parser.add_argument("--pcs-mode",  default="bypass", choices=["bypass", "g8b10b", "pcie", "pcie_bypass", "hybrid"],
-        help="SerDes PCS mode: bypass (fabric 8b10b) or g8b10b (DCU-internal 8b10b).")
-    parser.add_argument("--pcie-mode", action="store_true",
-        help="Set CHX_PCIE_MODE (g8b10b mode only).")
-    parser.add_argument("--tx-boost", action="store_true",
-        help="Max TX driver slice currents (OOB hearing-margin experiment).")
-    parser.add_argument("--rx-rate-mode", default="0b0", choices=["0b0","0b1"],
-        help="DCU RX rate fuse: 0b0 = full rate (Gen2), 0b1 = half rate (Gen1 from a Gen2 PLL).")
-    parser.add_argument("--tx-rate-mode", default="0b0", choices=["0b0","0b1"],
-        help="DCU TX rate fuse: 0b0 = full rate (Gen2), 0b1 = half rate (Gen1 from a Gen2 PLL).")
-    parser.add_argument("--rx-los-lvl", default=4, type=int,
-        help="CHX_RX_LOS_LVL threshold 0-7 (default 4; lower = more sensitive).")
     args = parser.parse_args()
 
     platform = lambdaconcept_ecpix5.Platform(device=args.device, toolchain=args.toolchain)
     platform.add_extension(_sata_io)
     soc = SATATestSoC(platform,
         sys_clk_freq    = int(args.sys_clk_freq),
-        gen             = "gen" + args.gen,
         with_bist       = args.with_bist,
         with_analyzer   = args.with_analyzer,
         analyzer_domain = args.analyzer_domain,
-        oob_config      = set(filter(None, args.oob_config.split(","))),
-        pcs_mode        = args.pcs_mode,
-        pcie_mode       = args.pcie_mode,
-        tx_boost        = args.tx_boost,
-        rx_los_lvl      = args.rx_los_lvl,
-        rx_rate_mode    = args.rx_rate_mode,
-        tx_rate_mode    = args.tx_rate_mode,
     )
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)

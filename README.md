@@ -91,6 +91,9 @@ enjoy-digital.fr.
 2. Install LiteX and the cores by following the LiteX's wiki [installation guide](https://github.com/enjoy-digital/litex/wiki/Installation).
 3. You can find examples of integration of the core with LiteX in LiteX-Boards and in the examples directory.
 
+Experimental ECP5-5G/ECPIX-5 bring-up status and reproducible test commands are
+documented in [doc/ecp5.md](doc/ecp5.md).
+
 [> Tests
 --------
 Unit tests are available in ./test/.
