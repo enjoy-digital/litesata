@@ -3038,3 +3038,37 @@ The next action is physical: power down the drive and reseat both ends of the
 SATA data cable, preferably replacing or reversing the cable. No ATA command
 was reached in this campaign and no disk data was written. The line was
 parked after every attempt.
+
+## *** CAMPAIGN 60 (2026-07-29): ORIGINAL DRIVE A/B - STRICT LINK, NO ATA READY ***
+
+The original COMWAKE-responsive drive was reconnected without changing the
+board or cable. On the first fresh timing-clean load, the non-lenient
+SEND-ALIGN exit reached READY after 0.61 seconds and held for five seconds
+with zero drops. No initial signature FIS appeared. IDENTIFY then transmitted
+the exact five-dword Linux-style command:
+
+```text
+00ec8027 a0000000 00000000 08000000 00000000
+```
+
+The drive returned `R_RDY/R_IP/R_OK`, the host reported no TX error, and the
+link remained `status=0xf`, but no PIO Setup, Data, or Register D2H FIS
+followed. A second fresh strict attempt did not repeat the link within 30
+seconds, confirming that this late strict exit remains intermittent and is
+not evidence that the device reached ATA protocol-ready state.
+
+This is a useful same-cable A/B result. The two replacement drives stopped in
+`AWAIT-COMWAKE`, whereas the original drive hears the host well enough to
+complete OOB, exchange link primitives, and acknowledge a CRC-valid frame.
+The common TX path is therefore not simply open. Drive-dependent receive
+margin or OOB behavior remains possible, but the original drive has an
+additional failure above the link layer: it never emits the mandatory
+signature and executes neither IDENTIFY nor the earlier read-only READ DMA
+EXT probe.
+
+The decisive next disk-health test is this original drive on a normal
+AHCI/USB-SATA host. If that host also cannot IDENTIFY it, the FPGA command
+result should no longer be used to diagnose LiteSATA. If it identifies
+normally there, the remaining ECP5 fault is the negotiation state reached
+before the intermittent strict/diagnostic link. No disk data was written in
+this campaign.
