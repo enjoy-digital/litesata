@@ -3348,3 +3348,41 @@ were deliberately not imported: this host already receives and cleanly
 decodes the drive's Gen2 ALIGN stream, so changing the proven RX direction
 would not test the observed fault. The legacy image was restored and parked.
 No ATA command or write BIST ran.
+
+## *** CAMPAIGN 67 (2026-07-29): DEDICATED HIGH-VCO SATA REFERENCE PLL IS NEUTRAL ***
+
+The baseline ECPIX-5 CRG produces both the 90MHz system clock and 150MHz SATA
+reference from one EHXPLLL at a 450MHz VCO. A bench-only split-clock option
+isolated the remaining fabric-reference hypothesis. LiteX selected a 720MHz
+VCO for the system PLL and a separate 750MHz VCO for the SATA-reference PLL;
+the DCU still received exactly 150MHz and all SerDes/protocol parameters were
+unchanged.
+
+The seed-3 BIST/analyzer image closed timing after routing:
+
+```text
+RX   182.65MHz (required 150.01MHz)
+TX   189.11MHz (required 150.01MHz)
+sys  109.65MHz (required  90.00MHz)
+
+0bf678ea16d0dddc17dd2abdc7f36a078b3d0d9ff6bfe2ca299cb14382486821  bitstream
+9fe30dfae4597eb8a5cc46d94c01b8ac0649b392bfaf643fda4ff43029f8007b  csr.csv
+9092409914212e7906ed465d5ee43ee58d374027b8747a27c791b0a0cf6f8931  analyzer.csv
+```
+
+A fresh-load 60-second strict attempt against the known-healthy Toshiba
+produced no READY event and ended at status `0x6`. A 32x-subsampled OOB
+capture then showed SerDes init READY and both TX/RX LOL low for every sample.
+It contains 248 complete valid drive ALIGN primitives and no SYNC, X_RDY,
+R_RDY, or other defined non-ALIGN primitive. Steady host SEND-ALIGN again
+uses only the correct registered DCU bus pattern.
+
+The capture is
+`/tmp/litesata-ecp5-split-refclk-oob/oob-await-align.csv` with SHA256
+`7ec92538b3140ec4e283a961f1eb1b81ab89114c33d9fd4950a0e2d6722274c2`.
+Moving the reference-generation VCO from the low end to the high end of the
+EHXPLLL range and removing the system-clock load therefore does not improve
+the device's reception of host ALIGN. Together with Campaign 66 this exhausts
+the accessible PLL/CMU configuration branch; reference phase noise and the
+serialized eye now require external measurement. No ATA command or write
+BIST ran, and the line was parked.

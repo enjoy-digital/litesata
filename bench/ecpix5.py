@@ -79,7 +79,8 @@ class SATAPads:
 # CRG ----------------------------------------------------------------------------------------------
 
 class _CRG(LiteXModule):
-    def __init__(self, platform, sys_clk_freq, refclk_freq=150e6):
+    def __init__(self, platform, sys_clk_freq, refclk_freq=150e6,
+        split_sata_refclk_pll=False):
         self.cd_sys         = ClockDomain()
         self.cd_por         = ClockDomain(reset_less=True)
         self.cd_sata_refclk = ClockDomain(reset_less=True)
@@ -99,12 +100,21 @@ class _CRG(LiteXModule):
         self.sync.por += If(~por_done, por_count.eq(por_count - 1))
 
         # PLL: sys clk + 150MHz SATA SerDes refclk (the onboard 100MHz EXTREF cannot synthesize
-        # the 1.5/3.0Gbps SATA linerates with the DCU PLL multipliers).
+        # the 1.5/3.0Gbps SATA linerates with the DCU PLL multipliers). The optional split is a
+        # bench-only reference-quality A/B: it moves the SATA PLL VCO from 450MHz to 750MHz and
+        # removes the sys-clock output load while preserving the exact 150MHz DCU reference.
         self.pll = pll = ECP5PLL()
         pll.register_clkin(clk100, 100e6)
         pll.create_clkout(self.cd_sys, sys_clk_freq, with_reset=False)
-        pll.create_clkout(self.cd_sata_refclk, refclk_freq)
-        self.specials += AsyncResetSynchronizer(self.cd_sys, ~por_done | ~pll.locked | ~rst_n)
+        if split_sata_refclk_pll:
+            self.sata_refclk_pll = sata_refclk_pll = ECP5PLL()
+            sata_refclk_pll.register_clkin(clk100, 100e6)
+            sata_refclk_pll.create_clkout(self.cd_sata_refclk, refclk_freq)
+            plls_locked = pll.locked & sata_refclk_pll.locked
+        else:
+            pll.create_clkout(self.cd_sata_refclk, refclk_freq)
+            plls_locked = pll.locked
+        self.specials += AsyncResetSynchronizer(self.cd_sys, ~por_done | ~plls_locked | ~rst_n)
 
 # SATATestSoC --------------------------------------------------------------------------------------
 
@@ -114,6 +124,7 @@ class SATATestSoC(SoCMini):
         with_analyzer   = False,
         analyzer_domain = "sys",
         dcu_cmu_profile = "legacy",
+        split_sata_refclk_pll = False,
     ):
         assert analyzer_domain in ["sys", "tx", "rx"]
         assert dcu_cmu_profile in _dcu_cmu_profiles
@@ -126,7 +137,10 @@ class SATATestSoC(SoCMini):
 
         # CRG --------------------------------------------------------------------------------------
         # SATA SerDes refclk = linerate/20 (x20 DCU PLL multiplier, see ecp5sataphy.py).
-        self.crg = _CRG(platform, sys_clk_freq, refclk_freq=sata_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq,
+            refclk_freq           = sata_clk_freq,
+            split_sata_refclk_pll = split_sata_refclk_pll,
+        )
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on ECPIX-5.")
@@ -376,6 +390,8 @@ def main():
         help="LiteScope Analyzer clock domain/probe set (default: sys).")
     parser.add_argument("--dcu-cmu-profile", default="legacy", choices=_dcu_cmu_profiles,
         help="Diagnostic DCU transmitter CMU profile (default: legacy).")
+    parser.add_argument("--split-sata-refclk-pll", action="store_true",
+        help="Generate the SATA reference with a dedicated EHXPLLL.")
     args = parser.parse_args()
 
     platform = lambdaconcept_ecpix5.Platform(device=args.device, toolchain=args.toolchain)
@@ -386,6 +402,7 @@ def main():
         with_analyzer   = args.with_analyzer,
         analyzer_domain = args.analyzer_domain,
         dcu_cmu_profile = args.dcu_cmu_profile,
+        split_sata_refclk_pll = args.split_sata_refclk_pll,
     )
     builder = Builder(soc, csr_csv="csr.csv")
     build_kwargs = {"seed": args.seed} if args.toolchain == "trellis" else {}
