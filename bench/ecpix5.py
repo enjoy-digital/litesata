@@ -52,6 +52,23 @@ _sata_io = [
     ),
 ]
 
+# The original LiteICLink values are retained by default. These diagnostic
+# profiles make the transmitter-side CMU differences found in Lattice-generated
+# low-rate examples and LUNA's 5Gbps ECPIX-5 PHY independently reproducible.
+_dcu_cmu_profiles = {
+    "legacy": {},
+    "clarity-low-rate": {
+        "p_D_SETIRPOLY_AUX": "0b10",
+        "p_D_SETIRPOLY_CH":  "0b10",
+    },
+    "luna-5g": {
+        "p_D_CMUSETI4CPP":   "0d4",
+        "p_D_CMUSETZGM":     "0b100",
+        "p_D_SETIRPOLY_AUX": "0b10",
+        "p_D_SETIRPOLY_CH":  "0b10",
+    },
+}
+
 class SATAPads:
     def __init__(self, tx, rx):
         self.tx_p = tx.p
@@ -96,8 +113,10 @@ class SATATestSoC(SoCMini):
         with_bist       = False,
         with_analyzer   = False,
         analyzer_domain = "sys",
+        dcu_cmu_profile = "legacy",
     ):
         assert analyzer_domain in ["sys", "tx", "rx"]
+        assert dcu_cmu_profile in _dcu_cmu_profiles
         gen = "gen2"
         sata_clk_freq = 150e6
         # The 16->32 RX StrideConverter requires sys_clk > sata_rx_clk/2 (see acorn.py).
@@ -126,6 +145,11 @@ class SATATestSoC(SoCMini):
             dual       = 1,
             channel    = 0,
         )
+        # Apply before SerDes finalization/Instance creation. The low-rate profile changes only
+        # the two regulator-current selections used by Lattice's 2.5Gbps Clarity output. The
+        # LUNA profile adds LUNA's two 5Gbps CMU loop values. RX DCO parameters are deliberately
+        # untouched: the drive's Gen2 ALIGN stream is already received and decoded cleanly.
+        self.sata_phy.phy.serdes.serdes_params.update(_dcu_cmu_profiles[dcu_cmu_profile])
         # ECPIX-5 bring-up controls/counters are intentionally bench-only; the
         # production ECP5 PHY comes up with the evidence-backed Gen2 defaults.
         self.sata_phy.phy.add_oob_csr()
@@ -350,6 +374,8 @@ def main():
     parser.add_argument("--with-analyzer",   action="store_true", help="Add LiteScope Analyzer.")
     parser.add_argument("--analyzer-domain", default="sys", choices=["sys", "tx", "rx"],
         help="LiteScope Analyzer clock domain/probe set (default: sys).")
+    parser.add_argument("--dcu-cmu-profile", default="legacy", choices=_dcu_cmu_profiles,
+        help="Diagnostic DCU transmitter CMU profile (default: legacy).")
     args = parser.parse_args()
 
     platform = lambdaconcept_ecpix5.Platform(device=args.device, toolchain=args.toolchain)
@@ -359,6 +385,7 @@ def main():
         with_bist       = args.with_bist,
         with_analyzer   = args.with_analyzer,
         analyzer_domain = args.analyzer_domain,
+        dcu_cmu_profile = args.dcu_cmu_profile,
     )
     builder = Builder(soc, csr_csv="csr.csv")
     build_kwargs = {"seed": args.seed} if args.toolchain == "trellis" else {}

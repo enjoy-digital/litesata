@@ -3289,3 +3289,62 @@ the reason the healthy disk rejects startup ALIGN. The next bounded
 discriminator is the ECPIX-5/LUNA CMU/DCO/SSC configuration, followed by
 serialized-eye/refclk-jitter measurement. No ATA command or write BIST ran,
 and the line was parked after every attempt.
+
+## *** CAMPAIGN 66 (2026-07-29): LUNA/CLARITY CMU PROFILES DO NOT CHANGE NEGOTIATION ***
+
+LUNA's ECPIX-5 SuperSpeed PHY history was audited for the reported CDR/SSC
+problem. Commit `d475011` changed four shared CMU settings so its receiver
+could lock to the spread-spectrum clocking permitted by both PCIe and USB3:
+
+```text
+D_CMUSETI4CPP    3 -> 4
+D_CMUSETZGM    000 -> 100
+D_SETIRPOLY_AUX 01 -> 10
+D_SETIRPOLY_CH  01 -> 10
+```
+
+That change concerns receiver tolerance at a 5Gbps x20 setting; it is not a
+documented ECP5 TX-lock workaround. LUNA commit `a0c49dc` independently
+sequenced TX PLL, TX PCS, RX CDR, and RX PCS resets, which now matches the
+LiteSATA sequence from Campaign 65. LUNA's ECPIX-5 target derives its 250MHz
+DCU reference and 125MHz logic clock from the board's 100MHz oscillator with
+one EHXPLLL; it does not use a hidden external DCU clock or PLL cascade.
+
+The local Lattice Clarity-generated 2.5Gbps example instead retains
+`D_CMUSETI4CPP=3` and `D_CMUSETZGM=000`, changing only both
+`SETIRPOLY` selections to `10`. Two bench-only, selectable profiles therefore
+isolated the low-rate and full LUNA differences while leaving the production
+default unchanged:
+
+```text
+clarity-low-rate: D_SETIRPOLY_AUX=10, D_SETIRPOLY_CH=10
+luna-5g:          clarity-low-rate + D_CMUSETI4CPP=4, D_CMUSETZGM=100
+```
+
+Both seed-3 images reproduced the Campaign 65 timing exactly: 182.32MHz RX,
+186.15MHz TX, and 108.84MHz system. Their bitstream hashes are:
+
+```text
+baef487c5dd583a2b534512c10971d0d1c93c814090c5260e9d991fe843b9362  clarity-low-rate
+d7078ca25bf8a37fcc058145fb08a25be74fa0ac6a87405c63390267750add82  luna-5g
+```
+
+Strict bounded tests against the known-healthy Toshiba both timed out at
+status `0x6` and issued no ATA command. Long group-0 captures contain the
+same negotiation as the legacy profile: TX/RX LOL stay zero, all four reset
+controls remain released, the drive supplies a clean Gen2 ALIGN window, the
+host supplies its alternating complete ALIGN words, and the drive emits no
+SYNC or other valid non-ALIGN primitive before stepping away. The captures
+are:
+
+```text
+3031b5f971a64ccf5379bb47eac786c9dec6f7cbbe527c23b090793aa214d5a1  /tmp/litesata-ecp5-cmu-clarity-low-rate-oob/oob-await-align.csv
+d1411b91e125471b053c8eaf0d128d82a5d8f494bba9e0b2ec5c2ab3e6ec87f2  /tmp/litesata-ecp5-cmu-luna-5g-oob/oob-await-align.csv
+```
+
+The LUNA/SSC CMU branch is therefore closed as the cause of this
+transmitter-side negotiation failure. LUNA's RX DCO calibration settings
+were deliberately not imported: this host already receives and cleanly
+decodes the drive's Gen2 ALIGN stream, so changing the proven RX direction
+would not test the observed fault. The legacy image was restored and parked.
+No ATA command or write BIST ran.
