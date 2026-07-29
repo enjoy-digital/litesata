@@ -2844,3 +2844,37 @@ What remains needs hands: (1) `bench/test_first_contact.py` after a TRUE drive p
 first negotiation of a power session is the one thing never tested; (2) drive in a PC - does it
 still negotiate with a normal AHCI host at all (its behavior pattern would also fit a drive whose
 firmware has soft-failed); (3) scope the TX eye at the drive connector. Line left parked.
+
+## *** CAMPAIGN 55 (2026-07-29): FRESH DRIVE #2 - ONE-WAY LINK, DRIVE DEAF TO OUR TX ***
+
+The user swapped in a different disk (true power-on, zero prior exposure to our host). This was
+the decisive latched-state experiment from campaign 52 - and the result is a NEW failure mode,
+upstream of everything we fought with drive #1.
+
+First contact (test_first_contact.py, T-g1host spec + lenient fallback): no link, status 0x6,
+no signature X_RDY. Same on S-txboost (Gen2, max TX current). OOB tracing (group-0 captures):
+
+- Our COMRESET goes out; a COMINIT is detected in AWAIT-COMINIT; FSM proceeds CAL -> COMWAKE
+  (2.7us, 6 bursts) -> AWAIT-COMWAKE... and sits in 165us+ of DEAD SILENCE (act=0,
+  rx_comwake_stb=0). The drive never replies to our COMWAKE. Ever.
+- Sweeps all null: COMWAKE gap 80-187ns x burst_len 16/20/24, wake_delay 1us-5ms,
+  pwdn_gap, no-deemph. Always gapmin=28 (COMINIT spacing), count=145/12s.
+- **Smoking gun: with our TX fully parked (rec armed, 20s): count=240 at IDENTICAL 12.0/s
+  cadence, gap 28-29, burst 9-11.** The drive's COMINITs are autonomous broadcast, not replies.
+  It has never heard (or never qualified) anything we transmitted. Drive TX -> our RX is
+  perfect (textbook COMINIT decode); our TX -> drive RX is dead.
+- The BACKOFF "long carrier" (burst_max=65535 + kcnt) was re-checked: it occurs in BACKOFF with
+  raw DCU bus all-zeros = self-artifact of the parked lane state, not drive activity.
+- PCIe receiver-detect (_oob_rxdet): done never asserts in this config (facility unvalidated);
+  connected=1 reading not trustworthy without done.
+
+Contrast with drive #1: same bitstreams completed the full OOB handshake (COMWAKE reply,
+speed-negotiation windows, links, R_OK'd frames). So the ECP5 TX was heard by drive #1 but not
+by drive #2. Hypotheses, in order: (1) SATA data cable half-seated after the swap (TX pair
+open, RX pair fine - fits every observation); (2) drive #2's RX squelch threshold above our
+TX swing (drive #1 tolerated it; boost bitstream also rejected).
+
+Asked the user for a cable reseat; reseat_watch.py running (12s attempts / 8s parks, logs
+"DRIVE HEARS US" on first gapmin<15, auto-IDENTIFY on held link). Lesson re-learned the hard
+way: RemoteClient/LiteScopeAnalyzerDriver MUST get explicit csr_csv (stale csr.csv in
+scratchpad CWD broke the first watcher launch).
