@@ -317,6 +317,86 @@ class TestECP5OOB(unittest.TestCase):
 
         run_simulation(dut, gen())
 
+    def test_ctrl_lenient_exit_obeys_align_dwell(self):
+        clk_freq = 1e6
+
+        class _TRXStub(Module):
+            def __init__(self):
+                self.ready              = Signal(reset=1)
+                self.tx_idle            = Signal()
+                self.tx_polarity        = Signal()
+                self.rx_polarity        = Signal()
+                self.tx_cominit_stb     = Signal()
+                self.tx_cominit_ack     = Signal()
+                self.tx_comwake_stb     = Signal()
+                self.tx_comwake_ack     = Signal()
+                self.rx_idle            = Signal(reset=1)
+                self.rx_cdrhold         = Signal()
+                self.rx_cominit_stb     = Signal()
+                self.rx_comwake_stb     = Signal()
+                self.oob_lenient_exit   = Signal(reset=1)
+                self.oob_lenient_dwell  = Signal(16, reset=16)
+                self.comb += [
+                    self.tx_cominit_ack.eq(self.tx_cominit_stb),
+                    self.tx_comwake_ack.eq(self.tx_comwake_stb),
+                ]
+
+        class _CRGStub(Module):
+            def __init__(self):
+                self.tx_reset = Signal()
+                self.rx_reset = Signal()
+
+        class _DUT(Module):
+            def __init__(self):
+                self.submodules.trx = _TRXStub()
+                self.submodules.crg = _CRGStub()
+                self.submodules.ctrl = LiteSATAPHYCtrl(
+                    self.trx, self.crg, clk_freq,
+                    align_timeout_us=1000,
+                    stability_us=1,
+                )
+
+        dut = _DUT()
+
+        def wait_state(name, timeout=200):
+            encoding = dut.ctrl.fsm.encoding[name]
+            for _ in range(timeout):
+                if (yield dut.ctrl.fsm.state) == encoding:
+                    return
+                yield
+            self.fail(f"timeout waiting for {name}")
+
+        def gen():
+            yield from wait_state("AWAIT-COMINIT")
+            yield dut.trx.rx_cominit_stb.eq(1)
+            yield
+            yield dut.trx.rx_cominit_stb.eq(0)
+            yield from wait_state("AWAIT-COMWAKE")
+            yield dut.trx.rx_comwake_stb.eq(1)
+            yield
+            yield dut.trx.rx_comwake_stb.eq(0)
+            yield from wait_state("AWAIT-ALIGN")
+
+            yield dut.trx.rx_idle.eq(0)
+            yield dut.ctrl.sink.valid.eq(1)
+            yield dut.ctrl.sink.charisk.eq(0b0001)
+            yield dut.ctrl.sink.data.eq(primitives["ALIGN"])
+            yield from wait_state("SEND-ALIGN")
+
+            # Four consecutive ALIGNs normally trigger the diagnostic exit immediately.
+            # The configured dwell must keep us in SEND-ALIGN first.
+            for _ in range(12):
+                yield
+            self.assertEqual(
+                (yield dut.ctrl.fsm.state),
+                dut.ctrl.fsm.encoding["SEND-ALIGN"],
+            )
+
+            yield from wait_state("READY", timeout=16)
+            self.assertEqual((yield dut.ctrl.source.data), primitives["SYNC"])
+
+        run_simulation(dut, gen())
+
     def test_align_timer_accepts_any_k_led_primitive(self):
         dut = LiteSATAPHYAlignTimer(timeout=8)
 
@@ -429,6 +509,7 @@ class TestECP5OOB(unittest.TestCase):
         self.assertEqual(dut.phy.oob_early_d102.reset.value, 1)
         self.assertEqual(dut.phy.oob_pattern.reset.value, 0xF0F0)
         self.assertEqual(dut.phy.oob_align_nocomma.reset.value, 4096)
+        self.assertEqual(dut.phy.oob_lenient_dwell.reset.value, 0)
         self.assertEqual(dut.phy.com_check.quiet_cycles.reset.value, 32)
 
         dut.phy.add_oob_csr()
@@ -436,6 +517,7 @@ class TestECP5OOB(unittest.TestCase):
         self.assertEqual(dut.phy._oob_txctl.storage.reset.value, 0x00000260)
         self.assertEqual(dut.phy._oob_pattern.storage.reset.value, 0xF0F0)
         self.assertEqual(dut.phy._oob_align.storage.reset.value, (4096 << 16) | 64)
+        self.assertEqual(dut.phy._oob_lenient_dwell.storage.reset.value, 0)
         self.assertEqual(dut.phy._oob_quiet.storage.reset.value, 32)
         v = str(verilog.convert(dut, special_overrides=lattice_ecp5_special_overrides))
         self.assertIn("DCUA", v)

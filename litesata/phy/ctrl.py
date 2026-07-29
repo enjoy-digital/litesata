@@ -86,6 +86,9 @@ class LiteSATAPHYCtrl(LiteXModule):
         lenient_exit = getattr(trx, "oob_lenient_exit", None)
         if lenient_exit is None:
             lenient_exit = Signal()
+        lenient_dwell = getattr(trx, "oob_lenient_dwell", None)
+        if lenient_dwell is None:
+            lenient_dwell = Signal(16)
 
         # Sticky ALIGN/ALIGN_N detection (cleared with the FSM): the device's ALIGN bursts are
         # short and must not be missed while the FSM is between states.
@@ -127,6 +130,16 @@ class LiteSATAPHYCtrl(LiteXModule):
 
         self.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
+        lenient_dwell_count = Signal(16)
+        lenient_dwell_done  = Signal()
+        self.comb += lenient_dwell_done.eq(lenient_dwell_count >= lenient_dwell)
+        self.sync += [
+            If(~fsm.ongoing("SEND-ALIGN"),
+                lenient_dwell_count.eq(0)
+            ).Elif(lenient_dwell_count < lenient_dwell,
+                lenient_dwell_count.eq(lenient_dwell_count + 1)
+            )
+        ]
         fsm.act("RESET",
             self.tx_idle.eq(1),
             trx.rx_cdrhold.eq(1),
@@ -235,9 +248,11 @@ class LiteSATAPHYCtrl(LiteXModule):
             source.charisk.eq(0b0001),
             If(sink.valid & (sink.charisk == 0b0001),
                 # Strict SATA exit is a K28.3-family primitive such as SYNC.  The ECP5
-                # diagnostic CSR can additionally count ALIGN for controlled A/B tests.
+                # diagnostic CSR can additionally count ALIGN after a controlled dwell.
+                # This permits experiments that give the device time to lock to the host's
+                # ALIGN before forcing the transition to SYNC.
                 If((sink.data[0:8] == 0x7c) |
-                   ((sink.data[0:8] == 0xbc) & lenient_exit),
+                   ((sink.data[0:8] == 0xbc) & lenient_exit & lenient_dwell_done),
                     If(align_count != 0,
                         NextValue(align_count, align_count - 1),
                     )

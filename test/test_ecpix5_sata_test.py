@@ -39,6 +39,7 @@ class FakeRegs:
             "sata_phy_phy_oob_quiet",
             "sata_phy_phy_oob_ei_shape",
             "sata_phy_phy_oob_align",
+            "sata_phy_phy_oob_lenient_dwell",
             "sata_phy_phy_oob_rec",
             "sata_bist_identify_start",
             "sata_bist_identify_done",
@@ -65,6 +66,7 @@ def test_canonical_configuration_and_park(monkeypatch):
     assert regs.sata_phy_phy_oob_quiet.value == 32
     assert regs.sata_phy_phy_oob_ei_shape.value == 16 << 13
     assert regs.sata_phy_phy_oob_align.value == (4096 << 16) | 64
+    assert regs.sata_phy_phy_oob_lenient_dwell.value == 0
 
     ecpix5_sata_test.park(regs)
     assert regs.sata_phy_enable.writes[-2:] == [0, 1]
@@ -72,10 +74,11 @@ def test_canonical_configuration_and_park(monkeypatch):
         ecpix5_sata_test.OOB_CONTROL | ecpix5_sata_test.CTRL_DISABLE
     )
 
-    ecpix5_sata_test.configure_attempt(regs, lenient_exit=True)
+    ecpix5_sata_test.configure_attempt(regs, lenient_exit=True, lenient_dwell_cycles=3600)
     assert regs.sata_phy_phy_oob_txctl.value == (
         ecpix5_sata_test.OOB_TXCTL | ecpix5_sata_test.LENIENT_EXIT
     )
+    assert regs.sata_phy_phy_oob_lenient_dwell.value == 3600
 
 
 def test_phy_snapshot_can_reuse_sampled_status():

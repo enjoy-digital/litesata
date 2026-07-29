@@ -46,6 +46,7 @@ from collections import Counter
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
 # Canonical Gen2 configuration proven on ECPIX-5 (BRINGUP campaigns 40+).
+SYS_CLK_FREQ = 90_000_000
 EI_MODE     = 1 << 1
 LDR_TIMEOUT = 4 << 8
 BURST_MODE  = 1 << 18
@@ -208,7 +209,7 @@ def park(regs):
     regs.sata_phy_enable.write(1)
 
 
-def configure_attempt(regs, lenient_exit=False):
+def configure_attempt(regs, lenient_exit=False, lenient_dwell_cycles=0):
     regs.sata_phy_enable.write(0)
     time.sleep(1e-3)
     regs.sata_phy_phy_oob_txctl.write(
@@ -220,6 +221,7 @@ def configure_attempt(regs, lenient_exit=False):
     regs.sata_phy_phy_oob_quiet.write(32)
     regs.sata_phy_phy_oob_ei_shape.write(16 << 13)
     regs.sata_phy_phy_oob_align.write((4096 << 16) | 64)
+    regs.sata_phy_phy_oob_lenient_dwell.write(lenient_dwell_cycles)
     regs.sata_phy_phy_oob_control.write(OOB_CONTROL)
 
 
@@ -528,6 +530,8 @@ def run(args):
         # built from a revision that implements the corresponding controls;
         # an archived image cannot be inferred to do so from CSR writes alone.
         "lenient_send_align_exit_requested": args.lenient_exit,
+        "lenient_send_align_dwell_us": args.lenient_dwell_us,
+        "lenient_send_align_dwell_cycles": round(args.lenient_dwell_us*SYS_CLK_FREQ/1e6),
         "bitstream_policy_verified_by_runner": False,
         "oob_control": OOB_CONTROL,
         "oob_txctl": OOB_TXCTL | (LENIENT_EXIT if args.lenient_exit else 0),
@@ -568,7 +572,11 @@ def run(args):
             arm_analyzer(signature_analyzer, 2, {link_rx_fsm: "0b001"})
             result.event("signature_watch_armed")
 
-        configure_attempt(regs, lenient_exit=args.lenient_exit)
+        configure_attempt(
+            regs,
+            lenient_exit=args.lenient_exit,
+            lenient_dwell_cycles=round(args.lenient_dwell_us*SYS_CLK_FREQ/1e6),
+        )
         reset_oob_recorders(regs)
         regs.sata_phy_enable.write(1)
         result.event("phy_enabled")
@@ -785,6 +793,12 @@ def parse_args(argv=None):
         action="store_true",
         help="Diagnostic only: permit ALIGN as well as SYNC to exit SEND-ALIGN.",
     )
+    parser.add_argument(
+        "--lenient-dwell-us",
+        default=0.0,
+        type=float,
+        help="Diagnostic SEND-ALIGN dwell before --lenient-exit can count device ALIGNs.",
+    )
     parser.add_argument("--signature-timeout", default=1.0, type=float)
     parser.add_argument(
         "--soft-reset",
@@ -802,6 +816,12 @@ def parse_args(argv=None):
         parser.error("--poll-interval must be greater than zero")
     if args.post_reset_delay < 0:
         parser.error("--post-reset-delay cannot be negative")
+    if args.lenient_dwell_us < 0:
+        parser.error("--lenient-dwell-us cannot be negative")
+    if round(args.lenient_dwell_us*SYS_CLK_FREQ/1e6) > 0xffff:
+        parser.error("--lenient-dwell-us exceeds the 16-bit hardware counter")
+    if args.lenient_dwell_us and not args.lenient_exit:
+        parser.error("--lenient-dwell-us requires --lenient-exit")
     return args
 
 

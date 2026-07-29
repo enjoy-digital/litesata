@@ -519,6 +519,7 @@ class ECP5LiteSATAPHY(LiteXModule):
         self.oob_early_d102  = Signal(reset=1)   # Start continuous D10.2 on COMWAKE detection (see ctrl).
         self.oob_d102_phase  = Signal()   # i (from ctrl): the post-COMWAKE D10.2 filler phase.
         self.oob_lenient_exit = Signal()  # CSR: lenient SEND-ALIGN exit (count drive ALIGNs too).
+        self.oob_lenient_dwell = Signal(16) # CSR: sys cycles before lenient ALIGN counting starts.
         self.oob_pat_alt     = Signal(reset=1) # Gen1-rate carrier: alternate pattern with its inverse.
         self.oob_sci_gate    = Signal() # OOB gaps made by SCI TDRV-slice power-down.
         self.oob_sci_burst_val = Signal(8, reset=0x55)
@@ -856,6 +857,9 @@ class ECP5LiteSATAPHY(LiteXModule):
                             "0 = edge-pulsed re-arm on decode error / no-comma timeout (default: "
                             "the combination proven on the loopback, with LSM_DISABLE=1)."),
         ])
+        self._oob_lenient_dwell = CSRStorage(16,
+            description="Diagnostic SEND-ALIGN dwell in sys cycles before lenient ALIGN counting "
+                        "can force the transition to SYNC (0 = immediate).")
         self._oob_gap_pattern = CSRStorage(16, reset=0x0000,
             description="Raw pattern transmitted during OOB gaps (constant = de-emphasis idle).")
         self._oob_sci_vals = CSRStorage(fields=[
@@ -901,6 +905,7 @@ class ECP5LiteSATAPHY(LiteXModule):
             self.oob_deemph_gap.eq(  self._oob_txctl.fields.deemph_gap),
             self.oob_early_d102.eq(  self._oob_txctl.fields.early_d102),
             self.oob_lenient_exit.eq(self._oob_txctl.fields.lenient_exit),
+            self.oob_lenient_dwell.eq(self._oob_lenient_dwell.storage),
             self.oob_gap_pattern.eq( self._oob_gap_pattern.storage),
             self.oob_align_holdoff.eq(self._oob_align.fields.holdoff),
             self.oob_align_nocomma.eq(self._oob_align.fields.nocomma),

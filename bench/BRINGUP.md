@@ -2914,3 +2914,54 @@ lenient IDENTIFY first without reset. If it again accepts the command but does
 not answer, run exactly one `--soft-reset --post-reset-delay 30` attempt with
 the post-reset signature watch. BIST writes remain blocked until IDENTIFY
 returns capacity and a disposable nonzero LBA range is explicitly chosen.
+
+## *** CAMPAIGN 57 (2026-07-29): POWER-CYCLE RETEST + MEASURED ALIGN DWELL ***
+
+The drive was physically power-cycled. The first bounded lenient IDENTIFY
+again held `status=0xf`, transmitted the exact Linux-style five-dword FIS, and
+received `R_RDY/R_IP/R_OK` with `tx_error=0`; no D2H FIS followed. This
+reproduces campaign 56 from a fresh device power state and exonerates stale
+pre-power-cycle state as the reason IDENTIFY is unanswered.
+
+A strict SEND-ALIGN capture with 8x subsampling established the timing:
+
+- host entry to SEND-ALIGN at qualified sample 128;
+- 613 consecutive subsampled samples of clean device Gen2
+  `7b4a4abc/k0001`;
+- rate-step artifacts beginning at sample 741; and
+- 613 * 8 / 90 MHz = **54.49 us**, matching the SATA speed window.
+
+The host's actual 16-bit DCU TX input remained the correct ALIGN halves
+(`4abc/k01`, `7b4a/k00`) for the complete capture. The device never sent SYNC.
+
+Added a runtime `oob_lenient_dwell` CSR plus runner
+`--lenient-dwell-us` option. Strict SYNC detection remains immediate and
+unchanged; only the diagnostic ALIGN-based exit is delayed. Hardware sweep:
+5 us eventually held with 16 early drops; 15 us produced one zero-drop held
+link but varied on repeats; 20 us was the most repeatable held point; 40 us
+was unstable with 35 drops. The timing-clean BIST/analyzer build achieved
+151.65 MHz RX, 162.92 MHz TX, and 108.10 MHz sys.
+
+Fresh-load capture at 15 us:
+
+```text
+IDENTIFY: 00ec8027 a0000000 00000000 08000000 00000000
+RX:       R_RDY, R_IP, R_OK; no R_ERR; no device frame
+```
+
+The single planned long-recovery SRST discriminator then ran at the more
+repeatable 20 us point. Both control frames were accepted:
+
+```text
+00000027 00000000 00000000 0c000000 00000000
+00000027 00000000 00000000 08000000 00000000
+```
+
+No signature X_RDY appeared during the full 30-second post-reset watch. The
+link remained `0xf`, and the following IDENTIFY was again accepted with
+`R_OK` and unanswered. The disk therefore has working PHY and link-layer
+engines in both directions, but never reaches the device state that emits the
+mandatory signature or executes ATA commands under this negotiation.
+
+IDENTIFY is still not complete, so destructive generator/checker BIST remains
+intentionally blocked.

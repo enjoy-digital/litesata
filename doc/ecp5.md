@@ -77,7 +77,8 @@ timeout, unstable link, IDENTIFY timeout, or partial IDENTIFY response.
 
 `--lenient-exit` is a diagnostic A/B switch. It permits device ALIGN primitives,
 in addition to the K28.3 primitive required by the normal handshake, to finish
-the host SEND-ALIGN state:
+the host SEND-ALIGN state. `--lenient-dwell-us` can keep transmitting ALIGN for
+a measured interval before that diagnostic exit is allowed:
 
 ```sh
 python3 bench/ecpix5_sata_test.py \
@@ -85,10 +86,13 @@ python3 bench/ecpix5_sata_test.py \
     --csr-csv csr.csv \
     --analyzer-csv analyzer.csv \
     --output-dir /tmp/litesata-ecp5-lenient \
-    --lenient-exit
+    --lenient-exit \
+    --lenient-dwell-us 20
 ```
 
-Do not enable this switch in a claimed production configuration.
+The dwell is expressed in 90 MHz ECPIX-5 system-clock cycles in hardware and
+is limited to the 16-bit counter range. Do not enable either lenient option in
+a claimed production configuration.
 
 To issue the standard two-FIS ATA software reset before IDENTIFY, add:
 
@@ -110,6 +114,9 @@ On 2026-07-29, the reduced ECPIX-5 build routed with timing met:
 | SATA RX | 163.19 MHz | 150.01 MHz |
 | SATA TX | 178.99 MHz | 150.01 MHz |
 | System | 111.74 MHz | 90.00 MHz |
+
+The later BIST/analyzer image containing the configurable ALIGN dwell also met
+timing: 151.65 MHz SATA RX, 162.92 MHz SATA TX, and 108.10 MHz system.
 
 The strict SEND-ALIGN exit does not reliably reach READY with the current test
 drive. With the diagnostic lenient exit, the link reaches and holds READY. An
@@ -146,13 +153,32 @@ An ATA software-reset discriminator was also exercised. The host emitted:
 ```
 
 Both C=0 control FISes were accepted with `R_OK`, and the PHY remained READY.
-No post-reset signature appeared. One second later the drive no longer
-answered the IDENTIFY `X_RDY` with `R_RDY`; reloading the FPGA, issuing a new
-COMRESET, and parking the line for 30 seconds did not clear that drive state.
-A true drive power cycle is therefore required before the next IDENTIFY
-attempt. This is a device-state recovery requirement, not evidence of a dead
-ECPIX-5 TX path: the same drive had just accepted the complete IDENTIFY and
-both reset frames.
+No post-reset signature appeared. An initial one-second recovery experiment
+left the drive no longer answering IDENTIFY `X_RDY` with `R_RDY`; reloading the
+FPGA, issuing a new COMRESET, and parking the line for 30 seconds did not clear
+that state.
+
+After a true drive power cycle, a strict capture measured the device's clean
+Gen2 ALIGN interval from host SEND-ALIGN entry to its rate step as 54.49 us
+(613 samples at 8x subsampling of the 90 MHz system clock). The actual DCU TX
+input remained the correct alternating halves of `7b4a4abc/k0001` throughout,
+but the device never changed from ALIGN to SYNC. A diagnostic dwell sweep then
+gave:
+
+| Lenient dwell | Hardware result |
+| ---: | --- |
+| 5 us | eventually held READY; 16 early ready drops; IDENTIFY timed out |
+| 15 us | one zero-drop held link; later runs were less stable |
+| 20 us | repeatably reached a held link; best overall operating point |
+| 40 us | 35 ready drops and no two-second hold |
+
+On a fresh FPGA load at 15 us, IDENTIFY again received
+`R_RDY/R_IP/R_OK` with zero TX errors and no D2H FIS. The planned single
+software-reset discriminator was then repeated at 20 us with a full 30-second
+post-reset watch. Both reset FISes received `R_OK`, the PHY stayed READY, no
+signature appeared, and the subsequent IDENTIFY also received `R_OK` but no
+response. SRST therefore does not recover the missing device protocol-ready
+state.
 
 Do not start the write/check BIST until IDENTIFY succeeds and a disposable,
 nonzero sector range has been selected. The generator intentionally
