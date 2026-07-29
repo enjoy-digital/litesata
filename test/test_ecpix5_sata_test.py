@@ -155,6 +155,35 @@ def test_soft_reset_reports_unsupported_map():
     assert state == "unsupported"
 
 
+def test_tx_rterm_is_read_modify_write_verified(monkeypatch):
+    regs = SimpleNamespace(
+        sata_phy_phy_serdes_sci_reconfig_pause=FakeRegister(),
+        sata_phy_phy_serdes_sci_reconfig_sel=FakeRegister(),
+    )
+    values = {0x11: 0x53}
+    writes = []
+
+    monkeypatch.setattr(ecpix5_sata_test.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        ecpix5_sata_test,
+        "sci_read",
+        lambda _regs, address: values[address],
+    )
+
+    def fake_write(_regs, address, value):
+        writes.append((address, value))
+        values[address] = value
+
+    monkeypatch.setattr(ecpix5_sata_test, "sci_write", fake_write)
+
+    before, after = ecpix5_sata_test.apply_tx_rterm(regs, 60)
+
+    assert (before, after) == (0x53, 0x4b)
+    assert writes == [(0x11, 0x4b)]
+    assert regs.sata_phy_phy_serdes_sci_reconfig_pause.writes == [1, 0]
+    assert regs.sata_phy_phy_serdes_sci_reconfig_sel.writes == [0]
+
+
 def test_result_is_incremental(tmp_path):
     result = ecpix5_sata_test.Result(tmp_path)
     result.event("stage", value=3)
@@ -368,6 +397,17 @@ def test_cli_requires_explicit_analyzer_map():
     assert args.no_analyzer
     assert args.poll_interval == 0.05
     assert args.oob_subsampler == 32
+    assert args.tx_rterm_ohms is None
+
+    args = ecpix5_sata_test.parse_args([
+        "--reuse-bitstream",
+        "--csr-csv",
+        "csr.csv",
+        "--no-analyzer",
+        "--tx-rterm-ohms",
+        "60",
+    ])
+    assert args.tx_rterm_ohms == 60
 
     try:
         ecpix5_sata_test.parse_args([

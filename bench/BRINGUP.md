@@ -3386,3 +3386,56 @@ the device's reception of host ALIGN. Together with Campaign 66 this exhausts
 the accessible PLL/CMU configuration branch; reference phase noise and the
 serialized eye now require external measurement. No ATA command or write
 BIST ran, and the line was parked.
+
+## *** CAMPAIGN 68 (2026-07-29): TX TERMINATION SWEEP IS NEUTRAL ***
+
+The bounded ECPIX-5 runner can now apply every documented ECP5 DCU
+transmitter-termination choice through channel SCI register `CH_11[4:0]`.
+The update is a read/modify/write operation: the controller is masked while
+SCI is active, unrelated register bits are preserved, the requested value is
+read back before OOB starts, and the line is parked in the existing `finally`
+path.
+
+The baseline Campaign 65 image was used so only termination changed. Against
+the known-healthy Toshiba, each non-default setting received a fresh,
+strict 15-second attempt:
+
+```text
+termination   CH_11[4:0]   result
+46 ohm        0x19         no READY, status 0x6
+60 ohm        0x0b         no READY, status 0x6
+70 ohm        0x06         no READY, status 0x6
+75 ohm        0x04         no READY, status 0x6
+80 ohm        0x01         no READY, status 0x6
+```
+
+Every SCI value was confirmed by hardware readback. The nominal 50-ohm
+setting (`0x13`) had already failed the longer baseline tests and was
+explicitly restored and verified after the sweep. The result records are:
+
+```text
+04e957e1e5b34ea884a2868c4ccc23616c34c39c77a55dacb185ea9b4ef950ec  /tmp/litesata-ecp5-tx-rterm-46/result.json
+0fa2d18927a14a92c077a6ab68473acc0747edbe8443458614e98d65203bbee4  /tmp/litesata-ecp5-tx-rterm-60/result.json
+b7fcf7955b5d5f7b427338c014a5d27d902b01bc0d0076487f8d04cdc42fb4e5  /tmp/litesata-ecp5-tx-rterm-70/result.json
+d1413c809cd950628f48c99e27cc0e5cb00a96ff906a4e2e3be633c2592b6452  /tmp/litesata-ecp5-tx-rterm-75/result.json
+2ab584a0ec5070fb971b6f92a4527125c3fc656a7aed670199ac1209f7cd3fdc  /tmp/litesata-ecp5-tx-rterm-80/result.json
+085052f46f4e270b8895c0ea1be01e8a046c35667d8dcb54404dcf4a43060e74  /tmp/litesata-ecp5-tx-rterm-restore-50/result.json
+```
+
+A final diagnostic complete-ALIGN exit at restored 50 ohms held controller
+READY for five seconds without a drop, but produced neither startup
+signature nor IDENTIFY data. The IDENTIFY analyzer did not trigger, so this
+specific run does not prove that a command frame reached the wire. This is
+expected after the experimental link-TX SYNC relaxation was removed: the
+standard link layer will not launch a frame until it receives the device's
+SYNC, and diagnostic ALIGN-only READY does not supply that prerequisite.
+The record is
+`/tmp/litesata-ecp5-post-rterm-lenient-identify/result.json` with SHA256
+`d3bb832d9264bd6f815a2064ed4d67bbfdc9745d72d1d606454d7b0e22edc013`.
+
+Termination mismatch is therefore not the cause of the healthy drive
+rejecting host ALIGN. Together with the CMU and reference-PLL A/B tests, all
+safe programmable TX clock/termination discriminators are exhausted. The
+next useful evidence must come from an external serialized-eye/refclock
+phase-noise measurement or a golden SATA receiver. No write BIST ran, no disk
+data changed, the 50-ohm setting was restored, and the line was parked.

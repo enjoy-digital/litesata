@@ -77,6 +77,16 @@ PRIMITIVE_NAMES = {
 }
 MAX_READY_DROP_EVENTS = 10
 
+# ECP5 DCU CH_11[4:0] transmitter termination encodings from FPGA-TN-02206.
+TX_RTERM_CODES = {
+    46: 25,
+    50: 19,
+    60: 11,
+    70: 6,
+    75: 4,
+    80: 1,
+}
+
 
 class Result:
     """Incrementally written acceptance result.
@@ -232,6 +242,47 @@ def reset_oob_recorders(regs):
     recorder.write(0)
     time.sleep(1e-3)
     recorder.write(1)
+
+
+def sci_read(regs, address):
+    regs.sata_phy_phy_serdes_sci_reconfig_adr.write(address)
+    regs.sata_phy_phy_serdes_sci_reconfig_re.write(1)
+    # The SCI background FSM reports idle before it observes the CSR strobe.
+    # Allow the request to cross and complete before checking its done signal.
+    time.sleep(0.01)
+    if not regs.sata_phy_phy_serdes_sci_reconfig_done.read():
+        raise TimeoutError("SCI read did not complete")
+    return regs.sata_phy_phy_serdes_sci_reconfig_dat_r.read()
+
+
+def sci_write(regs, address, value):
+    regs.sata_phy_phy_serdes_sci_reconfig_adr.write(address)
+    regs.sata_phy_phy_serdes_sci_reconfig_dat_w.write(value)
+    regs.sata_phy_phy_serdes_sci_reconfig_we.write(1)
+    time.sleep(0.01)
+    if not regs.sata_phy_phy_serdes_sci_reconfig_done.read():
+        raise TimeoutError("SCI write did not complete")
+
+
+def apply_tx_rterm(regs, ohms):
+    """Apply and verify a reversible ECP5 transmitter-termination setting."""
+    code = TX_RTERM_CODES[ohms]
+    regs.sata_phy_phy_serdes_sci_reconfig_pause.write(1)
+    regs.sata_phy_phy_serdes_sci_reconfig_sel.write(0)  # Channel register space.
+    time.sleep(0.01)
+    try:
+        before = sci_read(regs, 0x11)
+        requested = (before & ~0x1f) | code
+        sci_write(regs, 0x11, requested)
+        after = sci_read(regs, 0x11)
+        if after != requested:
+            raise RuntimeError(
+                f"SCI TX termination verification failed: "
+                f"requested=0x{requested:02x}, read=0x{after:02x}"
+            )
+    finally:
+        regs.sata_phy_phy_serdes_sci_reconfig_pause.write(0)
+    return before, after
 
 
 def drain_identify(regs, limit=4096):
@@ -567,6 +618,7 @@ def run(args):
         "soft_reset_requested": args.soft_reset,
         "post_reset_delay_s": args.post_reset_delay,
         "oob_capture_subsampler": args.oob_subsampler,
+        "tx_rterm_ohms": args.tx_rterm_ohms,
     }
     result.flush()
 
@@ -613,7 +665,23 @@ def run(args):
             lenient_exit=args.lenient_exit,
             lenient_dwell_cycles=round(args.lenient_dwell_us*SYS_CLK_FREQ/1e6),
         )
+        if args.tx_rterm_ohms is not None:
+            # The SCI FSM is held in reset while sata_phy_enable is low. Start
+            # only the SerDes and keep controller TX requests masked until the
+            # new termination has been verified by readback.
+            regs.sata_phy_phy_oob_control.write(OOB_CONTROL | CTRL_DISABLE)
+            regs.sata_phy_enable.write(1)
+            time.sleep(0.1)
+            before, after = apply_tx_rterm(regs, args.tx_rterm_ohms)
+            result.event(
+                "tx_rterm_applied",
+                ohms=args.tx_rterm_ohms,
+                ch11_before=before,
+                ch11_after=after,
+            )
         reset_oob_recorders(regs)
+        if args.tx_rterm_ohms is not None:
+            regs.sata_phy_phy_oob_control.write(OOB_CONTROL)
         regs.sata_phy_enable.write(1)
         result.event("phy_enabled")
 
@@ -866,6 +934,12 @@ def parse_args(argv=None):
     parser.add_argument("--post-reset-delay", default=1.0, type=float)
     parser.add_argument("--identify-timeout", default=5.0, type=float)
     parser.add_argument("--analyzer-timeout", default=1.0, type=float)
+    parser.add_argument(
+        "--tx-rterm-ohms",
+        choices=sorted(TX_RTERM_CODES),
+        type=int,
+        help="Apply and verify an ECP5 TX termination for this attempt.",
+    )
     args = parser.parse_args(argv)
     if not args.no_analyzer and not args.analyzer_csv:
         parser.error("--analyzer-csv is required unless --no-analyzer is used")
