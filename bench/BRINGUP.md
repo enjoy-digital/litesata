@@ -3203,3 +3203,31 @@ selection as the reason the healthy disk does not answer host ALIGN. The
 remaining high-value discriminator is a proper eye measurement of the
 serialized waveform at the drive connector, including PLL jitter. No ATA
 command or write BIST ran, and the line was parked after every experiment.
+
+## *** CAMPAIGN 64 (2026-07-29): FULL SPEED WINDOW CONTAINS NO HIDDEN SYNC ***
+
+The healthy Toshiba's complete Gen2 negotiation window was captured with the
+system analyzer subsampled by eight. The 1020 qualified samples span 90.67us:
+about 5.5us before host SEND-ALIGN and 85us after it. The receive signal
+remained present for the entire capture.
+
+The device supplied 469 sampled clean `0x7b4a4abc/k0001` ALIGN primitives.
+At roughly 54--59us after the start of its clean Gen2 window, it changed to
+the deterministic out-of-rate family:
+
+```text
+0xd926c0e0/k0001
+0xe720d926/k0000
+```
+
+That family continued through the end of the capture as the device stepped
+away from Gen2. Neither the 32-bit receive stream nor the raw 20-bit/fabric
+decoder views contain SYNC, X_RDY, R_RDY, or any other complete valid
+non-ALIGN primitive before the rate change. This rules out a short device
+SYNC being lost only by the controller's qualification logic or hidden at
+the Gen2-window boundary: the known-healthy disk really does reject host
+ALIGN and continue speed search.
+
+The capture is `/tmp/litesata-known-healthy-align-window.csv` with SHA256
+`0d6d583219b838bc878ec212925ecd3708001418d1a66ac2f392ff303b77c698`.
+No ATA command or write BIST ran, and the line was parked after the capture.
