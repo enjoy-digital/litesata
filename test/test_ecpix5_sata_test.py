@@ -59,6 +59,15 @@ class FakeRegs:
             "sata_bist_checker_aborted",
             "sata_bist_checker_errors",
             "sata_bist_checker_cycles",
+            "sata_bist_generator_start",
+            "sata_bist_generator_sector",
+            "sata_bist_generator_count",
+            "sata_bist_generator_loops",
+            "sata_bist_generator_random",
+            "sata_bist_generator_done",
+            "sata_bist_generator_aborted",
+            "sata_bist_generator_errors",
+            "sata_bist_generator_cycles",
         ]:
             setattr(self, name, FakeRegister())
 
@@ -209,7 +218,47 @@ def test_bist_checker_is_bounded_and_read_only(monkeypatch):
     assert regs.sata_bist_checker_loops.writes == [1]
     assert regs.sata_bist_checker_random.writes == [0]
     assert regs.sata_bist_checker_start.writes == [1]
-    assert not hasattr(regs, "sata_bist_generator_start")
+    assert regs.sata_bist_generator_start.writes == []
+
+
+def test_bist_generator_is_bounded_and_uses_requested_pattern(monkeypatch):
+    regs = FakeRegs()
+    regs.sata_bist_generator_done.reads = [0, 1]
+    regs.sata_bist_generator_cycles.value = 180_000
+    monkeypatch.setattr(ecpix5_sata_test.time, "sleep", lambda _: None)
+
+    result = ecpix5_sata_test.run_bist_generator(
+        regs, sector=2_097_152, count=2048, timeout=1, random=True
+    )
+
+    assert result["state"] == "complete"
+    assert result["sector"] == 2_097_152
+    assert result["count"] == 2048
+    assert result["random"] is True
+    assert result["aborted"] is False
+    assert result["bytes"] == 1024 * 1024
+    assert "errors_are_pattern_mismatches" not in result
+    assert regs.sata_bist_generator_sector.writes == [2_097_152]
+    assert regs.sata_bist_generator_count.writes == [2048]
+    assert regs.sata_bist_generator_loops.writes == [1]
+    assert regs.sata_bist_generator_random.writes == [1]
+    assert regs.sata_bist_generator_start.writes == [1]
+    assert regs.sata_bist_checker_start.writes == []
+
+
+def test_bist_generator_accepts_completion_faster_than_uart_poll(monkeypatch):
+    regs = FakeRegs()
+    regs.sata_bist_generator_done.value = 1
+    regs.sata_bist_generator_cycles.reads = [0, 4133]
+    monkeypatch.setattr(ecpix5_sata_test.time, "sleep", lambda _: None)
+
+    result = ecpix5_sata_test.run_bist_generator(
+        regs, sector=2_097_152, count=1, timeout=1
+    )
+
+    assert result["state"] == "complete"
+    assert result["cycles"] == 4133
+    assert result["aborted"] is False
 
 
 def test_tx_rterm_is_read_modify_write_verified(monkeypatch):
@@ -493,6 +542,9 @@ def test_cli_requires_explicit_analyzer_map():
     assert args.tx_rterm_ohms is None
     assert args.bist_read_sector is None
     assert args.bist_read_count == 1
+    assert args.bist_write_sector is None
+    assert args.bist_write_count == 1
+    assert not args.bist_random
     assert args.bist_timeout == 5
 
     args = ecpix5_sata_test.parse_args([
@@ -520,6 +572,24 @@ def test_cli_requires_explicit_analyzer_map():
     assert args.bist_read_sector == 2048
     assert args.bist_read_count == 8
     assert args.bist_timeout == 2
+
+    args = ecpix5_sata_test.parse_args([
+        "--reuse-bitstream",
+        "--csr-csv",
+        "csr.csv",
+        "--no-analyzer",
+        "--bist-write-sector",
+        "2097152",
+        "--bist-write-count",
+        "2048",
+        "--bist-random",
+        "--bist-timeout",
+        "3",
+    ])
+    assert args.bist_write_sector == 2_097_152
+    assert args.bist_write_count == 2048
+    assert args.bist_random
+    assert args.bist_timeout == 3
 
     try:
         ecpix5_sata_test.parse_args([

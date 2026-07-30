@@ -3608,3 +3608,66 @@ hashes:
 No generator/write command was issued and no disk content changed. A
 generator/checker pattern test must wait until the user names an explicitly
 disposable, nonzero LBA range. The line was parked after every run.
+
+## *** CAMPAIGN 71 (2026-07-30): BOUNDED GENERATOR/CHECKER BIST PASSES ***
+
+The user explicitly authorized destructive testing of the complete Toshiba
+disk. The bounded runner was extended with an opt-in generator-then-checker
+stage. It requires a nonzero starting LBA, enforces the hardware's 65,535
+sector transaction limit and the IDENTIFY-reported capacity, makes read-only
+and destructive modes mutually exclusive, applies a separate timeout to
+each transaction, requires `aborted=false`, and treats any checker mismatch
+as failure. The line remains parked in `finally`.
+
+The first one-sector attempt exposed a software observation race rather than
+a SATA failure. The generator completed in 4,133 system cycles (45.9us),
+entirely between two UART CSR reads, so the runner never sampled `done=0`.
+The retained hardware status was `done=1`, `aborted=0`, `cycles=4133`.
+Start detection now also accepts a changed nonzero transaction-cycle count
+as proof of such fast completion; a focused regression reproduces this case.
+
+Repeating the counter-pattern test at LBA 2,097,152 then passed end-to-end:
+
+```text
+stage       sectors   cycles   time       throughput   aborted   errors
+generator   1         4280     47.56us    10.77MB/s    false     0
+checker     1         1313     14.59us    35.10MB/s    false     0
+```
+
+The bounded result is
+`/tmp/litesata-fixed-power-bist-write-1sector-v2/result.json`, SHA256:
+
+```text
+ea170f2f89c4cafc3f3763fb0ba011b6e20bd0c262c250362da8f8c536b9405d
+```
+
+A sustained test then wrote and verified a pseudorandom pattern over 32,768
+sectors (16MiB), starting at the same 1GiB offset:
+
+```text
+stage       bytes       time      throughput    aborted   errors
+generator   16,777,216  61.65ms   272.13MB/s    false     0
+checker     16,777,216  91.83ms   182.70MB/s    false     0
+```
+
+The write figure includes the HDD's write cache and is not a platter-speed
+claim. The checker consumed every returned dword with zero pseudorandom
+pattern mismatches. Both stages kept PHY status `0xf` with zero link drops.
+The record is
+`/tmp/litesata-fixed-power-bist-random-16mib/result.json`, SHA256:
+
+```text
+72f7c682c753beecb2355dddda5102772895d47e429c2b11709dd7e9c3f82afc
+```
+
+This completes the command-path objective: startup signature, IDENTIFY,
+DMA write, DMA read, and data verification all work on ECP5/ECPIX-5 once the
+HDD is correctly powered and the measured 20us complete-ALIGN diagnostic
+exit is used. The remaining issue is narrower but still important: the
+strict SATA initialization FSM does not see device SYNC and remains at
+status `0x6`, so the diagnostic ALIGN exit is not yet suitable as a
+production default.
+
+Disk content was intentionally overwritten from LBA 2,097,152 through
+2,129,919 inclusive (1GiB offset, 16MiB total). The line was parked after
+each test.

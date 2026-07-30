@@ -355,34 +355,41 @@ def run_identify(regs, timeout):
     return words, "complete"
 
 
-def run_bist_checker(regs, sector, count, timeout, loops=1, random=False):
-    """Run one bounded, read-only BIST checker transaction.
-
-    The checker compares disk contents with its generated pattern, so a non-zero
-    error count is expected unless the same range was previously written by the
-    BIST generator. Completion and ``aborted`` qualify the SATA read transaction;
-    ``errors`` only qualifies the data pattern.
-    """
-    checker = {
-        name: getattr(regs, f"sata_bist_checker_{name}")
+def run_bist_unit(regs, unit, sector, count, timeout, loops=1, random=False):
+    """Run one bounded BIST generator or checker transaction."""
+    bist = {
+        name: getattr(regs, f"sata_bist_{unit}_{name}")
         for name in [
             "start", "sector", "count", "loops", "random",
             "done", "aborted", "errors", "cycles",
         ]
     }
-    checker["sector"].write(sector)
-    checker["count"].write(count)
-    checker["loops"].write(loops)
-    checker["random"].write(int(random))
+    bist["sector"].write(sector)
+    bist["count"].write(count)
+    bist["loops"].write(loops)
+    bist["random"].write(int(random))
 
+    cycles_before = bist["cycles"].read()
     started = time.monotonic()
-    checker["start"].write(1)
-    busy = wait_until(
-        lambda: checker["done"].read() == 0,
+    bist["start"].write(1)
+
+    def start_state():
+        if bist["done"].read() == 0:
+            return "busy"
+        # Short writes can complete entirely between two UART CSR reads. The
+        # unit resets its cycle counter on start, so a changed non-zero value
+        # proves the request ran even when the low/busy phase was unobservable.
+        cycles = bist["cycles"].read()
+        if cycles and cycles != cycles_before:
+            return "complete"
+        return None
+
+    state = wait_until(
+        start_state,
         timeout=min(timeout, 1.0),
         interval=1e-3,
     )
-    if not busy:
+    if state is None:
         return {
             "state": "start_timeout",
             "sector": sector,
@@ -391,22 +398,23 @@ def run_bist_checker(regs, sector, count, timeout, loops=1, random=False):
             "random": bool(random),
         }
 
-    remaining = max(0, timeout - (time.monotonic() - started))
-    complete = wait_until(
-        checker["done"].read,
-        timeout=remaining,
-        interval=1e-3,
-    )
-    if not complete:
-        return {
-            "state": "timeout",
-            "sector": sector,
-            "count": count,
-            "loops": loops,
-            "random": bool(random),
-        }
+    if state == "busy":
+        remaining = max(0, timeout - (time.monotonic() - started))
+        complete = wait_until(
+            bist["done"].read,
+            timeout=remaining,
+            interval=1e-3,
+        )
+        if not complete:
+            return {
+                "state": "timeout",
+                "sector": sector,
+                "count": count,
+                "loops": loops,
+                "random": bool(random),
+            }
 
-    cycles = checker["cycles"].read()
+    cycles = bist["cycles"].read()
     elapsed = cycles / SYS_CLK_FREQ
     return {
         "state": "complete",
@@ -414,14 +422,36 @@ def run_bist_checker(regs, sector, count, timeout, loops=1, random=False):
         "count": count,
         "loops": loops,
         "random": bool(random),
-        "aborted": bool(checker["aborted"].read()),
-        "errors": checker["errors"].read(),
+        "aborted": bool(bist["aborted"].read()),
+        "errors": bist["errors"].read(),
         "cycles": cycles,
         "elapsed_s": elapsed,
         "bytes": loops * count * 512,
         "speed_bytes_s": 0 if elapsed == 0 else loops * count * 512 / elapsed,
-        "errors_are_pattern_mismatches": True,
     }
+
+
+def run_bist_checker(regs, sector, count, timeout, loops=1, random=False):
+    """Run one bounded, read-only BIST checker transaction.
+
+    The checker compares disk contents with its generated pattern, so a non-zero
+    error count is expected unless the same range was previously written by the
+    BIST generator. Completion and ``aborted`` qualify the SATA read transaction;
+    ``errors`` only qualifies the data pattern.
+    """
+    result = run_bist_unit(
+        regs, "checker", sector, count, timeout, loops=loops, random=random
+    )
+    if result["state"] == "complete":
+        result["errors_are_pattern_mismatches"] = True
+    return result
+
+
+def run_bist_generator(regs, sector, count, timeout, loops=1, random=False):
+    """Run one bounded, destructive BIST generator transaction."""
+    return run_bist_unit(
+        regs, "generator", sector, count, timeout, loops=loops, random=random
+    )
 
 
 def run_soft_reset(regs, timeout, settle=0.01):
@@ -805,7 +835,14 @@ def run(args):
         "post_reset_delay_s": args.post_reset_delay,
         "bist_read_sector": args.bist_read_sector,
         "bist_read_count": args.bist_read_count if args.bist_read_sector is not None else None,
-        "bist_timeout_s": args.bist_timeout if args.bist_read_sector is not None else None,
+        "bist_write_sector": args.bist_write_sector,
+        "bist_write_count": args.bist_write_count if args.bist_write_sector is not None else None,
+        "bist_random": args.bist_random if args.bist_write_sector is not None else None,
+        "bist_timeout_s": (
+            args.bist_timeout
+            if args.bist_read_sector is not None or args.bist_write_sector is not None
+            else None
+        ),
         "oob_capture_subsampler": args.oob_subsampler,
         "tx_rterm_ohms": args.tx_rterm_ohms,
     }
@@ -1095,6 +1132,80 @@ def run(args):
                 result.data["final_snapshot"] = phy_snapshot(regs)
                 return 9
 
+        if args.bist_write_sector is not None:
+            end_sector = args.bist_write_sector + args.bist_write_count
+            if end_sector > identify["sectors"]:
+                result.data["outcome"] = "bist_write_range_invalid"
+                result.data["final_snapshot"] = phy_snapshot(regs)
+                result.event(
+                    "bist_write_range_invalid",
+                    sector=args.bist_write_sector,
+                    count=args.bist_write_count,
+                    device_sectors=identify["sectors"],
+                )
+                return 10
+
+            result.event(
+                "bist_write_start",
+                sector=args.bist_write_sector,
+                count=args.bist_write_count,
+                random=args.bist_random,
+            )
+            bist_write = run_bist_generator(
+                regs,
+                sector=args.bist_write_sector,
+                count=args.bist_write_count,
+                timeout=args.bist_timeout,
+                random=args.bist_random,
+            )
+            result.data["bist_write"] = bist_write
+            result.event(
+                "bist_write_complete",
+                state=bist_write["state"],
+                aborted=bist_write.get("aborted"),
+            )
+            if bist_write["state"] != "complete":
+                result.data["outcome"] = f"bist_write_{bist_write['state']}"
+                result.data["final_snapshot"] = phy_snapshot(regs)
+                return 11
+            if bist_write["aborted"]:
+                result.data["outcome"] = "bist_write_aborted"
+                result.data["final_snapshot"] = phy_snapshot(regs)
+                return 12
+
+            result.event(
+                "bist_verify_start",
+                sector=args.bist_write_sector,
+                count=args.bist_write_count,
+                random=args.bist_random,
+            )
+            bist_verify = run_bist_checker(
+                regs,
+                sector=args.bist_write_sector,
+                count=args.bist_write_count,
+                timeout=args.bist_timeout,
+                random=args.bist_random,
+            )
+            result.data["bist_verify"] = bist_verify
+            result.event(
+                "bist_verify_complete",
+                state=bist_verify["state"],
+                aborted=bist_verify.get("aborted"),
+                errors=bist_verify.get("errors"),
+            )
+            if bist_verify["state"] != "complete":
+                result.data["outcome"] = f"bist_verify_{bist_verify['state']}"
+                result.data["final_snapshot"] = phy_snapshot(regs)
+                return 13
+            if bist_verify["aborted"]:
+                result.data["outcome"] = "bist_verify_aborted"
+                result.data["final_snapshot"] = phy_snapshot(regs)
+                return 14
+            if bist_verify["errors"]:
+                result.data["outcome"] = "bist_verify_errors"
+                result.data["final_snapshot"] = phy_snapshot(regs)
+                return 15
+
         result.data["final_snapshot"] = phy_snapshot(regs)
         result.data["outcome"] = "success"
         return 0
@@ -1116,7 +1227,7 @@ def run(args):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Bounded ECPIX-5 Gen2 SATA link, IDENTIFY, and read-BIST acceptance test."
+        description="Bounded ECPIX-5 Gen2 SATA link, IDENTIFY, and BIST acceptance test."
     )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--bitstream", help="Bitstream to load before testing.")
@@ -1203,10 +1314,26 @@ def parse_args(argv=None):
         help="Number of sectors for --bist-read-sector (default: 1, maximum: 65535).",
     )
     parser.add_argument(
+        "--bist-write-sector",
+        type=int,
+        help="Destructive: write a BIST pattern at this nonzero LBA, then read and verify it.",
+    )
+    parser.add_argument(
+        "--bist-write-count",
+        default=1,
+        type=int,
+        help="Number of sectors for --bist-write-sector (default: 1, maximum: 65535).",
+    )
+    parser.add_argument(
+        "--bist-random",
+        action="store_true",
+        help="Use the BIST pseudorandom pattern for destructive write/verify.",
+    )
+    parser.add_argument(
         "--bist-timeout",
         default=5.0,
         type=float,
-        help="Read-only BIST checker timeout in seconds (default: 5).",
+        help="Timeout for each BIST generator/checker transaction in seconds (default: 5).",
     )
     parser.add_argument("--analyzer-timeout", default=1.0, type=float)
     parser.add_argument(
@@ -1240,6 +1367,14 @@ def parse_args(argv=None):
         parser.error("--bist-read-sector cannot be negative")
     if not 1 <= args.bist_read_count <= 0xffff:
         parser.error("--bist-read-count must be between 1 and 65535")
+    if args.bist_write_sector is not None and args.bist_write_sector <= 0:
+        parser.error("--bist-write-sector must be greater than zero")
+    if not 1 <= args.bist_write_count <= 0xffff:
+        parser.error("--bist-write-count must be between 1 and 65535")
+    if args.bist_read_sector is not None and args.bist_write_sector is not None:
+        parser.error("--bist-read-sector and --bist-write-sector are mutually exclusive")
+    if args.bist_random and args.bist_write_sector is None:
+        parser.error("--bist-random requires --bist-write-sector")
     if args.bist_timeout <= 0:
         parser.error("--bist-timeout must be greater than zero")
     return args

@@ -259,8 +259,16 @@ after IDENTIFY. A 1MiB read completed without abort or link drop at
 34.88MB/s. Its expected pattern mismatches confirm all payload dwords were
 consumed—the sector range had not been initialized by the BIST generator.
 
-Do not start the write BIST until a disposable, nonzero sector range has been
-explicitly selected. The generator intentionally overwrites its target range.
+After the complete disk was explicitly made disposable, the bounded
+generator/checker mode wrote and verified a 16MiB pseudorandom region at a
+1GiB offset. The generator completed at 272.13MB/s (including the HDD write
+cache), and the checker completed at 182.70MB/s with zero mismatches, no
+abort, no link drop, and final PHY status `0xf`. This qualifies the complete
+LiteSATA command, DMA-write, DMA-read, and data-checking path on ECP5.
+
+The generator intentionally overwrites its target range. Destructive mode
+therefore requires an explicit nonzero LBA; the runner bounds the range,
+times out each stage, and always parks the line afterward.
 
 ## Regression tests
 
