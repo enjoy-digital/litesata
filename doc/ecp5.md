@@ -246,9 +246,21 @@ gaps because `FFC_EI_EN` cannot engage and release within a 106.7ns COMWAKE
 gap. An external OOB-envelope/serialized-eye capture or a golden SATA
 receiver is now the useful next discriminator.
 
-Do not start the write BIST until IDENTIFY succeeds and a disposable, nonzero
-sector range has been selected. The generator intentionally overwrites its
-target range.
+Correcting the 3.5-inch Toshiba's power subsequently produced the first
+complete command result. The strict path still ends at status `0x6`, but the
+20us complete-ALIGN diagnostic exit now holds status `0xf`, receives the
+unsolicited startup signature, and returns all 256 IDENTIFY words for a
+1TB `TOSHIBA DT01ACA100`. This proves the command and transport paths are
+functional; earlier ACKed-but-unanswered diagnostic commands were observed
+while the HDD spindle was not correctly powered.
+
+The bounded runner can optionally execute a read-only BIST checker stage
+after IDENTIFY. A 1MiB read completed without abort or link drop at
+34.88MB/s. Its expected pattern mismatches confirm all payload dwords were
+consumed—the sector range had not been initialized by the BIST generator.
+
+Do not start the write BIST until a disposable, nonzero sector range has been
+explicitly selected. The generator intentionally overwrites its target range.
 
 ## Regression tests
 

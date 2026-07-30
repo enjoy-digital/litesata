@@ -3530,3 +3530,81 @@ strongest remaining discriminator is therefore an external serialized-eye
 and OOB-envelope capture, or a golden SATA receiver observing the ECPIX-5 TX.
 No ATA command or write BIST ran, no disk data changed, and the line was
 parked after every attempt.
+
+## *** CAMPAIGN 70 (2026-07-30): CORRECT HDD POWER UNLOCKS IDENTIFY AND READ BIST ***
+
+The known-healthy Toshiba used for Campaigns 61-69 is a 3.5-inch HDD, but the
+bench power arrangement had been inherited from an SSD and did not initially
+supply the spindle correctly. A first attempted correction also supplied
+3.3V in a way that left the drive outside its earlier OOB behavior: no
+AWAIT-ALIGN or host-COMWAKE-finish trigger occurred. After correcting the
+power wiring, the disk became operational and its established OOB signature
+returned immediately: approximately 9,000 recorded bursts while parked,
+valid repeating beacons, and COMWAKE/ALIGN after enabling the PHY.
+
+Power does not resolve the strict initialization failure. A fresh 60-second
+attempt on the exact Campaign 69 image produced no READY transition and ended
+at status `0x6`, matching the earlier fully digital observations. The record
+is `/tmp/litesata-fixed-power-strict/result.json`, SHA256:
+
+```text
+f3fbef0b1264443027e86899eae3a39cc74f5139bf06fa9ef67f1cd751815bcc
+```
+
+It does, however, completely change the result after the established
+20us complete-ALIGN diagnostic exit. The link reached status `0xf` about
+95ms after enable, held for three seconds with zero drops, and the analyzer
+captured the unsolicited startup signature. The drive supplied normal SYNC
+and accepted the complete five-dword IDENTIFY H2D Register FIS with
+`R_RDY -> R_IP -> R_OK` and zero host TX errors. This time it returned all
+256 IDENTIFY words:
+
+```text
+model       TOSHIBA DT01ACA100
+firmware    MS2OA8U0
+sectors     1,953,525,168
+capacity    1,000,204,886,016 bytes
+features    Gen1, Gen2, Gen3, LBA48
+```
+
+The result and analyzer artifacts are:
+
+```text
+c45c1b1f067caf41c5eebd08f33c30eb283b8ae2f97cc63563b3f9fa7744e9d3  result.json
+cfb2261274ec841f967c04ed18d80e8036acccc82425b0f55ddd13000e566169  signature.csv
+a1f9863f6998aee120b1cb3a1f4e487d03afe2be9261890a6a332e022e078b34  identify-link.csv
+```
+
+Thus the earlier lenient-link observation—host frames receiving link-layer
+ACKs but no device FIS—was caused by incomplete HDD power, not a LiteSATA
+command/transport defect. The strict no-SYNC result remains independently
+real and still prevents enabling this diagnostic exit as a production
+criterion.
+
+The ECPIX-5 runner now has an optional bounded, explicitly read-only BIST
+checker stage after successful IDENTIFY. Unlike `bench/test_bist.py`, it
+never accesses generator CSRs, rejects out-of-capacity ranges, has a timeout,
+records completion/abort/cycle/error data, and still parks the line in
+`finally`. Two hardware reads qualified the path:
+
+```text
+range                 result       errors     time       throughput
+LBA 0, 1 sector       complete     127        22.52ms    startup-dominated
+LBA 0, 2048 sectors   complete     262143     30.06ms    34.88 MB/s
+```
+
+Both reads completed with `aborted=false`, zero link drops, and final PHY
+status `0xf`. These ranges contain ordinary disk data, not a pattern
+previously written by the BIST generator, so every checked dword except the
+terminal beat is expected to mismatch. The error counters therefore prove
+that the complete payload was consumed; they are not media errors. Result
+hashes:
+
+```text
+5f9fc6ae9e8fd990af386608476c5e2f4447b55f2a20361772d08ec387f4ef8f  1-sector result.json
+07558f173b1e27407d189a176b502997f76c027d8c78e7efd22c7259577627ab  1MiB result.json
+```
+
+No generator/write command was issued and no disk content changed. A
+generator/checker pattern test must wait until the user names an explicitly
+disposable, nonzero LBA range. The line was parked after every run.

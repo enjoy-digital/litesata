@@ -50,6 +50,15 @@ class FakeRegs:
             "sata_bist_identify_source_ready",
             "sata_bist_soft_reset_start",
             "sata_bist_soft_reset_done",
+            "sata_bist_checker_start",
+            "sata_bist_checker_sector",
+            "sata_bist_checker_count",
+            "sata_bist_checker_loops",
+            "sata_bist_checker_random",
+            "sata_bist_checker_done",
+            "sata_bist_checker_aborted",
+            "sata_bist_checker_errors",
+            "sata_bist_checker_cycles",
         ]:
             setattr(self, name, FakeRegister())
 
@@ -168,6 +177,39 @@ def test_soft_reset_reports_unsupported_map():
     state = ecpix5_sata_test.run_soft_reset(SimpleNamespace(), timeout=0.1)
 
     assert state == "unsupported"
+
+
+def test_bist_checker_is_bounded_and_read_only(monkeypatch):
+    regs = FakeRegs()
+    regs.sata_bist_checker_done.reads = [0, 1]
+    regs.sata_bist_checker_cycles.value = 90_000
+    regs.sata_bist_checker_errors.value = 127
+    monkeypatch.setattr(ecpix5_sata_test.time, "sleep", lambda _: None)
+
+    result = ecpix5_sata_test.run_bist_checker(
+        regs, sector=2048, count=1, timeout=1
+    )
+
+    assert result == {
+        "state": "complete",
+        "sector": 2048,
+        "count": 1,
+        "loops": 1,
+        "random": False,
+        "aborted": False,
+        "errors": 127,
+        "cycles": 90_000,
+        "elapsed_s": 0.001,
+        "bytes": 512,
+        "speed_bytes_s": 512_000,
+        "errors_are_pattern_mismatches": True,
+    }
+    assert regs.sata_bist_checker_sector.writes == [2048]
+    assert regs.sata_bist_checker_count.writes == [1]
+    assert regs.sata_bist_checker_loops.writes == [1]
+    assert regs.sata_bist_checker_random.writes == [0]
+    assert regs.sata_bist_checker_start.writes == [1]
+    assert not hasattr(regs, "sata_bist_generator_start")
 
 
 def test_tx_rterm_is_read_modify_write_verified(monkeypatch):
@@ -449,6 +491,9 @@ def test_cli_requires_explicit_analyzer_map():
     assert not args.final_oob_ei
     assert args.oob_match_gaps == 4
     assert args.tx_rterm_ohms is None
+    assert args.bist_read_sector is None
+    assert args.bist_read_count == 1
+    assert args.bist_timeout == 5
 
     args = ecpix5_sata_test.parse_args([
         "--reuse-bitstream",
@@ -459,6 +504,22 @@ def test_cli_requires_explicit_analyzer_map():
         "60",
     ])
     assert args.tx_rterm_ohms == 60
+
+    args = ecpix5_sata_test.parse_args([
+        "--reuse-bitstream",
+        "--csr-csv",
+        "csr.csv",
+        "--no-analyzer",
+        "--bist-read-sector",
+        "2048",
+        "--bist-read-count",
+        "8",
+        "--bist-timeout",
+        "2",
+    ])
+    assert args.bist_read_sector == 2048
+    assert args.bist_read_count == 8
+    assert args.bist_timeout == 2
 
     try:
         ecpix5_sata_test.parse_args([
