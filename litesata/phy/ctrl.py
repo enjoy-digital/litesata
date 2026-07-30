@@ -46,10 +46,9 @@ class LiteSATAPHYCtrl(LiteXModule):
         self.comb += sink.ready.eq(1)
 
         # Retry / Align count/timers.
-        retry_timer = WaitTimer(self.us(10000))
-        align_timer = WaitTimer(self.us(873))
+        self.retry_timer = retry_timer = WaitTimer(self.us(10000))
+        self.align_timer = align_timer = WaitTimer(self.us(873))
         align_count = Signal(4)
-        self.submodules += align_timer, retry_timer
 
         # Drive Transceiver/CRG idle/reset from internal logic.
         self.sync += trx.tx_idle.eq(self.tx_idle)

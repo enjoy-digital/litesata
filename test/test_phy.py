@@ -4,6 +4,7 @@
 # Copyright (c) 2026 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import inspect
 import unittest
 
 from migen import ClockDomain, Instance, Module, Signal
@@ -12,11 +13,13 @@ from migen.sim import run_simulation
 from litex.soc.interconnect import stream
 
 from litesata.phy import LiteSATAPHY
+from litesata.phy.a7sataphy import A7LiteSATAPHY
 from litesata.phy.datapath import LiteSATAPHYDatapathRX
 from litesata.phy.gth3sataphy import GTH3LiteSATAPHYCRG, GTH3LiteSATAPHY
 from litesata.phy.gth4sataphy import GTH4LiteSATAPHYCRG, GTH4LiteSATAPHY
 from litesata.phy.gty4sataphy import GTY4LiteSATAPHYCRG, GTY4LiteSATAPHY
 from litesata.phy.gthe4sataphy import GTHE4LiteSATAPHYCRG, GTHE4LiteSATAPHY
+from litesata.phy.k7sataphy import K7LiteSATAPHY
 from litesata.phy.uspsataphy import USPLiteSATAPHYCRG, USPLiteSATAPHY
 from litesata.phy.ussataphy import USLiteSATAPHYCRG, USLiteSATAPHY
 
@@ -30,6 +33,11 @@ class SATAPads:
 
 
 class TestPHY(unittest.TestCase):
+    def test_constructor_keeps_legacy_positional_order(self):
+        parameters = list(inspect.signature(LiteSATAPHY.__init__).parameters)
+        self.assertLess(parameters.index("with_csr"), parameters.index("dual"))
+        self.assertLess(parameters.index("with_csr"), parameters.index("channel"))
+
     def assert_phy(self, device, gt_type, phy_cls, primitive):
         dut = LiteSATAPHY(
             device   = device,
@@ -67,6 +75,22 @@ class TestPHY(unittest.TestCase):
             gt_type   = "GTY",
             phy_cls   = GTY4LiteSATAPHY,
             primitive = "GTYE4_CHANNEL",
+        )
+
+    def test_7series_kintex7(self):
+        self.assert_phy(
+            device    = "xc7k325tffg900-2",
+            gt_type   = "GTY",
+            phy_cls   = K7LiteSATAPHY,
+            primitive = "GTXE2_CHANNEL",
+        )
+
+    def test_7series_artix7(self):
+        self.assert_phy(
+            device    = "xc7a200tsbg484-1",
+            gt_type   = "GTY",
+            phy_cls   = A7LiteSATAPHY,
+            primitive = "GTPE2_CHANNEL",
         )
 
     def test_legacy_aliases(self):
