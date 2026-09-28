@@ -94,9 +94,8 @@ class Packet(list):
 
 
 class PacketStreamer(Module):
-    def __init__(self, description, last_be=None, packet_cls=Packet):
+    def __init__(self, description, packet_cls=Packet):
         self.source = stream.Endpoint(description)
-        self.last_be = last_be
 
         self.packets = []
         self.packet  = packet_cls()
@@ -123,8 +122,6 @@ class PacketStreamer(Module):
                 self.packet.ongoing = True
             elif (yield self.source.valid) and (yield self.source.ready):
                 yield self.source.last.eq(len(self.packet) == 1)
-                if self.last_be is not None:
-                    yield self.source.last_be.eq(self.last_be & (len(self.packet) == 1))
                 if len(self.packet):
                     yield self.source.valid.eq(1)
                     yield self.source.data.eq(self.packet.pop(0))
