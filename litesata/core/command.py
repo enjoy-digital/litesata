@@ -206,7 +206,10 @@ class LiteSATACommandRX(Module):
                     is_dma_activate.eq(1),
                 ).Elif(test_type("REG_D2H"),
                     update_d2h.eq(1),
-                    set_d2h_error.eq(transport.source.status[reg_d2h_status["err"]]),
+                    set_d2h_error.eq(
+                        transport.source.status[reg_d2h_status["err"]] |
+                        transport.source.status[reg_d2h_status["df"]]
+                    ),
                     NextState("PRESENT_WRITE_RESPONSE")
                 )
             )

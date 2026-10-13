@@ -9,6 +9,7 @@ from copy import deepcopy
 
 from litesata.common import *
 from litesata.core import LiteSATACore
+from litesata.core.command import LiteSATACommandRX
 
 from test.stream_helpers import *
 
@@ -107,6 +108,49 @@ class CommandLogger(PacketLogger):
 
 
 class TestCommand(unittest.TestCase):
+    def test_write_device_fault(self):
+        transport = Module()
+        transport.source = stream.Endpoint(transport_rx_description(32))
+        dut = LiteSATACommandRX(transport)
+        results = []
+
+        def generator():
+            # ERR and DF independently fail a write; a later success clears the error.
+            for status in (0x40, 0x41, 0x60, 0x61, 0x40):
+                yield dut.from_tx.write.eq(1)
+                yield
+                yield dut.from_tx.write.eq(0)
+                yield
+
+                yield transport.source.type.eq(fis_types["REG_D2H"])
+                yield transport.source.status.eq(status)
+                yield transport.source.errors.eq(4 if status & 1 else 0)
+                yield transport.source.i.eq(1)
+                yield transport.source.last.eq(1)
+                yield transport.source.valid.eq(1)
+                yield
+                self.assertEqual((yield transport.source.ready), 1)
+                yield transport.source.valid.eq(0)
+                yield
+
+                failed = (yield dut.source.failed)
+                results.append(failed)
+                # Hold the completion under backpressure before accepting it.
+                for _ in range(3):
+                    self.assertEqual((yield dut.source.valid), 1)
+                    self.assertEqual((yield dut.source.write), 1)
+                    self.assertEqual((yield dut.source.end), 1)
+                    self.assertEqual((yield dut.source.last), 1)
+                    self.assertEqual((yield dut.source.failed), failed)
+                    yield
+                yield dut.source.ready.eq(1)
+                yield
+                yield dut.source.ready.eq(0)
+                yield
+
+        run_simulation(dut, generator())
+        self.assertEqual(results, [0, 1, 1, 1, 0])
+
     def test_command(self):
         def generator(dut):
             hdd = dut.hdd
