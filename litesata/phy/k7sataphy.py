@@ -46,7 +46,7 @@ class K7LiteSATAPHYCRG(Module):
         #   (gen2) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 150MHz (16-bits) /   75MHz (32-bits)
         #   (gen1) 150MHz from CPLL TXOUTCLK, sata_tx clk @ 75MHz  (16-bits) / 37.5MHz (32-bits)
         if tx_buffer_enable:
-            self.specials += Instance("BUFG", i_I=gtp.txoutclk, o_O=self.cd_sata_tx.clk)
+            self.specials += Instance("BUFG", i_I=gtx.txoutclk, o_O=self.cd_sata_tx.clk)
         else:
             tx_mmcm_clkin = Signal()
             tx_mmcm = S7MMCM(speedgrade=-1)
