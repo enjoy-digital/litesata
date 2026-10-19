@@ -4,7 +4,12 @@ on: [push, pull_request]
 
 jobs:
   build:
+    name: test (py${{ matrix.python-version }})
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
     steps:
       # Checkout Repository
       - name: Checkout
@@ -15,10 +20,10 @@ jobs:
         run: |
           sudo apt-get install -y wget build-essential
 
-      - name: Set up Python 3.9
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: ${{ matrix.python-version }}
           cache: "pip"
           cache-dependency-path: "setup.py"
 
