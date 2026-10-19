@@ -47,7 +47,9 @@ class FIS:
 # FIS_REG_H2D --------------------------------------------------------------------------------------
 
 class FIS_REG_H2D(FIS):
-    def __init__(self, packet=[0]*fis_reg_h2d_header.length):
+    def __init__(self, packet=None):
+        if packet is None:
+            packet = [0]*fis_reg_h2d_header.length
         FIS.__init__(self, packet, fis_reg_h2d_header.fields)
         self.type      = fis_types["REG_H2D"]
         self.direction = "H2D"
@@ -60,7 +62,9 @@ class FIS_REG_H2D(FIS):
 # FIS_REG_D2H --------------------------------------------------------------------------------------
 
 class FIS_REG_D2H(FIS):
-    def __init__(self, packet=[0]*fis_reg_d2h_header.length):
+    def __init__(self, packet=None):
+        if packet is None:
+            packet = [0]*fis_reg_d2h_header.length
         FIS.__init__(self, packet, fis_reg_d2h_header.fields)
         self.type      = fis_types["REG_D2H"]
         self.direction = "D2H"
@@ -73,7 +77,9 @@ class FIS_REG_D2H(FIS):
 # FIS_DMA_ACTIVATE_D2H -----------------------------------------------------------------------------
 
 class FIS_DMA_ACTIVATE_D2H(FIS):
-    def __init__(self, packet=[0]*fis_dma_activate_d2h_header.length):
+    def __init__(self, packet=None):
+        if packet is None:
+            packet = [0]*fis_dma_activate_d2h_header.length
         FIS.__init__(self, packet, fis_dma_activate_d2h_header.fields)
         self.type      = fis_types["DMA_ACTIVATE_D2H"]
         self.direction = "D2H"
@@ -83,10 +89,27 @@ class FIS_DMA_ACTIVATE_D2H(FIS):
         r += FIS.__repr__(self)
         return r
 
+# FIS_PIO_SETUP_D2H --------------------------------------------------------------------------------
+
+class FIS_PIO_SETUP_D2H(FIS):
+    def __init__(self, packet=None):
+        if packet is None:
+            packet = [0]*fis_pio_setup_d2h_header.length
+        FIS.__init__(self, packet, fis_pio_setup_d2h_header.fields)
+        self.type      = fis_types["PIO_SETUP_D2H"]
+        self.direction = "D2H"
+
+    def __repr__(self):
+        r = "FIS_PIO_SETUP_D2H\n"
+        r += FIS.__repr__(self)
+        return r
+
 # FIS_DATA -----------------------------------------------------------------------------------------
 
 class FIS_DATA(FIS):
-    def __init__(self, packet=[0], direction="H2D"):
+    def __init__(self, packet=None, direction="H2D"):
+        if packet is None:
+            packet = [0]
         FIS.__init__(self, packet, fis_data_header.fields, direction)
         self.type = fis_types["DATA"]
 
@@ -100,7 +123,9 @@ class FIS_DATA(FIS):
 # FIS_UNKNOWN --------------------------------------------------------------------------------------
 
 class FIS_UNKNOWN(FIS):
-    def __init__(self, packet=[0], direction="H2D"):
+    def __init__(self, packet=None, direction="H2D"):
+        if packet is None:
+            packet = [0]
         FIS.__init__(self, packet, {}, direction)
 
     def __repr__(self):
@@ -145,6 +170,8 @@ class TransportLayer(Module):
             fis = FIS_REG_D2H(packet)
         elif fis_type == fis_types["DMA_ACTIVATE_D2H"]:
             fis = FIS_DMA_ACTIVATE_D2H(packet)
+        elif fis_type == fis_types["PIO_SETUP_D2H"]:
+            fis = FIS_PIO_SETUP_D2H(packet)
         elif fis_type == fis_types["DATA"]:
             fis = FIS_DATA(packet, direction="H2D")
         else:

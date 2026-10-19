@@ -30,6 +30,8 @@ class CommandLayer(Module):
                 resp = self.hdd.write_dma_callback(fis)
             elif fis.command == regs["READ_DMA_EXT"]:
                 resp = self.hdd.read_dma_callback(fis)
+            elif fis.command == regs["IDENTIFY_DEVICE"]:
+                resp = self.hdd.identify_callback(fis)
         elif isinstance(fis, FIS_DATA):
             resp = self.hdd.data_callback(fis)
 

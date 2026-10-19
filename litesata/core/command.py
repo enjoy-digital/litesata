@@ -153,6 +153,13 @@ class LiteSATACommandRX(Module):
             )
         self.comb += read_done.eq(dwords_counter == read_ndwords)
 
+        # A command completed with ERR or DF (Device Fault) in the Status register has failed.
+        status_fault = Signal()
+        self.comb += status_fault.eq(
+            transport.source.status[reg_d2h_status["err"]] |
+            transport.source.status[reg_d2h_status["df"]]
+        )
+
         d2h_error     = Signal()
         clr_d2h_error = Signal()
         set_d2h_error = Signal()
@@ -206,10 +213,7 @@ class LiteSATACommandRX(Module):
                     is_dma_activate.eq(1),
                 ).Elif(test_type("REG_D2H"),
                     update_d2h.eq(1),
-                    set_d2h_error.eq(
-                        transport.source.status[reg_d2h_status["err"]] |
-                        transport.source.status[reg_d2h_status["df"]]
-                    ),
+                    set_d2h_error.eq(status_fault),
                     NextState("PRESENT_WRITE_RESPONSE")
                 )
             )
@@ -236,7 +240,7 @@ class LiteSATACommandRX(Module):
                     NextState("PRESENT_PIO_SETUP_D2H")
                 ).Elif(test_type("REG_D2H"),
                     update_d2h.eq(1),
-                    set_d2h_error.eq(transport.source.status[reg_d2h_status["err"]]),
+                    set_d2h_error.eq(status_fault),
                     NextState("PRESENT_READ_RESPONSE")
                 )
             )
@@ -247,6 +251,11 @@ class LiteSATACommandRX(Module):
                 transport.source.ready.eq(0),
                 If(test_type("PIO_SETUP_D2H"),
                     NextState("PRESENT_PIO_SETUP_D2H")
+                ).Elif(test_type("REG_D2H"),
+                    # The device aborted the command (no data phase).
+                    update_d2h.eq(1),
+                    set_d2h_error.eq(status_fault),
+                    NextState("PRESENT_READ_RESPONSE")
                 ).Else(
                     NextState("FLUSH")
                 )
@@ -255,7 +264,13 @@ class LiteSATACommandRX(Module):
         fsm.act("PRESENT_PIO_SETUP_D2H",
             transport.source.ready.eq(1),
             If(transport.source.valid & transport.source.last,
-                NextState("WAIT_READ_DATA_OR_REG_D2H")
+                update_d2h.eq(1),
+                If(status_fault,
+                    set_d2h_error.eq(1),
+                    NextState("PRESENT_READ_RESPONSE")
+                ).Else(
+                    NextState("WAIT_READ_DATA_OR_REG_D2H")
+                )
             )
         )
 
@@ -266,7 +281,7 @@ class LiteSATACommandRX(Module):
             source.read.eq(~is_identify),
             source.identify.eq(is_identify),
             source.failed.eq(transport.source.error),
-            source.end.eq(is_identify),
+            source.end.eq(is_identify & read_done),
             source.data.eq(transport.source.data),
             transport.source.ready.eq(source.ready),
             If(source.valid & source.ready,
@@ -288,7 +303,8 @@ class LiteSATACommandRX(Module):
         fsm.act("PRESENT_READ_RESPONSE",
             source.valid.eq(1),
             source.last.eq(1),
-            source.read.eq(1),
+            source.read.eq(~is_identify),
+            source.identify.eq(is_identify),
             source.end.eq(1),
             source.failed.eq(~read_done | read_error | d2h_error),
             If(source.valid & source.ready,

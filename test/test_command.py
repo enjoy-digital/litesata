@@ -17,12 +17,13 @@ from test.model.hdd import *
 
 
 class CommandTXPacket(list):
-    def __init__(self, write=0, read=0, sector=0, count=0, data=[]):
-        self.ongoing = False
-        self.done    = False
-        self.write   = write
-        self.read    = read
-        self.sector  = sector
+    def __init__(self, write=0, read=0, identify=0, sector=0, count=0, data=[]):
+        self.ongoing  = False
+        self.done     = False
+        self.write    = write
+        self.read     = read
+        self.identify = identify
+        self.sector   = sector
         self.count   = count
         for d in data:
             self.append(d)
@@ -55,6 +56,7 @@ class CommandStreamer(PacketStreamer):
                 self.packet = self.packets.pop(0)
             yield self.source.write.eq(self.packet.write)
             yield self.source.read.eq(self.packet.read)
+            yield self.source.identify.eq(self.packet.identify)
             yield self.source.sector.eq(self.packet.sector)
             yield self.source.count.eq(self.packet.count)
             if not self.packet.ongoing and not self.packet.done:
@@ -76,11 +78,13 @@ class CommandStreamer(PacketStreamer):
 
 class CommandRXPacket(list):
     def __init__(self):
-        self.ongoing = False
-        self.done    = False
-        self.write   = 0
-        self.read    = 0
-        self.failed  = 0
+        self.ongoing  = False
+        self.done     = False
+        self.write    = 0
+        self.read     = 0
+        self.identify = 0
+        self.end      = 0
+        self.failed   = 0
 
 
 class CommandLogger(PacketLogger):
@@ -94,17 +98,59 @@ class CommandLogger(PacketLogger):
             yield self.sink.ready.eq(1)
             if (yield self.sink.valid) and self.first:
                 self.packet = CommandRXPacket()
-                self.packet.write  = (yield self.sink.write)
-                self.packet.read   = (yield self.sink.read)
-                self.packet.failed = (yield self.sink.failed)
+                self.packet.write    = (yield self.sink.write)
+                self.packet.read     = (yield self.sink.read)
+                self.packet.identify = (yield self.sink.identify)
                 self.packet.append((yield self.sink.data))
                 self.first = False
             elif (yield self.sink.valid):
                 self.packet.append((yield self.sink.data))
+            if (yield self.sink.valid):
+                # failed can be flagged on any beat, end on the final one.
+                self.packet.failed |= (yield self.sink.failed)
+                self.packet.end     = (yield self.sink.end)
             if (yield self.sink.valid) and (yield self.sink.last):
                 self.packet.done = True
                 self.first = True
             yield
+
+
+class CommandDUT(Module):
+    def __init__(self, random_level=50):
+        self.submodules.hdd = HDD(
+            link_debug         = False,
+            link_random_level  = random_level,
+            transport_debug    = False,
+            transport_loopback = False,
+            hdd_debug          = True)
+        self.submodules.core = LiteSATACore(self.hdd.phy)
+
+        self.submodules.streamer = CommandStreamer()
+        self.submodules.streamer_randomizer = Randomizer(command_tx_description(32), level=random_level)
+
+        self.submodules.logger = CommandLogger()
+        self.submodules.logger_randomizer = Randomizer(command_rx_description(32), level=random_level)
+
+        self.submodules.pipeline = Pipeline(
+            self.streamer,
+            self.streamer_randomizer,
+            self.core,
+            self.logger_randomizer,
+            self.logger
+        )
+
+    def run(self, generator):
+        generators = {
+            "sys" :   [generator,
+                       self.hdd.link.generator(),
+                       self.streamer.generator(),
+                       self.streamer_randomizer.generator(),
+                       self.logger.generator(),
+                       self.logger_randomizer.generator(),
+                       self.hdd.phy.rx.generator(),
+                       self.hdd.phy.tx.generator()]
+        }
+        run_simulation(self, generators, {"sys": 10})
 
 
 class TestCommand(unittest.TestCase):
@@ -172,40 +218,92 @@ class TestCommand(unittest.TestCase):
             self.assertEqual(s, 0)
             self.assertEqual(e, 0)
 
-        class DUT(Module):
-            def __init__(self):
-                self.submodules.hdd = HDD(
-                    link_debug         = False,
-                    link_random_level  = 50,
-                    transport_debug    = False,
-                    transport_loopback = False,
-                    hdd_debug          = True)
-                self.submodules.core = LiteSATACore(self.hdd.phy)
+        dut = CommandDUT(random_level=50)
+        dut.run(generator(dut))
 
-                self.submodules.streamer = CommandStreamer()
-                self.submodules.streamer_randomizer = Randomizer(command_tx_description(32), level=50)
+    def receive(self, dut, timeout=50000):
+        """Wait for the next response packet, failing instead of hanging on a regression."""
+        dut.logger.packet.done = False
+        for _ in range(timeout):
+            if dut.logger.packet.done:
+                return
+            yield
+        self.fail("Timeout waiting for a command response")
 
-                self.submodules.logger = CommandLogger()
-                self.submodules.logger_randomizer = Randomizer(command_rx_description(32), level=50)
+    def test_read_device_fault(self):
+        def generator(dut):
+            hdd = dut.hdd
+            hdd.malloc(0, 8)
+            data = [i for i in range(sectors2dwords(1))]
 
-                self.submodules.pipeline = Pipeline(
-                    self.streamer,
-                    self.streamer_randomizer,
-                    self.core,
-                    self.logger_randomizer,
-                    self.logger
-                )
+            # A write completed with DF (and ERR clear) fails.
+            hdd.set_reg_d2h_status(1 << reg_d2h_status["df"])
+            yield from dut.streamer.send_blocking(CommandTXPacket(write=1, sector=1, count=1, data=data))
+            yield from self.receive(dut)
+            self.assertEqual(dut.logger.packet.write,  1)
+            self.assertEqual(dut.logger.packet.end,    1)
+            self.assertEqual(dut.logger.packet.failed, 1)
 
-        dut = DUT()
-        generators = {
-            "sys" :   [generator(dut),
-                       dut.hdd.link.generator(),
-                       dut.streamer.generator(),
-                       dut.streamer_randomizer.generator(),
-                       dut.logger.generator(),
-                       dut.logger_randomizer.generator(),
-                       dut.hdd.phy.rx.generator(),
-                       dut.hdd.phy.tx.generator()]
-        }
-        clocks = {"sys": 10}
-        run_simulation(dut, generators, clocks)
+            # A read completed with DF fails: data packet, then a failed response.
+            yield from dut.streamer.send_blocking(CommandTXPacket(read=1, sector=1, count=1))
+            yield from self.receive(dut)
+            self.assertEqual(dut.logger.packet.read, 1)
+            self.assertEqual(dut.logger.packet.end,  0)
+            self.assertEqual(len(dut.logger.packet), sectors2dwords(1))
+            yield from self.receive(dut)
+            self.assertEqual(dut.logger.packet.read,   1)
+            self.assertEqual(dut.logger.packet.end,    1)
+            self.assertEqual(dut.logger.packet.failed, 1)
+
+            # A clean completion succeeds and returns the data.
+            hdd.set_reg_d2h_status(0)
+            yield from dut.streamer.send_blocking(CommandTXPacket(read=1, sector=1, count=1))
+            yield from self.receive(dut)
+            read_data = list(dut.logger.packet)
+            yield from self.receive(dut)
+            self.assertEqual(dut.logger.packet.end,    1)
+            self.assertEqual(dut.logger.packet.failed, 0)
+            self.assertEqual(read_data, data)
+
+        dut = CommandDUT(random_level=0)
+        dut.run(generator(dut))
+
+    def test_identify(self):
+        def generator(dut):
+            hdd = dut.hdd
+
+            def identify():
+                yield from dut.streamer.send_blocking(CommandTXPacket(identify=1))
+                yield from self.receive(dut)
+                self.assertEqual(dut.logger.packet.identify, 1)
+                self.assertEqual(dut.logger.packet.read,     0)
+                self.assertEqual(dut.logger.packet.end,      1)
+
+            # Success: one 128-dword block, end on the final dword.
+            yield from identify()
+            self.assertEqual(dut.logger.packet.failed, 0)
+            self.assertEqual(list(dut.logger.packet), hdd.identify_data)
+
+            # Device Fault flagged in the PIO Setup FIS: a single failed response.
+            hdd.set_pio_setup_status(0x58 | (1 << reg_d2h_status["df"]))
+            yield from identify()
+            self.assertEqual(dut.logger.packet.failed, 1)
+            self.assertEqual(len(dut.logger.packet), 1)
+            hdd.set_pio_setup_status(0x58)
+
+            # Command aborted with a Register D2H (ERR) instead of a PIO Setup.
+            hdd.set_busy(1)
+            hdd.set_reg_d2h_status(0x41)
+            yield from identify()
+            self.assertEqual(dut.logger.packet.failed, 1)
+            self.assertEqual(len(dut.logger.packet), 1)
+            hdd.set_busy(0)
+            hdd.set_reg_d2h_status(0)
+
+            # The port is not stuck: a following identify succeeds.
+            yield from identify()
+            self.assertEqual(dut.logger.packet.failed, 0)
+            self.assertEqual(list(dut.logger.packet), hdd.identify_data)
+
+        dut = CommandDUT(random_level=0)
+        dut.run(generator(dut))

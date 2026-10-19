@@ -14,6 +14,7 @@ class LiteSATAIdentify(Module):
     def __init__(self, user_port):
         self.start      = Signal()
         self.done       = Signal()
+        self.error      = Signal()
         self.data_width = user_port.dw
 
         fifo = ResetInserter()(stream.SyncFIFO([("data", 32)], 512, buffered=True))
@@ -45,13 +46,21 @@ class LiteSATAIdentify(Module):
             fifo.reset.eq(1),
             source.valid.eq(1),
             NextValue(count, 0),
+            NextValue(self.error, 0),
             If(source.valid & source.ready,
                 NextState("WAIT-ACK")
             )
         )
         fsm.act("WAIT-ACK",
             If(sink.valid & sink.identify,
-                NextState("RECEIVE-DATA")
+                If(sink.failed & sink.end,
+                    # The device aborted the command: consume the response.
+                    sink.ready.eq(1),
+                    NextValue(self.error, 1),
+                    NextState("IDLE")
+                ).Else(
+                    NextState("RECEIVE-DATA")
+                )
             )
         )
         self.comb += fifo.sink.data.eq(sink.data)
@@ -61,7 +70,10 @@ class LiteSATAIdentify(Module):
                 fifo.sink.valid.eq(1),
                 If(sink.ready,
                     NextValue(count, count + 1),
-                    If(count == (ndwords - 1),
+                    If(sink.failed,
+                        NextValue(self.error, 1)
+                    ),
+                    If((count == (ndwords - 1)) | (sink.failed & sink.end),
                         NextState("IDLE")
                     )
                 )
@@ -78,6 +90,7 @@ class LiteSATAIdentifyCSR(Module, AutoCSR):
         self._source_valid = CSRStatus()
         self._source_ready = CSR()
         self._source_data  = CSRStatus(32)
+        self._error        = CSRStatus()
 
         # # #
 
@@ -85,6 +98,7 @@ class LiteSATAIdentifyCSR(Module, AutoCSR):
         self.comb += [
             bist_identify.start.eq(self._start.wr_data & self._start.wr_stb),
             self._done.status.eq(bist_identify.done),
+            self._error.status.eq(bist_identify.error),
 
             self._source_valid.status.eq(bist_identify.source.valid),
             self._source_data.status.eq(bist_identify.source.data),
