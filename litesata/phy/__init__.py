@@ -31,7 +31,7 @@ class LiteSATAPHY(LiteXModule):
     """
     def __init__(self, device, pads, gen, clk_freq, refclk=None, data_width=16,
                  qpll=None, gt_type="GTY", use_gtgrefclk=True, with_csr=True,
-                 dual=0, channel=0):
+                 dual=0, channel=0, link_down_timeout=100e-3):
         self.pads   = pads
         self.gen    = gen
         self.refclk = refclk
@@ -118,6 +118,13 @@ class LiteSATAPHY(LiteXModule):
             self.comb += self.phy.serdes.init.rst.eq(~self.enable)
         self.comb += self.ready.eq(self.phy.ready & self.ctrl.ready)
 
+        # Link events.
+        # ------------
+        self.link_monitor   = LiteSATAPHYLinkMonitor(self.ready, down_cycles=int(link_down_timeout*clk_freq))
+        self.link_up        = self.link_monitor.link_up
+        self.connect_irq    = self.link_monitor.connect
+        self.disconnect_irq = self.link_monitor.disconnect
+
         # CSRs.
         # -----
         if with_csr:
@@ -142,6 +149,10 @@ class LiteSATAPHY(LiteXModule):
                     ("``0b0``", "Ctrl/OOB not initialized."),
                     ("``0b1``", "Ctrl/OOB initialized and ready.")
             ]),
+            CSRField("link_up", size=1, values=[
+                    ("``0b0``", "Link down (debounced)."),
+                    ("``0b1``", "Link up.")
+            ]),
         ])
 
         self.comb += self.enable.eq(self._enable.storage)
@@ -156,3 +167,4 @@ class LiteSATAPHY(LiteXModule):
             self.comb += self._status.fields.tx_ready.eq(self.phy.ready)
             self.comb += self._status.fields.rx_ready.eq(self.phy.ready)
         self.comb += self._status.fields.ctrl_ready.eq(self.ctrl.ready)
+        self.comb += self._status.fields.link_up.eq(self.link_up)
