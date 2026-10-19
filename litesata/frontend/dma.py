@@ -149,10 +149,10 @@ class LiteSATAMem2SectorDMA(LiteXModule):
         self.dma = dma = WishboneDMAReader(bus, with_csr=False, endianness=endianness)
 
         # Sector buffer
-        self.buf = buf = stream.SyncFIFO([("data", port.dw)], logical_sector_size//dma_bytes)
+        self.buf = buf = stream.SyncFIFO([("data", bus.data_width)], logical_sector_size//dma_bytes)
 
         # Converter
-        self.conv = conv = stream.Converter(nbits_from=bus.data_width, nbits_to=port.dw)
+        self.conv = conv = stream.Converter(nbits_from=bus.data_width, nbits_to=port.dw, reverse=True)
 
         # Connect DMA to Sector Buffer
         self.comb += dma.source.connect(buf.sink)
