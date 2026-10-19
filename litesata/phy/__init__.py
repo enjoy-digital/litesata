@@ -31,10 +31,12 @@ class LiteSATAPHY(LiteXModule):
     """
     def __init__(self, device, pads, gen, clk_freq, refclk=None, data_width=16,
                  qpll=None, gt_type="GTY", use_gtgrefclk=True, with_csr=True,
-                 dual=0, channel=0, link_down_timeout=100e-3):
-        self.pads   = pads
-        self.gen    = gen
-        self.refclk = refclk
+                 dual=0, channel=0, link_down_timeout=100e-3, rate_fallback=False):
+        self.pads          = pads
+        self.gen           = gen
+        self.refclk        = refclk
+        self.rate_fallback = rate_fallback
+        self.rate_max      = {"gen1": 0, "gen2": 1, "gen3": 2}[gen]
 
         # Control/Status.
         self.enable = Signal()
@@ -98,7 +100,14 @@ class LiteSATAPHY(LiteXModule):
 
         # Control.
         # --------
-        self.ctrl = ctrl_cls(self.phy, self.crg, clk_freq)
+        if rate_fallback:
+            # Link rate fallback needs a transceiver with runtime rate control (trx.rate/rate_done).
+            if not (hasattr(self.phy, "rate") and hasattr(self.phy, "rate_done")):
+                raise NotImplementedError(f"Link rate fallback is not supported by the {device} PHY.")
+            self.ctrl = ctrl_cls(self.phy, self.crg, clk_freq, rate_fallback=True, rate_max=self.rate_max)
+            self.rate = self.ctrl.rate
+        else:
+            self.ctrl = ctrl_cls(self.phy, self.crg, clk_freq)
 
         # Datapath.
         # ---------
@@ -112,8 +121,13 @@ class LiteSATAPHY(LiteXModule):
         # Restart/Status.
         # ---------------
         if hasattr(self.phy, "tx_init") and hasattr(self.phy, "rx_init"):
-            self.comb += self.phy.tx_init.restart.eq(~self.enable)
-            self.comb += self.phy.rx_init.restart.eq(~self.enable | self.ctrl.rx_reset)
+            if rate_fallback:
+                # Hold both init FSMs while the transceiver applies a new rate.
+                self.comb += self.phy.tx_init.restart.eq(~self.enable | ~self.phy.rate_done)
+                self.comb += self.phy.rx_init.restart.eq(~self.enable | self.ctrl.rx_reset | ~self.phy.rate_done)
+            else:
+                self.comb += self.phy.tx_init.restart.eq(~self.enable)
+                self.comb += self.phy.rx_init.restart.eq(~self.enable | self.ctrl.rx_reset)
         elif hasattr(self.phy, "serdes"):
             self.comb += self.phy.serdes.init.rst.eq(~self.enable)
         self.comb += self.ready.eq(self.phy.ready & self.ctrl.ready)
@@ -132,7 +146,7 @@ class LiteSATAPHY(LiteXModule):
 
     def  add_csr(self):
         self._enable = CSRStorage(reset=1)
-        self._status = CSRStatus(fields=[
+        status_fields = [
             CSRField("ready", size=1, values=[
                     ("``0b0``", "PHY not initialized."),
                     ("``0b1``", "PHY initialized and ready.")
@@ -153,7 +167,35 @@ class LiteSATAPHY(LiteXModule):
                     ("``0b0``", "Link down (debounced)."),
                     ("``0b1``", "Link up.")
             ]),
-        ])
+        ]
+        if self.rate_fallback:
+            status_fields.append(CSRField("rate", size=2, values=[
+                    ("``0b00``", "Gen1 (1.5Gbps)."),
+                    ("``0b01``", "Gen2 (3.0Gbps)."),
+                    ("``0b10``", "Gen3 (6.0Gbps)."),
+            ], description="Current link rate (negotiated once ready)."))
+        self._status = CSRStatus(fields=status_fields)
+
+        if self.rate_fallback:
+            self._rate = CSRStorage(fields=[
+                CSRField("max", size=2, offset=0, reset=self.rate_max,
+                    description="Highest rate to try (0: Gen1, 1: Gen2, 2: Gen3); applied at the next link reset (toggle enable)."),
+                CSRField("min", size=2, offset=4, reset=0,
+                    description="Lowest rate to try."),
+            ])
+            self._rate_count = CSRStatus(fields=[
+                CSRField("gen1", size=8, offset=0,  description="Link attempts at Gen1 (saturating)."),
+                CSRField("gen2", size=8, offset=8,  description="Link attempts at Gen2 (saturating)."),
+                CSRField("gen3", size=8, offset=16, description="Link attempts at Gen3 (saturating)."),
+            ])
+            self.comb += [
+                self._status.fields.rate.eq(self.ctrl.rate),
+                self.ctrl.rate_max_i.eq(self._rate.fields.max),
+                self.ctrl.rate_min_i.eq(self._rate.fields.min),
+                self._rate_count.fields.gen1.eq(self.ctrl.rate_count[0]),
+                self._rate_count.fields.gen2.eq(self.ctrl.rate_count[1]),
+                self._rate_count.fields.gen3.eq(self.ctrl.rate_count[2]),
+            ]
 
         self.comb += self.enable.eq(self._enable.storage)
         self.comb += self._status.fields.ready.eq(self.phy.ready & self.ctrl.ready)

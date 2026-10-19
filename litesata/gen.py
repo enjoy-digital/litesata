@@ -31,6 +31,8 @@ YAML keys:
 - clk_freq       : System clock frequency (Hz).
 - data_width     : PHY datapath width, 16 | 32 (default: 16).
 - gt_type        : "GTH" | "GTY" override for UltraScale+ (default: from the PHY name).
+- rate_fallback  : Host-side Gen3 -> Gen2 -> Gen1 link rate fallback (default: False; requires a PHY
+                   with runtime rate support, "gen" is then the highest rate).
 - core           : "wishbone" | "axi-lite" control bus; omit for a native-only core.
 - dma_data_width : Wishbone DMA master data width (default: 32).
 - dma_mode       : "read" | "write" | "read+write" (default: "read+write").
@@ -133,6 +135,7 @@ class _LiteSATACore(SoCMini):
         gen            = core_config["gen"]
         data_width     = int(core_config.get("data_width", 16))
         gt_type        = core_config.get("gt_type", "GTY")
+        rate_fallback  = core_config.get("rate_fallback", False)
         bus_standard   = core_config.get("core", None)
         dma_data_width = int(core_config.get("dma_data_width", 32))
         dma_mode       = core_config.get("dma_mode", "read+write")
@@ -164,8 +167,9 @@ class _LiteSATACore(SoCMini):
             gen        = gen,
             clk_freq   = sys_clk_freq,
             data_width = data_width,
-            gt_type    = gt_type,
-            with_csr   = bus_standard is not None)
+            gt_type       = gt_type,
+            rate_fallback = rate_fallback,
+            with_csr      = bus_standard is not None)
         self.comb += self.sata_phy.enable.eq(platform.request("enable"))
         self.comb += platform.request("ready").eq(self.sata_phy.ready)
         self.comb += platform.request("link_up").eq(self.sata_phy.link_up)

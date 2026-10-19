@@ -102,6 +102,19 @@ class TestPHY(unittest.TestCase):
             primitive = "GTPE2_CHANNEL",
         )
 
+    def test_rate_fallback_requires_phy_support(self):
+        # No PHY implements runtime rate control yet: opting in must fail loudly, not silently.
+        with self.assertRaises(NotImplementedError):
+            LiteSATAPHY(
+                device        = "xc7k325tffg900-2",
+                pads          = SATAPads(),
+                gen           = "gen3",
+                clk_freq      = 100e6,
+                refclk        = Signal(),
+                with_csr      = False,
+                rate_fallback = True,
+            )
+
     def test_legacy_aliases(self):
         self.assertIs(USLiteSATAPHYCRG, GTH3LiteSATAPHYCRG)
         self.assertIs(USLiteSATAPHY,    GTH3LiteSATAPHY)
