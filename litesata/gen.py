@@ -131,6 +131,7 @@ class _LiteSATACore(SoCMini):
             gen        = core_config["gen"],
             clk_freq   = sys_clk_freq,
             data_width = 16,
+            gt_type    = core_config.get("gt_type", "GTY"),
             with_csr   = False)
         self.comb += self.sata_phy.enable.eq(platform.request("enable"))
         self.comb += platform.request("ready").eq(self.sata_phy.ready)
@@ -186,6 +187,18 @@ class _LiteSATACore(SoCMini):
             self.sata_phy.crg.cd_sata_tx.clk,
             self.sata_phy.crg.cd_sata_rx.clk)
 
+# PHYs ---------------------------------------------------------------------------------------------
+
+# PHY name -> (Device, GT type, Toolchain). The device only selects the transceiver PHY; the generated
+# core is independent of the exact part/package.
+PHYS = {
+    "A7SATAPHY"   : ("xc7a",    None,  "ise"),    # Artix-7 GTP.
+    "K7SATAPHY"   : ("xc7k",    None,  "ise"),    # Kintex-7 GTX.
+    "GTH3SATAPHY" : ("xcku040", "GTH", "vivado"), # Kintex/Virtex UltraScale GTH.
+    "GTH4SATAPHY" : ("xcau25p", "GTH", "vivado"), # Artix/Kintex/Zynq UltraScale+ GTH.
+    "GTY4SATAPHY" : ("xcvu9p",  "GTY", "vivado"), # Kintex/Virtex UltraScale+ GTY.
+}
+
 # Build --------------------------------------------------------------------------------------------
 
 def main():
@@ -203,14 +216,14 @@ def main():
                 core_config[k] = replaces[r]
 
     # Generate core --------------------------------------------------------------------------------
-    if core_config["phy"] == "A7SATAPHY":
-        from litex.build.xilinx import XilinxPlatform
-        platform = XilinxPlatform("xc7a", io=[])
-    elif core_config["phy"] == "K7SATAPHY":
-        from litex.build.xilinx import XilinxPlatform
-        platform = XilinxPlatform("xc7k", io=[])
-    else:
-        raise ValueError("Unsupported SATA PHY: {}".format(core_config["phy"]))
+    if core_config["phy"] not in PHYS:
+        raise ValueError("Unsupported SATA PHY: {} (supported: {})".format(
+            core_config["phy"], ", ".join(PHYS.keys())))
+    device, gt_type, toolchain = PHYS[core_config["phy"]]
+    if gt_type is not None:
+        core_config["gt_type"] = gt_type
+    from litex.build.xilinx import XilinxPlatform
+    platform = XilinxPlatform(device, io=[], toolchain=toolchain)
     soc      = _LiteSATACore(platform, core_config)
     builder  = Builder(soc, output_dir="build", compile_gateware=False)
     builder.build(build_name="litesata_core")

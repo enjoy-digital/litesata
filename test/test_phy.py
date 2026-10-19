@@ -69,6 +69,15 @@ class TestPHY(unittest.TestCase):
             primitive = "GTHE4_CHANNEL",
         )
 
+    def test_artix_ultrascale_plus_gth4(self):
+        # Artix UltraScale+ only has GTH transceivers: GTH4 must be selected even with the GTY default.
+        self.assert_phy(
+            device    = "xcau25p-ffvb676-2-e",
+            gt_type   = "GTY",
+            phy_cls   = GTH4LiteSATAPHY,
+            primitive = "GTHE4_CHANNEL",
+        )
+
     def test_ultrascale_plus_gty4(self):
         self.assert_phy(
             device    = "xcvu9p-flga2104-2L-e",

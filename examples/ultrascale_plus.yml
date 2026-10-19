@@ -1,0 +1,25 @@
+#
+# This file is part of LiteSATA.
+#
+# Copyright (c) 2026 Florent Kermarrec <florent@enjoy-digital.fr>
+# SPDX-License-Identifier: BSD-2-Clause
+
+{
+    # PHY ----------------------------------------------------------------------
+    # GTH4SATAPHY: UltraScale+ GTH (Artix/Kintex/Zynq UltraScale+, GTHE4).
+    # GTY4SATAPHY: UltraScale+ GTY (Kintex/Virtex UltraScale+,     GTYE4).
+    # GTH3SATAPHY: UltraScale  GTH (Kintex/Virtex UltraScale,      GTHE3).
+    "phy": "GTH4SATAPHY",
+    "gen": "gen3",
+
+    # Frequency ----------------------------------------------------------------
+    "clk_freq": 150e6,
+
+    # User Ports ---------------------------------------------------------------
+    "user_ports": {
+        "native_0" : {
+            "type": "native",
+            "data_width": 32,
+        },
+    },
+}
