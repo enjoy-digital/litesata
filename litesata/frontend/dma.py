@@ -23,6 +23,8 @@ class LiteSATASector2MemDMA(LiteXModule):
     """Sector to Memory DMA
 
     Read a sector from the SATA core and write it to memory through DMA.
+
+    irq pulses for one cycle when the transfer terminates (completion or error).
     """
     def __init__(self, port, bus, endianness="little"):
         self.port     = port
@@ -93,7 +95,6 @@ class LiteSATASector2MemDMA(LiteXModule):
             If(dma.sink.valid & dma.sink.ready,
                 NextValue(count, count + 1),
                 If(dma.sink.last,
-                    self.irq.eq(1),
                     NextState("SECTOR-LOOP")
                 )
             ),
