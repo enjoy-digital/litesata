@@ -58,20 +58,23 @@ class LiteSATAPHY(LiteXModule):
             self.crg = A7LiteSATAPHYCRG(refclk, pads, self.phy, gen,  tx_buffer_enable=True)
 
         # Kintex/Virtex UltraScale GTH (GTHE3).
-        elif re.match("^xc[kv]u[0-9]+-", device):
+        elif re.match("^xc[kv]u[0-9]+(-|$)", device):
             from litesata.phy.gth3sataphy import GTH3LiteSATAPHYCRG, GTH3LiteSATAPHY
             self.phy = GTH3LiteSATAPHY(pads, gen, clk_freq, data_width)
             self.crg = GTH3LiteSATAPHYCRG(refclk, pads, self.phy, gen)
 
-        # Kintex/Virtex/Zynq Ultrascale+.
-        elif re.match("^xc([kv]u[0-9]+p-|zu[0-9])", device):
+        # Artix/Kintex/Virtex/Zynq UltraScale+.
+        elif re.match("^xc([akv]u[0-9]+p|zu[0-9])", device):
+            # Artix UltraScale+ only provides GTH transceivers.
+            if re.match("^xcau", device):
+                gt_type = "GTH"
             if gt_type == "GTY":
                 # GTY transceiver for Virtex/Kintex UltraScale+ (GTYE4).
                 from litesata.phy.gty4sataphy import GTY4LiteSATAPHYCRG, GTY4LiteSATAPHY
                 self.phy = GTY4LiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
                 self.crg = GTY4LiteSATAPHYCRG(refclk, pads, self.phy, gen)
             elif gt_type == "GTH":
-                # GTH transceiver for Kintex/Zynq UltraScale+ (GTHE4).
+                # GTH transceiver for Artix/Kintex/Zynq UltraScale+ (GTHE4).
                 from litesata.phy.gth4sataphy import GTH4LiteSATAPHYCRG, GTH4LiteSATAPHY
                 self.phy = GTH4LiteSATAPHY(pads, gen, clk_freq, data_width, use_gtgrefclk=use_gtgrefclk)
                 self.crg = GTH4LiteSATAPHYCRG(refclk, pads, self.phy, gen)

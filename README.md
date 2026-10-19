@@ -35,7 +35,7 @@ PHY:
   - Xilinx Artix-7 GTP (`GTPE2_CHANNEL`)
   - Xilinx Kintex-7 GTX (`GTXE2_CHANNEL`)
   - Xilinx UltraScale GTH (`GTHE3_CHANNEL`)
-  - Xilinx UltraScale+ GTH/GTY (`GTHE4_CHANNEL`/`GTYE4_CHANNEL`, selected with `gt_type`)
+  - Xilinx UltraScale+ GTH/GTY (`GTHE4_CHANNEL`/`GTYE4_CHANNEL`, selected with `gt_type`; Artix UltraScale+ is GTH only)
   - OOB, COMWAKE, COMINIT
   - ALIGN inserter/remover and bytes alignment on K28.5
   - 8B/10B encoding/decoding in transceiver
