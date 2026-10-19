@@ -247,7 +247,7 @@ class GTY4LiteSATAPHY(Module):
             p_ADAPT_CFG2                     = 0b0000000000000000,
             p_ALIGN_COMMA_DOUBLE             = "FALSE",
             p_ALIGN_COMMA_ENABLE             = 0b1111111111,
-            p_ALIGN_COMMA_WORD               = 2,
+            p_ALIGN_COMMA_WORD               = 2 if data_width == 16 else 4,
             p_ALIGN_MCOMMA_DET               = "TRUE",
             p_ALIGN_MCOMMA_VALUE             = 0b1010000011,
             p_ALIGN_PCOMMA_DET               = "TRUE",

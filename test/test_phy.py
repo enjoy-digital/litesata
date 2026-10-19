@@ -19,7 +19,7 @@ from litesata.phy.gth3sataphy import GTH3LiteSATAPHYCRG, GTH3LiteSATAPHY
 from litesata.phy.gth4sataphy import GTH4LiteSATAPHYCRG, GTH4LiteSATAPHY
 from litesata.phy.gty4sataphy import GTY4LiteSATAPHYCRG, GTY4LiteSATAPHY
 from litesata.phy.gthe4sataphy import GTHE4LiteSATAPHYCRG, GTHE4LiteSATAPHY
-from litesata.phy.k7sataphy import K7LiteSATAPHY
+from litesata.phy.k7sataphy import K7LiteSATAPHYCRG, K7LiteSATAPHY
 from litesata.phy.uspsataphy import USPLiteSATAPHYCRG, USPLiteSATAPHY
 from litesata.phy.ussataphy import USLiteSATAPHYCRG, USLiteSATAPHY
 
@@ -92,6 +92,34 @@ class TestPHY(unittest.TestCase):
             phy_cls   = A7LiteSATAPHY,
             primitive = "GTPE2_CHANNEL",
         )
+
+    def test_7series_kintex7_tx_buffer_crg(self):
+        # The TX buffer clocking path of the K7 CRG must elaborate (it referenced an undefined name).
+        pads = SATAPads()
+        phy  = K7LiteSATAPHY(pads, "gen3", 100e6, data_width=16, tx_buffer_enable=True)
+        crg  = K7LiteSATAPHYCRG(Signal(), pads, phy, "gen3", tx_buffer_enable=True)
+        instances = [special.of for special in crg.get_fragment().specials
+            if isinstance(special, Instance)]
+        self.assertIn("BUFG", instances)
+
+    def test_ultrascale_plus_gty4_comma_word_tracks_data_width(self):
+        for data_width, comma_word in [(16, 2), (32, 4)]:
+            with self.subTest(data_width=data_width):
+                dut = LiteSATAPHY(
+                    device     = "xcvu9p-flga2104-2L-e",
+                    pads       = SATAPads(),
+                    gen        = "gen3",
+                    clk_freq   = 100e6,
+                    refclk     = Signal(),
+                    data_width = data_width,
+                    gt_type    = "GTY",
+                    with_csr   = False,
+                )
+                channel = [special for special in dut.phy.get_fragment().specials
+                    if isinstance(special, Instance) and special.of == "GTYE4_CHANNEL"][0]
+                params = {item.name: item.value for item in channel.items
+                    if isinstance(item, Instance.Parameter)}
+                self.assertEqual(params["ALIGN_COMMA_WORD"].value, comma_word)
 
     def test_legacy_aliases(self):
         self.assertIs(USLiteSATAPHYCRG, GTH3LiteSATAPHYCRG)
