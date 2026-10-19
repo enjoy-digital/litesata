@@ -49,8 +49,12 @@ class HDD(Module):
         self.rx_end_sector = 0
 
         self.reg_d2h_status       = 0
+        self.pio_setup_status     = 0x58 # DRDY | DSC | DRQ
         self.data_error_injection = 0
         self.busy                 = 0
+
+        # IDENTIFY DEVICE data block (128 dwords), a recognizable pattern.
+        self.identify_data = [((i & 0xffff) << 16) | (0x5a5a ^ i) for i in range(logical_sector_size//4)]
 
     def malloc(self, sector, count):
         if self.debug:
@@ -91,6 +95,9 @@ class HDD(Module):
         reg_d2h.status = self.reg_d2h_status or self.busy
         return reg_d2h
 
+    def set_pio_setup_status(self, value):
+        self.pio_setup_status = value & 0xff
+
     def set_data_error_injection(self, value):
         self.data_error_injection = value
 
@@ -117,6 +124,20 @@ class HDD(Module):
                 for packet in packets:
                     packet.data_error_injection = True
         packets.append(self.get_reg_d2h())
+        return packets
+
+    def identify_callback(self, fis):
+        if self.busy:
+            # Command aborted: Register D2H instead of a data phase.
+            return [self.get_reg_d2h()]
+        pio_setup = FIS_PIO_SETUP_D2H()
+        pio_setup.d              = 1
+        pio_setup.i              = 1
+        pio_setup.status         = self.pio_setup_status
+        pio_setup.transfer_count = logical_sector_size
+        packets = [pio_setup]
+        if not self.pio_setup_status & ((1 << reg_d2h_status["err"]) | (1 << reg_d2h_status["df"])):
+            packets.append(FIS_DATA([0] + self.identify_data, direction="D2H"))
         return packets
 
     def data_callback(self, fis):
