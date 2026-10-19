@@ -11,7 +11,7 @@ from migen import Module, Signal
 from migen.sim import run_simulation
 
 from litesata.common import primitives
-from litesata.phy.ctrl import LiteSATAPHYCtrl
+from litesata.phy.ctrl import LiteSATAPHYCtrl, LiteSATAPHYLinkMonitor
 from litesata.phy.ecp5sataphy import ECP5LiteSATAPHYCtrl
 
 
@@ -114,6 +114,48 @@ class TestPHYCtrl(unittest.TestCase):
         result = self.run_early_align(with_early_align=True)
         self.assertEqual(result["charisk"], 0b0001)
         self.assertEqual(result["data"], primitives["ALIGN"])
+
+
+class TestPHYLinkMonitor(unittest.TestCase):
+    def test_link_events(self):
+        class DUT(Module):
+            def __init__(self):
+                self.ready = Signal()
+                self.submodules.monitor = LiteSATAPHYLinkMonitor(self.ready, down_cycles=16)
+
+        dut    = DUT()
+        events = []
+
+        def generator():
+            def drive(ready, cycles):
+                yield dut.ready.eq(ready)
+                for _ in range(cycles):
+                    yield
+                    if (yield dut.monitor.connect):
+                        events.append("connect")
+                    if (yield dut.monitor.disconnect):
+                        events.append("disconnect")
+
+            yield from drive(0, 4)
+            self.assertEqual(events, [])
+            # Ready: immediate link up + one connect pulse.
+            yield from drive(1, 4)
+            self.assertEqual((yield dut.monitor.link_up), 1)
+            self.assertEqual(events, ["connect"])
+            # Short drop (re-initialization): no event.
+            yield from drive(0, 8)
+            yield from drive(1, 4)
+            self.assertEqual((yield dut.monitor.link_up), 1)
+            self.assertEqual(events, ["connect"])
+            # Long drop (unplug): one disconnect pulse after the timeout.
+            yield from drive(0, 32)
+            self.assertEqual((yield dut.monitor.link_up), 0)
+            self.assertEqual(events, ["connect", "disconnect"])
+            # Back: one connect pulse.
+            yield from drive(1, 4)
+            self.assertEqual(events, ["connect", "disconnect", "connect"])
+
+        run_simulation(dut, generator())
 
 
 if __name__ == "__main__":

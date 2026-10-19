@@ -187,3 +187,34 @@ class LiteSATAPHYCtrl(LiteXModule):
     def us(self, t):
         clk_period_us = 1e6/self.clk_freq
         return ceil(t/clk_period_us)
+
+# LiteSATAPHYLinkMonitor ---------------------------------------------------------------------------
+
+class LiteSATAPHYLinkMonitor(LiteXModule):
+    """Debounced link up/down events derived from the PHY ready signal.
+
+    link_up rises as soon as ready is asserted (ready already includes the controller's stability
+    time) and falls only once ready has stayed low for down_cycles, so the short re-initializations
+    performed by the controller (misalignment, idle retries) do not generate events while a device
+    unplug does. connect/disconnect are single-cycle pulses (EventSourcePulse compatible).
+    """
+    def __init__(self, ready, down_cycles):
+        self.link_up    = Signal()
+        self.connect    = Signal()
+        self.disconnect = Signal()
+
+        # # #
+
+        self.timer = timer = WaitTimer(down_cycles)
+        link_up_d = Signal()
+        self.comb += timer.wait.eq(~ready)
+        self.sync += [
+            If(ready,
+                self.link_up.eq(1)
+            ).Elif(timer.done,
+                self.link_up.eq(0)
+            ),
+            link_up_d.eq(self.link_up),
+            self.connect.eq(self.link_up & ~link_up_d),
+            self.disconnect.eq(~self.link_up & link_up_d),
+        ]

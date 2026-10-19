@@ -107,6 +107,8 @@ class TestExamples(unittest.TestCase):
                 verilog, files = generate_example(name)
                 ports = re.findall(r"^\s*(?:input|output)\s+wire\s*(?:\[[^\]]*\])?\s*(\w+),?$", verilog, re.M)
                 self.assertIn(primitive, verilog)
+                for pad in ["enable", "ready", "link_up", "connect", "disconnect"]:
+                    self.assertIn(pad, ports)
                 self.assertIn("litesata_core.v", files)
                 self.assertIn("csr.csv", files)
                 # Native port: the sink data pad must drive the crossbar (it was left unconnected).
