@@ -12,6 +12,10 @@
     "phy": "GTH4SATAPHY",
     "gen": "gen3",
 
+    # PHY datapath width (16 or 32) and UltraScale+ GT type override (GTH/GTY).
+    # "data_width": 16,
+    # "gt_type":    "GTH",
+
     # Frequency ----------------------------------------------------------------
     "clk_freq": 150e6,
 

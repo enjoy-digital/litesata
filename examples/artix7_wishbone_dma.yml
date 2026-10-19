@@ -1,0 +1,32 @@
+#
+# This file is part of LiteSATA.
+#
+# Copyright (c) 2026 Florent Kermarrec <florent@enjoy-digital.fr>
+# SPDX-License-Identifier: BSD-2-Clause
+
+# Artix-7 core with a Wishbone control bus (CSRs), a Wishbone DMA master and an IRQ output, driven
+# by software through Identify and the Sector2Mem/Mem2Sector DMAs, plus one native user port.
+{
+    # PHY ----------------------------------------------------------------------
+    "phy": "A7SATAPHY",
+    "gen": "gen2",
+
+    # Frequency ----------------------------------------------------------------
+    "clk_freq": 100e6,
+
+    # Control/DMA --------------------------------------------------------------
+    "core":           "wishbone",   # Control bus: wishbone | axi-lite.
+    "dma_data_width": 32,           # Wishbone DMA master width.
+    "dma_mode":       "read+write", # Sector2Mem (read) / Mem2Sector (write) DMAs.
+    "with_identify":  True,
+    "with_bist":      False,
+    "with_irq":       True,
+
+    # User Ports ---------------------------------------------------------------
+    "user_ports": {
+        "native_0" : {
+            "type": "native",
+            "data_width": 32,
+        },
+    },
+}

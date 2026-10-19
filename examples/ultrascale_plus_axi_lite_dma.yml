@@ -1,0 +1,24 @@
+#
+# This file is part of LiteSATA.
+#
+# Copyright (c) 2026 Florent Kermarrec <florent@enjoy-digital.fr>
+# SPDX-License-Identifier: BSD-2-Clause
+
+# UltraScale+ GTH core with an AXI-Lite control bus (CSRs), a 64-bit Wishbone DMA master, BIST and
+# an IRQ output; no native user port.
+{
+    # PHY ----------------------------------------------------------------------
+    "phy": "GTH4SATAPHY",
+    "gen": "gen3",
+
+    # Frequency ----------------------------------------------------------------
+    "clk_freq": 150e6,
+
+    # Control/DMA --------------------------------------------------------------
+    "core":           "axi-lite",
+    "dma_data_width": 64,
+    "dma_mode":       "read+write",
+    "with_identify":  True,
+    "with_bist":      True,
+    "with_irq":       True,
+}
