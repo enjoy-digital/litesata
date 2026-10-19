@@ -19,25 +19,47 @@ for some use cases it could be interesting to generate a standalone Verilog file
 The standalone core is generated from a YAML configuration file that allows the user to generate
 easily a custom configuration of the core.
 
-Current version of the generator is limited to:
-- Xilinx 7-Series.
+Two flavours can be generated:
+- Native: the crossbar user ports are exposed as native streaming ports (no CPU required).
+- Control/DMA: a Wishbone or AXI-Lite control slave (CSRs), a Wishbone DMA master and an IRQ output,
+  integrating Identify, optional BIST and Sector2Mem/Mem2Sector DMAs through LiteX's add_sata. Native
+  user ports can still be added to this flavour.
+
+YAML keys:
+- phy            : PHY name (see PHYS below).
+- gen            : "gen1" | "gen2" | "gen3" (fixed link rate).
+- clk_freq       : System clock frequency (Hz).
+- data_width     : PHY datapath width, 16 | 32 (default: 16).
+- gt_type        : "GTH" | "GTY" override for UltraScale+ (default: from the PHY name).
+- core           : "wishbone" | "axi-lite" control bus; omit for a native-only core.
+- dma_data_width : Wishbone DMA master data width (default: 32).
+- dma_mode       : "read" | "write" | "read+write" (default: "read+write").
+- with_identify  : Identify frontend (default: True).
+- with_bist      : BIST frontend (default: False).
+- with_irq       : IRQ output (default: True).
+- user_ports     : {name: {"type": "native", "data_width": 32 | 64}}.
 """
 
+import os
 import argparse
 
 import yaml
 
 from migen import *
-from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from litex.gen import *
+
+from litex.build.generic_platform import *
+from litex.build.io import CRG
+
+from litex.soc.interconnect import wishbone
+from litex.soc.interconnect import axi
 from litex.soc.integration.soc import *
 from litex.soc.integration.builder import *
 
 from litesata.phy import LiteSATAPHY
 from litesata.core import LiteSATACore
 from litesata.frontend.arbitration import LiteSATACrossbar
-
-from litex.build.generic_platform import *
 
 # IOs/Interfaces -----------------------------------------------------------------------------------
 
@@ -65,7 +87,12 @@ def get_ctrl_ios():
         ("ready",  0, Pins(1)),
     ]
 
-def get_native_user_port_ios(_id):
+def get_irq_ios():
+    return [
+        ("irq", 0, Pins(1)),
+    ]
+
+def get_native_user_port_ios(_id, dw=32):
     return [
         ("user_port_{}".format(_id), 0,
             Subsignal("sink_valid",    Pins(1)),
@@ -76,7 +103,7 @@ def get_native_user_port_ios(_id):
             Subsignal("sink_identify", Pins(1)),
             Subsignal("sink_sector",   Pins(48)),
             Subsignal("sink_count",    Pins(16)),
-            Subsignal("sink_data",     Pins(32)),
+            Subsignal("sink_data",     Pins(dw)),
 
             Subsignal("source_valid",    Pins(1)),
             Subsignal("source_last",     Pins(1)),
@@ -86,69 +113,118 @@ def get_native_user_port_ios(_id):
             Subsignal("source_identify", Pins(1)),
             Subsignal("source_end",      Pins(1)),
             Subsignal("source_failed",   Pins(1)),
-            Subsignal("source_data",     Pins(32)),
+            Subsignal("source_data",     Pins(dw)),
         ),
     ]
-
-# CRG ----------------------------------------------------------------------------------------------
-
-class LiteSATACRG(Module):
-    def __init__(self, platform, sys_clk_freq):
-        self.clock_domains.cd_sys = ClockDomain()
-
-        # # #
-
-        platform.add_extension(get_clkin_ios())
-        self.comb += self.cd_sys.clk.eq(platform.request("clk"))
-        self.specials += AsyncResetSynchronizer(self.cd_sys, platform.request("rst"))
 
 # Core ---------------------------------------------------------------------------------------------
 
 class _LiteSATACore(SoCMini):
-    SoCMini.mem_map["csr"] = 0x00000000
-    SoCMini.csr_map = {
-        "ctrl":           0,
-    }
     def __init__(self, platform, core_config):
+        platform.add_extension(get_clkin_ios())
         platform.add_extension(get_sata_ios())
         platform.add_extension(get_ctrl_ios())
-        sys_clk_freq = int(float(core_config.get("clk_freq")))
-        sata_clk_freq = {"gen1": 75e6, "gen2": 150e6, "gen3": 300e6}[core_config["gen"]]
+
+        # Parameters -------------------------------------------------------------------------------
+        sys_clk_freq   = int(float(core_config["clk_freq"]))
+        gen            = core_config["gen"]
+        data_width     = int(core_config.get("data_width", 16))
+        gt_type        = core_config.get("gt_type", "GTY")
+        bus_standard   = core_config.get("core", None)
+        dma_data_width = int(core_config.get("dma_data_width", 32))
+        dma_mode       = core_config.get("dma_mode", "read+write")
+        with_identify  = core_config.get("with_identify", True)
+        with_bist      = core_config.get("with_bist", False)
+        with_irq       = core_config.get("with_irq", True)
+        user_ports     = core_config.get("user_ports", {}) or {}
+        assert gen in ["gen1", "gen2", "gen3"]
+        assert data_width in [16, 32]
+        assert bus_standard in [None, "wishbone", "axi-lite"]
+        # sata_tx/sata_rx clock frequency (linerate / (10 * data_width)).
+        sata_clk_freq = {"gen1": 75e6, "gen2": 150e6, "gen3": 300e6}[gen]*16/data_width
+
+        # CRG --------------------------------------------------------------------------------------
+        self.crg = CRG(platform.request("clk"), platform.request("rst"))
 
         # SoCMini ----------------------------------------------------------------------------------
+        self.mem_map = {**SoCMini.mem_map, "csr": 0x00000000}
         SoCMini.__init__(self, platform, clk_freq=sys_clk_freq,
+            bus_data_width = dma_data_width,
             csr_data_width = 32,
             ident          = "LiteSATA standalone core",
             ident_version  = True
         )
 
-        # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = LiteSATACRG(platform, sys_clk_freq)
-
         # SATA PHY ---------------------------------------------------------------------------------
-        self.submodules.sata_phy = LiteSATAPHY(platform.device,
+        self.sata_phy = LiteSATAPHY(platform.device,
             pads       = platform.request("sata"),
-            gen        = core_config["gen"],
+            gen        = gen,
             clk_freq   = sys_clk_freq,
-            data_width = 16,
-            gt_type    = core_config.get("gt_type", "GTY"),
-            with_csr   = False)
+            data_width = data_width,
+            gt_type    = gt_type,
+            with_csr   = bus_standard is not None)
         self.comb += self.sata_phy.enable.eq(platform.request("enable"))
         self.comb += platform.request("ready").eq(self.sata_phy.ready)
 
-        # SATA Core --------------------------------------------------------------------------------
-        self.submodules.sata_core = LiteSATACore(self.sata_phy)
+        if bus_standard is None:
+            # Native core: SATA Core + Crossbar only -----------------------------------------------
+            self.sata_core     = LiteSATACore(self.sata_phy)
+            self.sata_crossbar = LiteSATACrossbar(self.sata_core)
 
-        # SATA Crossbar ----------------------------------------------------------------------------
-        self.submodules.sata_crossbar = LiteSATACrossbar(self.sata_core)
+            # Timing constraints.
+            platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
+            platform.add_period_constraint(self.sata_phy.crg.cd_sata_rx.clk, 1e9/sata_clk_freq)
+            platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                self.sata_phy.crg.cd_sata_tx.clk,
+                self.sata_phy.crg.cd_sata_rx.clk)
+        else:
+            # Control bus ----------------------------------------------------------------------------
+            if bus_standard == "wishbone":
+                ctrl_bus = wishbone.Interface()
+                platform.add_extension(ctrl_bus.get_ios("wb_ctrl"))
+                self.comb += ctrl_bus.connect_to_pads(platform.request("wb_ctrl"), mode="slave")
+            else:
+                ctrl_bus = axi.AXILiteInterface(address_width=32, data_width=32)
+                platform.add_extension(ctrl_bus.get_ios("axil_ctrl"))
+                self.comb += ctrl_bus.connect_to_pads(platform.request("axil_ctrl"), mode="slave")
+            self.bus.add_master(name="ctrl", master=ctrl_bus)
+
+            # DMA bus --------------------------------------------------------------------------------
+            # Wishbone DMA Master, only slave of a dedicated bus the SATA DMAs are added to.
+            wb_dma = wishbone.Interface(data_width=dma_data_width)
+            platform.add_extension(wb_dma.get_ios("wb_dma"))
+            self.comb += wb_dma.connect_to_pads(platform.request("wb_dma"), mode="master")
+            self.dma_bus = SoCBusHandler(
+                name          = "SoCDMABusHandler",
+                standard      = "wishbone",
+                data_width    = dma_data_width,
+                address_width = 32,
+            )
+            self.dma_bus.add_slave("dma", slave=wb_dma, region=SoCRegion(origin=0x00000000, size=0x100000000))
+
+            # SATA Core/Crossbar/Frontends/DMAs (and timing constraints) through LiteX's add_sata.
+            self.add_sata(name="sata",
+                phy           = self.sata_phy,
+                mode          = dma_mode,
+                with_identify = with_identify,
+                with_bist     = with_bist,
+                with_irq      = with_irq,
+            )
+
+            # IRQ ------------------------------------------------------------------------------------
+            if with_irq:
+                platform.add_extension(get_irq_ios())
+                self.comb += platform.request("irq").eq(self.sata_irq.irq)
 
         # SATA User Ports --------------------------------------------------------------------------
-        for name, port in core_config["user_ports"].items():
+        for name, port in user_ports.items():
             # Native
             if port["type"] == "native":
-                assert port["data_width"] == 32
-                user_port = self.sata_crossbar.get_port()
-                platform.add_extension(get_native_user_port_ios(name))
+                dw = int(port.get("data_width", 32))
+                assert dw in [32, 64]
+                user_port = self.sata_crossbar.get_port(dw)
+                platform.add_extension(get_native_user_port_ios(name, dw))
                 user_port_pads = platform.request("user_port_{}".format(name))
 
                 self.comb += [
@@ -159,6 +235,7 @@ class _LiteSATACore(SoCMini):
                     user_port.sink.identify.eq(user_port_pads.sink_identify),
                     user_port.sink.sector.eq(user_port_pads.sink_sector),
                     user_port.sink.count.eq(user_port_pads.sink_count),
+                    user_port.sink.data.eq(user_port_pads.sink_data),
 
                     user_port_pads.sink_ready.eq(user_port.sink.ready),
                 ]
@@ -178,22 +255,13 @@ class _LiteSATACore(SoCMini):
             else:
                 raise ValueError("Unsupported port type: {}".format(port["type"]))
 
-
-        # Timing constraints
-        platform.add_period_constraint(self.sata_phy.crg.cd_sata_tx.clk, 1e9/sata_clk_freq)
-        platform.add_period_constraint(self.sata_phy.crg.cd_sata_rx.clk, 1e9/sata_clk_freq)
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            self.sata_phy.crg.cd_sata_tx.clk,
-            self.sata_phy.crg.cd_sata_rx.clk)
-
 # PHYs ---------------------------------------------------------------------------------------------
 
 # PHY name -> (Device, GT type, Toolchain). The device only selects the transceiver PHY; the generated
 # core is independent of the exact part/package.
 PHYS = {
-    "A7SATAPHY"   : ("xc7a",    None,  "ise"),    # Artix-7 GTP.
-    "K7SATAPHY"   : ("xc7k",    None,  "ise"),    # Kintex-7 GTX.
+    "A7SATAPHY"   : ("xc7a",    None,  "vivado"), # Artix-7 GTP.
+    "K7SATAPHY"   : ("xc7k",    None,  "vivado"), # Kintex-7 GTX.
     "GTH3SATAPHY" : ("xcku040", "GTH", "vivado"), # Kintex/Virtex UltraScale GTH.
     "GTH4SATAPHY" : ("xcau25p", "GTH", "vivado"), # Artix/Kintex/Zynq UltraScale+ GTH.
     "GTY4SATAPHY" : ("xcvu9p",  "GTY", "vivado"), # Kintex/Virtex UltraScale+ GTY.
@@ -203,7 +271,9 @@ PHYS = {
 
 def main():
     parser = argparse.ArgumentParser(description="LiteSATA standalone core generator")
-    parser.add_argument("config", help="YAML config file")
+    parser.add_argument("config",                           help="YAML config file")
+    parser.add_argument("--output-dir", default="build",    help="Output directory")
+    parser.add_argument("--name",       default="litesata_core", help="Name of the generated core")
     args = parser.parse_args()
     with open(args.config, "r", encoding="utf-8") as f:
         core_config = yaml.load(f, Loader=yaml.SafeLoader)
@@ -225,8 +295,11 @@ def main():
     from litex.build.xilinx import XilinxPlatform
     platform = XilinxPlatform(device, io=[], toolchain=toolchain)
     soc      = _LiteSATACore(platform, core_config)
-    builder  = Builder(soc, output_dir="build", compile_gateware=False)
-    builder.build(build_name="litesata_core")
+    builder  = Builder(soc,
+        output_dir       = args.output_dir,
+        compile_gateware = False,
+        csr_csv          = os.path.join(args.output_dir, "csr.csv"))
+    builder.build(build_name=args.name)
 
 if __name__ == "__main__":
     main()
