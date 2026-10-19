@@ -83,8 +83,11 @@ def get_sata_ios():
 
 def get_ctrl_ios():
     return [
-        ("enable", 0, Pins(1)),
-        ("ready",  0, Pins(1)),
+        ("enable",     0, Pins(1)),
+        ("ready",      0, Pins(1)),
+        ("link_up",    0, Pins(1)), # Debounced link status.
+        ("connect",    0, Pins(1)), # Single-cycle pulse on link up.
+        ("disconnect", 0, Pins(1)), # Single-cycle pulse on (debounced) link down.
     ]
 
 def get_irq_ios():
@@ -165,6 +168,9 @@ class _LiteSATACore(SoCMini):
             with_csr   = bus_standard is not None)
         self.comb += self.sata_phy.enable.eq(platform.request("enable"))
         self.comb += platform.request("ready").eq(self.sata_phy.ready)
+        self.comb += platform.request("link_up").eq(self.sata_phy.link_up)
+        self.comb += platform.request("connect").eq(self.sata_phy.connect_irq)
+        self.comb += platform.request("disconnect").eq(self.sata_phy.disconnect_irq)
 
         if bus_standard is None:
             # Native core: SATA Core + Crossbar only -----------------------------------------------
