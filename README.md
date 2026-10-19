@@ -36,6 +36,7 @@ PHY:
   - Xilinx Kintex-7 GTX (`GTXE2_CHANNEL`)
   - Xilinx UltraScale GTH (`GTHE3_CHANNEL`)
   - Xilinx UltraScale+ GTH/GTY (`GTHE4_CHANNEL`/`GTYE4_CHANNEL`, selected with `gt_type`; Artix UltraScale+ is GTH only)
+  - Lattice ECP5 SERDES (`DCUA`, Gen2 only, OOB generated/detected in fabric)
   - OOB, COMWAKE, COMINIT
   - ALIGN inserter/remover and bytes alignment on K28.5
   - 8B/10B encoding/decoding in transceiver
@@ -60,6 +61,7 @@ Core:
 
 Frontend:
   - Configurable crossbar (simply declare your crossbar and use crossbar.get_port() to add a new port!)
+  - Standalone Verilog core generator (`litesata_gen`) with native user ports and/or a Wishbone/AXI-Lite control bus + Wishbone DMA master
   - Ports arbitration transparent to the user
   - Synthesizable BIST
   - Striping module to segment data on multiple HDDs and increase write/read speed and capacity. (RAID0 equivalent)
@@ -73,12 +75,14 @@ LiteSATA is already used in commercial and open-source designs:
 
 [> Possible improvements
 ------------------------
-- add standardized interfaces (AXI, Avalon-ST)
+- add AXI-Stream user ports / AXI DMA master to the standalone core
+- add host-side link rate negotiation (Gen3 -> Gen2 -> Gen1 fallback)
+- add FLUSH CACHE / TRIM commands and 4Kn sector support
 - add NCQ support
 - add AES hardware encryption
 - add on-the-fly compression/decompression
-- add support for Altera PHYs.
-- add support for Lattice PHYs.
+- add support for Altera/Intel PHYs.
+- add ECP5 Gen1 (1.5Gbps) support and Linux integration.
 - add Zynq Linux drivers.
 - ... See below Support and consulting :)
 
@@ -87,9 +91,43 @@ enjoy-digital.fr.
 
 [> Getting started
 ------------------
-1. Install Python 3.7+ and FPGA vendor's development tools.
+1. Install Python 3.9+ and FPGA vendor's development tools.
 2. Install LiteX and the cores by following the LiteX's wiki [installation guide](https://github.com/enjoy-digital/litex/wiki/Installation).
 3. You can find examples of integration of the core with LiteX in LiteX-Boards and in the examples directory.
+
+[> Standalone core generation
+-----------------------------
+LiteSATA can also be generated as a standalone Verilog core from a YAML description, to integrate it
+in a traditional flow without Migen/LiteX at build time:
+```sh
+$ litesata_gen examples/artix7.yml [--output-dir build] [--name litesata_core]
+```
+The outputs are `build/gateware/litesata_core.v`, the Vivado constraints/`.tcl` and `build/csr.csv`
+(register map, for the control/DMA flavour).
+
+YAML keys:
+
+| Key              | Values                                                     | Default      |
+|------------------|------------------------------------------------------------|--------------|
+| `phy`            | `A7SATAPHY`, `K7SATAPHY`, `GTH3SATAPHY`, `GTH4SATAPHY`, `GTY4SATAPHY` | required |
+| `gen`            | `gen1`, `gen2`, `gen3` (fixed link rate)                   | required     |
+| `clk_freq`       | system clock frequency (Hz)                                | required     |
+| `data_width`     | PHY datapath width, 16 or 32                               | 16           |
+| `gt_type`        | `GTH`/`GTY` override (UltraScale+ only)                    | from `phy`   |
+| `core`           | `wishbone` or `axi-lite` control bus (CSRs at 0x00000000)  | none         |
+| `dma_data_width` | Wishbone DMA master width                                  | 32           |
+| `dma_mode`       | `read`, `write`, `read+write`                              | `read+write` |
+| `with_identify`, `with_bist`, `with_irq` | frontends/IRQ of the control/DMA flavour | True/False/True |
+| `user_ports`     | `{name: {"type": "native", "data_width": 32 or 64}}`       | none         |
+
+PHY names map to transceivers: `A7SATAPHY` Artix-7 GTP, `K7SATAPHY` Kintex-7 GTX, `GTH3SATAPHY`
+UltraScale GTH, `GTH4SATAPHY` Artix/Kintex/Zynq UltraScale+ GTH, `GTY4SATAPHY` Kintex/Virtex
+UltraScale+ GTY. Without `core`, only native streaming ports are exposed (no CPU needed). With `core`,
+the control bus gives access to the PHY status, Identify, optional BIST and the Sector2Mem/Mem2Sector
+DMAs (which master the `wb_dma` bus), and `irq` signals DMA completion. The system clock must satisfy
+`clk_freq >= linerate / dma_data_width` for the DMA flavour (e.g. 75MHz for Gen3 on a 64-bit bus).
+Transceiver location and reference clock pin constraints are added by the integrator. See
+`examples/` for native and control/DMA configurations.
 
 [> Tests
 --------

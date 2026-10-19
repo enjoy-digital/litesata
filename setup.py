@@ -19,7 +19,7 @@ setup(
     url                           = "http://enjoy-digital.fr",
     download_url                  = "https://github.com/enjoy-digital/litesata",
     license                       = "BSD-2-Clause",
-    python_requires               = "~=3.7",
+    python_requires               = ">=3.9",
     install_requires              = ["pyyaml", "litex"],
     extras_require                = {
         "develop": [
