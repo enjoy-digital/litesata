@@ -123,6 +123,25 @@ class TestExamples(unittest.TestCase):
                         self.assertIn(pad, ports)
                 self.assertEqual("irq" in ports, irq)
 
+    def test_gt_type_mismatch_is_rejected(self):
+        # gt_type is fixed by the PHY name: a contradicting value was silently overwritten.
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join([str(_repo_root)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "core.yml"
+            config.write_text((_examples_dir / "ultrascale_plus.yml").read_text().replace(
+                '"gen": "gen3",', '"gen": "gen3", "gt_type": "GTY",'))
+            result = subprocess.run(
+                [sys.executable, "-m", "litesata.gen", str(config), "--output-dir", str(Path(tmp) / "build")],
+                cwd    = tmp,
+                env    = env,
+                stdout = subprocess.DEVNULL,
+                stderr = subprocess.PIPE,
+                text   = True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("gt_type GTY does not match GTH4SATAPHY", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
