@@ -116,6 +116,25 @@ class TestPHYCtrl(unittest.TestCase):
         self.assertEqual(result["data"], primitives["ALIGN"])
 
 
+    def test_tx_polarity_alternates_on_retries(self):
+        # No device: each attempt ends with a retry timer reset, TX polarity must alternate.
+        dut        = DUT()
+        polarities = []
+
+        def generator():
+            yield dut.trx.ready.eq(1)
+            yield dut.trx.tx_cominit_ack.eq(1)
+            cominit = 0
+            while len(polarities) < 4:
+                if (yield dut.trx.tx_cominit_stb) and not cominit:
+                    polarities.append((yield dut.trx.tx_polarity))
+                cominit = (yield dut.trx.tx_cominit_stb)
+                yield
+
+        run_simulation(dut, generator())
+        self.assertEqual(polarities, [0, 1, 0, 1])
+
+
 class TestPHYLinkMonitor(unittest.TestCase):
     def test_link_events(self):
         class DUT(Module):

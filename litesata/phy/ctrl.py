@@ -55,6 +55,15 @@ class LiteSATAPHYCtrl(LiteXModule):
         self.sync += crg.rx_reset.eq(self.rx_reset)
         self.sync += crg.tx_reset.eq(self.tx_reset)
 
+        # TX polarity: alternate on each attempt (0, 1, 0...). Kept out of the FSM since the timers
+        # reset it (a NextValue would be cleared at each retry).
+        tx_polarity_next   = Signal()
+        tx_polarity_update = Signal()
+        self.sync += If(tx_polarity_update,
+            trx.tx_polarity.eq(tx_polarity_next),
+            tx_polarity_next.eq(~tx_polarity_next),
+        )
+
         # FSM.
         self.fsm = fsm = ResetInserter()(FSM(reset_state="RESET"))
         self.comb += fsm.reset.eq(retry_timer.done | align_timer.done)
@@ -73,7 +82,7 @@ class LiteSATAPHYCtrl(LiteXModule):
                 # Set RX polarity to 0 (we don't know it at this point).
                 NextValue(trx.rx_polarity, 0),
                 # Alternate TX polarity on each retry.
-                NextValue(trx.tx_polarity, ~trx.tx_polarity),
+                tx_polarity_update.eq(1),
                 NextState("COMINIT")
             )
         )
