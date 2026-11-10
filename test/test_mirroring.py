@@ -12,12 +12,29 @@ from litesata.frontend.arbitration import LiteSATACrossbar
 from litesata.frontend.bist import LiteSATABISTGenerator, LiteSATABISTChecker
 from litesata.frontend.raid import LiteSATAMirroring
 
+from litex.soc.interconnect.packet import Arbiter
+
 from test.stream_helpers import *
 
 from test.model.hdd import *
 
 
+class ControllerStub:
+    def __init__(self, dw=32):
+        self.sink   = stream.Endpoint(command_tx_description(dw))
+        self.source = stream.Endpoint(command_rx_description(dw))
+
+
 class TestMirroring(unittest.TestCase):
+    def test_mirroring_tx_arbiter_size(self):
+        # The write arbiter must have one input per controller (it was sized by the data width).
+        for n in [2, 3]:
+            with self.subTest(n=n):
+                mirroring = LiteSATAMirroring([ControllerStub() for i in range(n)])
+                arbiters  = [m for _, m in mirroring.tx._submodules if isinstance(m, Arbiter)]
+                self.assertEqual(len(arbiters), 1)
+                self.assertEqual(len(arbiters[0].rr.request), n)
+
     def test_mirroring(self):
         def generator(dut):
             dut.hdd0.malloc(0, 64)
