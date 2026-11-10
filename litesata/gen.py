@@ -159,13 +159,16 @@ class _LiteSATACore(SoCMini):
         )
 
         # SATA PHY ---------------------------------------------------------------------------------
+        # The refclk comes from the dedicated transceiver pins (IBUFDS_GTE4 on UltraScale+): feed it
+        # to GTREFCLK0, GTGREFCLK is only for a fabric refclk.
         self.sata_phy = LiteSATAPHY(platform.device,
-            pads       = platform.request("sata"),
-            gen        = gen,
-            clk_freq   = sys_clk_freq,
-            data_width = data_width,
-            gt_type    = gt_type,
-            with_csr   = bus_standard is not None)
+            pads          = platform.request("sata"),
+            gen           = gen,
+            clk_freq      = sys_clk_freq,
+            data_width    = data_width,
+            gt_type       = gt_type,
+            use_gtgrefclk = False,
+            with_csr      = bus_standard is not None)
         self.comb += self.sata_phy.enable.eq(platform.request("enable"))
         self.comb += platform.request("ready").eq(self.sata_phy.ready)
         self.comb += platform.request("link_up").eq(self.sata_phy.link_up)
