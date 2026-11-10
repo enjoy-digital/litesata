@@ -121,7 +121,7 @@ class LiteSATABISTIdentifyDriver:
             s = word.to_bytes(2, byteorder='big').decode("utf-8")
             self.firmware_revision += s
         self.model_number = ""
-        for i, word in enumerate(self.data[27:46]):
+        for i, word in enumerate(self.data[27:47]):
             s = word.to_bytes(2, byteorder='big').decode("utf-8")
             self.model_number += s
 
