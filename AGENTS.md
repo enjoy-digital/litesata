@@ -21,8 +21,9 @@ python3 -m litex_boards.targets.<board> --with-sata --build --no-compile
 
 - OOB depends on the transceiver: Xilinx GTP/GTX have hardware COMINIT/COMWAKE; on ECP5 the OOB
   gaps are made of data patterns (no usable electrical idle). Test both families when touching OOB.
-- A plain TX→RX loopback can never complete an OOB handshake: test the post-OOB datapath with the
-  OOB bypass control.
+- A plain TX→RX loopback can never complete an OOB handshake (there is no OOB bypass control): test
+  the post-OOB datapath (link, transport, command) in simulation against the drive model
+  (`test/model/hdd.py`).
 - Drives differ: keep a known-good drive as reference and say which drive was used.
 
 ## Rules
