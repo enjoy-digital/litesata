@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="230" viewBox="0 0 760 230">
+<defs>
+  <marker id="arrow-ctrl" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-ctrl-rev" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto">
+    <path d="M8,0 L0,4 L8,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-stream" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#606060"/></marker>
+  <marker id="arrow-accent" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-accent-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-stream-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#606060"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<polyline points="120,45 120,31 122.5,31 122.5,59 125,59 125,31 127.5,31 127.5,59 130,59 130,31 132.5,31 132.5,59 135,59 135,31 137.5,31 137.5,59 140,59 140,31 142.5,31 142.5,59 145,59 145,31 147.5,31 147.5,59 150,59 150,45" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="150,45 240,45" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="240,45 240,31 242.5,31 242.5,59 245,59 245,31 247.5,31 247.5,59 250,59 250,31 252.5,31 252.5,59 255,59 255,31 257.5,31 257.5,59 260,59 260,31 262.5,31 262.5,59 265,59 265,31 267.5,31 267.5,59 270,59 270,45" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="270,45 360,45" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="360,45 360,31 362.5,31 362.5,59 365,59 365,31 367.5,31 367.5,59 370,59 370,31 372.5,31 372.5,59 375,59 375,31 377.5,31 377.5,59 380,59 380,31 382.5,31 382.5,59 385,59 385,31 387.5,31 387.5,59 390,59 390,45" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="390,45 480,45" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="480,45 480,31 482.5,31 482.5,59 485,59 485,31 487.5,31 487.5,59 490,59 490,31 492.5,31 492.5,59 495,59 495,31 497.5,31 497.5,59 500,59 500,31 502.5,31 502.5,59 505,59 505,31 507.5,31 507.5,59 510,59 510,45" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="510,45 600,45" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="600,45 600,31 602.5,31 602.5,59 605,59 605,31 607.5,31 607.5,59 610,59 610,31 612.5,31 612.5,59 615,59 615,31 617.5,31 617.5,59 620,59 620,31 622.5,31 622.5,59 625,59 625,31 627.5,31 627.5,59 630,59 630,45" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="630,45 720,45" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="720,45 720,31 722.5,31 722.5,59 725,59 725,31 727.5,31 727.5,59 730,59 730,31 732.5,31 732.5,59 735,59 735,31 737.5,31 737.5,59 740,59 740,31 742.5,31 742.5,59 745,59 745,31 747.5,31 747.5,59 750,59 750,45" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="120,82 150,82" fill="none" stroke="#5b5b5b" stroke-width="1.0" marker-end="url(#arrow-ctrl)" marker-start="url(#arrow-ctrl-rev)"/>
+<text x="112" y="82" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="end" dominant-baseline="central"><tspan x="112" dy="0">160 UI</tspan></text>
+<polyline points="150,82 240,82" fill="none" stroke="#5b5b5b" stroke-width="1.0" marker-end="url(#arrow-ctrl)" marker-start="url(#arrow-ctrl-rev)"/>
+<text x="195" y="89" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="195" dy="0">480 UI</tspan></text>
+<polyline points="120,155 120,141 122.5,141 122.5,169 125,169 125,141 127.5,141 127.5,169 130,169 130,141 132.5,141 132.5,169 135,169 135,141 137.5,141 137.5,169 140,169 140,141 142.5,141 142.5,169 145,169 145,141 147.5,141 147.5,169 150,169 150,155" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="150,155 180,155" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="180,155 180,141 182.5,141 182.5,169 185,169 185,141 187.5,141 187.5,169 190,169 190,141 192.5,141 192.5,169 195,169 195,141 197.5,141 197.5,169 200,169 200,141 202.5,141 202.5,169 205,169 205,141 207.5,141 207.5,169 210,169 210,155" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="210,155 240,155" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="240,155 240,141 242.5,141 242.5,169 245,169 245,141 247.5,141 247.5,169 250,169 250,141 252.5,141 252.5,169 255,169 255,141 257.5,141 257.5,169 260,169 260,141 262.5,141 262.5,169 265,169 265,141 267.5,141 267.5,169 270,169 270,155" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="270,155 300,155" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="300,155 300,141 302.5,141 302.5,169 305,169 305,141 307.5,141 307.5,169 310,169 310,141 312.5,141 312.5,169 315,169 315,141 317.5,141 317.5,169 320,169 320,141 322.5,141 322.5,169 325,169 325,141 327.5,141 327.5,169 330,169 330,155" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="330,155 360,155" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="360,155 360,141 362.5,141 362.5,169 365,169 365,141 367.5,141 367.5,169 370,169 370,141 372.5,141 372.5,169 375,169 375,141 377.5,141 377.5,169 380,169 380,141 382.5,141 382.5,169 385,169 385,141 387.5,141 387.5,169 390,169 390,155" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="390,155 420,155" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="420,155 420,141 422.5,141 422.5,169 425,169 425,141 427.5,141 427.5,169 430,169 430,141 432.5,141 432.5,169 435,169 435,141 437.5,141 437.5,169 440,169 440,141 442.5,141 442.5,169 445,169 445,141 447.5,141 447.5,169 450,169 450,155" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
+<polyline points="120,192 150,192" fill="none" stroke="#5b5b5b" stroke-width="1.0" marker-end="url(#arrow-ctrl)" marker-start="url(#arrow-ctrl-rev)"/>
+<text x="112" y="192" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="end" dominant-baseline="central"><tspan x="112" dy="0">160 UI</tspan></text>
+<polyline points="150,192 180,192" fill="none" stroke="#5b5b5b" stroke-width="1.0" marker-end="url(#arrow-ctrl)" marker-start="url(#arrow-ctrl-rev)"/>
+<text x="188" y="192" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="start" dominant-baseline="central"><tspan x="188" dy="0">160 UI</tspan></text>
+<text x="108" y="36.6" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="end" dominant-baseline="central"><tspan x="108" dy="0">COMRESET</tspan><tspan x="108" dy="16.8">COMINIT</tspan></text>
+<text x="108" y="155" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="end" dominant-baseline="central"><tspan x="108" dy="0">COMWAKE</tspan></text>
+</svg>
