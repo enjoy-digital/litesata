@@ -48,8 +48,14 @@ class LiteSATASectors2Stream(LiteXModule):
         # Converter.
         self.conv = conv = stream.Converter(nbits_from=port.dw, nbits_to=data_width)
 
-        # Connect Port to Sector Buffer.
-        self.comb += port.source.connect(buf.sink, keep={"valid", "ready", "last", "data"})
+        # Connect Port to Sector Buffer (data only, the read response beat (end) is dropped).
+        self.comb += [
+            port.source.connect(buf.sink, keep={"valid", "ready", "last", "data"}),
+            If(port.source.end,
+                buf.sink.valid.eq(0),
+                port.source.ready.eq(1)
+            )
+        ]
 
         # Connect Sector Buffer to Converter.
         self.comb += buf.source.connect(conv.sink)
