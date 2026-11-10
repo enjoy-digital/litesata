@@ -139,7 +139,9 @@ class ECP5SATAOOBChecker(LiteXModule):
         wake_max = int( 175e-9*clk_freq)
         init_min = ceil(175e-9*clk_freq)
         init_max = int( 525e-9*clk_freq)
-        quiet    = 32
+        # Quiet interval: an idle longer than any OOB gap (and at least 32 cycles), a fixed value
+        # would clear the detection in the middle of a COMINIT gap at high sys clock frequencies.
+        quiet    = max(32, init_max + 1)
 
         rx_idle_d = Signal()
         gap_end   = Signal()
