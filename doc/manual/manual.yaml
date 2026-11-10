@@ -1,0 +1,26 @@
+# Manual of this project: output name and chapters, in order (read by build.py; the pandoc defaults
+# files and the theme are generic, from the manual kit).
+name: litesata_manual
+chapters:
+  - 00_front.md
+  - 01_introduction.md
+  - 02_sata_primer.md
+  - 03_core_architecture.md
+  - 04_link_layer.md
+  - 05_transport_command.md
+  - 06_frontends.md
+  - 07_phy_architecture.md
+  - 08_xilinx_phys.md
+  - 09_ecp5_phy.md
+  - 10_boards.md
+  - 11_getting_started.md
+  - 12_integration.md
+  - 13_examples.md
+  - 14_simulation.md
+  - 15_debugging.md
+  - Z_appendix.md
+  - A_registers.md
+  - B_build_options.md
+  - C_glossary.md
+  - D_performance.md
+  - E_maintenance.md
