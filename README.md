@@ -48,7 +48,7 @@ PHY:
 Core:
 
  - Link:
-    - CONT inserter/remover
+    - CONT remover (CONT is optional for a transmitter: the TX does not send it)
     - Scrambling/Descrambling of data
     - CRC inserter/checker
     - HOLD insertion/detection
