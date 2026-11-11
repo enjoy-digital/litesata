@@ -10,6 +10,7 @@ from unittest import mock
 from bench.acorn import SATATestSoC
 from bench import test_init
 from bench import test_bist
+from bench import test_dma
 
 
 class TestInit(unittest.TestCase):
@@ -72,6 +73,18 @@ class TestIdentifyDecode(unittest.TestCase):
         identify.data = data
         identify.decode()
         self.assertEqual(identify.model_number, model)
+
+class TestDMADriver(unittest.TestCase):
+    def test_nsectors_is_written(self):
+        # nsectors resets to 0: a DMA started without writing it never terminates.
+        for name, mode in [("sector2mem", "read"), ("mem2sector", "write")]:
+            with self.subTest(dma=name):
+                bus = mock.Mock()
+                getattr(bus.regs, f"sata_{name}_done").read.return_value  = 1
+                getattr(bus.regs, f"sata_{name}_error").read.return_value = 0
+                dma = test_dma.DMADriver(bus=bus, base=0x1000)
+                getattr(dma, mode)(10)
+                getattr(bus.regs, f"sata_{name}_nsectors").write.assert_called_once_with(1)
 
 
 if __name__ == "__main__":

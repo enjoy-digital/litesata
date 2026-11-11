@@ -7,12 +7,38 @@
 import unittest
 
 from litesata.common import *
-from litesata.core.link import LiteSATALink
+from litesata.core.link import LiteSATALink, LiteSATALinkTX, LiteSATALinkRX
 
 from test.stream_helpers import *
 
 from test.model.hdd import *
 
+# Helpers ------------------------------------------------------------------------------------------
+
+def fsm_next_states(statements):
+    for s in statements:
+        if isinstance(s, NextState):
+            yield s.state
+        elif isinstance(s, If):
+            yield from fsm_next_states(s.t)
+            yield from fsm_next_states(s.f)
+        elif isinstance(s, Case):
+            for case in s.cases.values():
+                yield from fsm_next_states(case)
+        elif isinstance(s, (list, tuple)):
+            yield from fsm_next_states(s)
+
+def fsm_unreachable_states(fsm):
+    reached = {fsm.reset_state}
+    pending = [fsm.reset_state]
+    while pending:
+        for state in fsm_next_states(fsm.actions[pending.pop()]):
+            if state not in reached:
+                reached.add(state)
+                pending.append(state)
+    return set(fsm.actions.keys()) - reached
+
+# Test ---------------------------------------------------------------------------------------------
 
 class LinkStreamer(PacketStreamer):
     def __init__(self):
@@ -25,6 +51,11 @@ class LinkLogger(PacketLogger):
 
 
 class TestLink(unittest.TestCase):
+    def test_link_fsm_states_reachable(self):
+        for cls in [LiteSATALinkTX, LiteSATALinkRX]:
+            with self.subTest(fsm=cls.__name__):
+                self.assertEqual(fsm_unreachable_states(cls().fsm), set())
+
     def test_link(self):
         def generator(dut):
             for i in range(2):

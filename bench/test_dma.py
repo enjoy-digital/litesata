@@ -19,6 +19,7 @@ class DMADriver:
 
     def read(self, sector):
         self.bus.regs.sata_sector2mem_sector.write(sector)
+        self.bus.regs.sata_sector2mem_nsectors.write(1)
         self.bus.regs.sata_sector2mem_base.write(self.base)
         self.bus.regs.sata_sector2mem_start.write(1)
         while self.bus.regs.sata_sector2mem_done.read() == 0:
@@ -27,6 +28,7 @@ class DMADriver:
 
     def write(self, sector):
         self.bus.regs.sata_mem2sector_sector.write(sector)
+        self.bus.regs.sata_mem2sector_nsectors.write(1)
         self.bus.regs.sata_mem2sector_base.write(self.base)
         self.bus.regs.sata_mem2sector_start.write(1)
         while self.bus.regs.sata_mem2sector_done.read() == 0:
