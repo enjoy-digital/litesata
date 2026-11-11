@@ -9,6 +9,7 @@ from unittest import mock
 
 from bench.acorn import SATATestSoC
 from bench import test_init
+from bench import test_bist
 from bench import test_dma
 
 
@@ -60,6 +61,18 @@ class TestInit(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "at least 150.0MHz"):
             SATATestSoC(platform=None, sys_clk_freq=100e6, gen="gen3")
 
+
+class TestIdentifyDecode(unittest.TestCase):
+    def test_model_number_is_words_27_to_46(self):
+        # ATA IDENTIFY: model number is 40 ASCII characters in words 27-46 (2 characters per word).
+        model = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789WXYZ"
+        data  = [0x2020]*256
+        for i in range(20):
+            data[27 + i] = int.from_bytes(model[2*i:2*i + 2].encode(), byteorder="big")
+        identify = test_bist.LiteSATABISTIdentifyDriver(mock.Mock(), None, "sata_bist")
+        identify.data = data
+        identify.decode()
+        self.assertEqual(identify.model_number, model)
 
 class TestDMADriver(unittest.TestCase):
     def test_nsectors_is_written(self):
