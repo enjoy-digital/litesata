@@ -1,0 +1,603 @@
+{
+ "argv": [
+  "ultrascale_plus_axi_lite_dma.yml"
+ ],
+ "banks": {
+  "sata_bist_checker": [
+   {
+    "access": "wo",
+    "description": "Write 1: run `loops` commands on `count` sectors from `sector`.",
+    "fields": [],
+    "name": "start",
+    "offset": 40,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "First sector (48-bit LBA).",
+    "fields": [],
+    "name": "sector",
+    "offset": 44,
+    "reset": 0,
+    "size": 48
+   },
+   {
+    "access": "rw",
+    "description": "Number of sectors per command.",
+    "fields": [],
+    "name": "count",
+    "offset": 52,
+    "reset": 0,
+    "size": 16
+   },
+   {
+    "access": "rw",
+    "description": "Number of commands of a run.",
+    "fields": [],
+    "name": "loops",
+    "offset": 56,
+    "reset": 0,
+    "size": 8
+   },
+   {
+    "access": "rw",
+    "description": "Data pattern: 0 counter, 1 scrambler (pseudo-random).",
+    "fields": [],
+    "name": "random",
+    "offset": 60,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: idle, run finished or never started.",
+    "fields": [],
+    "name": "done",
+    "offset": 64,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: the last command of the run failed (drive error or CRC error).",
+    "fields": [],
+    "name": "aborted",
+    "offset": 68,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Dwords read back with a wrong value in the last command (checker only).",
+    "fields": [],
+    "name": "errors",
+    "offset": 72,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "ro",
+    "description": "System clock cycles of the whole run.",
+    "fields": [],
+    "name": "cycles",
+    "offset": 76,
+    "reset": null,
+    "size": 32
+   }
+  ],
+  "sata_bist_generator": [
+   {
+    "access": "wo",
+    "description": "Write 1: run `loops` commands on `count` sectors from `sector`.",
+    "fields": [],
+    "name": "start",
+    "offset": 0,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "First sector (48-bit LBA).",
+    "fields": [],
+    "name": "sector",
+    "offset": 4,
+    "reset": 0,
+    "size": 48
+   },
+   {
+    "access": "rw",
+    "description": "Number of sectors per command.",
+    "fields": [],
+    "name": "count",
+    "offset": 12,
+    "reset": 0,
+    "size": 16
+   },
+   {
+    "access": "rw",
+    "description": "Number of commands of a run.",
+    "fields": [],
+    "name": "loops",
+    "offset": 16,
+    "reset": 0,
+    "size": 8
+   },
+   {
+    "access": "rw",
+    "description": "Data pattern: 0 counter, 1 scrambler (pseudo-random).",
+    "fields": [],
+    "name": "random",
+    "offset": 20,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: idle, run finished or never started.",
+    "fields": [],
+    "name": "done",
+    "offset": 24,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: the last command of the run failed (drive error or CRC error).",
+    "fields": [],
+    "name": "aborted",
+    "offset": 28,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Dwords read back with a wrong value in the last command (checker only).",
+    "fields": [],
+    "name": "errors",
+    "offset": 32,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "ro",
+    "description": "System clock cycles of the whole run.",
+    "fields": [],
+    "name": "cycles",
+    "offset": 36,
+    "reset": null,
+    "size": 32
+   }
+  ],
+  "sata_bist_identify": [
+   {
+    "access": "wo",
+    "description": "Write 1: empty the data FIFO and send an IDENTIFY DEVICE command.",
+    "fields": [],
+    "name": "start",
+    "offset": 80,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: idle, no command in progress.",
+    "fields": [],
+    "name": "done",
+    "offset": 84,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Width of the user port, in bits.",
+    "fields": [],
+    "name": "data_width",
+    "offset": 88,
+    "reset": null,
+    "size": 16
+   },
+   {
+    "access": "ro",
+    "description": "1: a dword of the IDENTIFY data is in `source_data`.",
+    "fields": [],
+    "name": "source_valid",
+    "offset": 92,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "wo",
+    "description": "Write 1: pop the dword of `source_data`.",
+    "fields": [],
+    "name": "source_ready",
+    "offset": 96,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Current dword of the IDENTIFY data (FIFO of 512 dwords, 128 used).",
+    "fields": [],
+    "name": "source_data",
+    "offset": 100,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "ro",
+    "description": "1: the last command failed (drive error or CRC error).",
+    "fields": [],
+    "name": "error",
+    "offset": 104,
+    "reset": null,
+    "size": 1
+   }
+  ],
+  "sata_identify": [
+   {
+    "access": "wo",
+    "description": "Write 1: empty the data FIFO and send an IDENTIFY DEVICE command.",
+    "fields": [],
+    "name": "start",
+    "offset": 0,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: idle, no command in progress.",
+    "fields": [],
+    "name": "done",
+    "offset": 4,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Width of the user port, in bits.",
+    "fields": [],
+    "name": "data_width",
+    "offset": 8,
+    "reset": null,
+    "size": 16
+   },
+   {
+    "access": "ro",
+    "description": "1: a dword of the IDENTIFY data is in `source_data`.",
+    "fields": [],
+    "name": "source_valid",
+    "offset": 12,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "wo",
+    "description": "Write 1: pop the dword of `source_data`.",
+    "fields": [],
+    "name": "source_ready",
+    "offset": 16,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Current dword of the IDENTIFY data (FIFO of 512 dwords, 128 used).",
+    "fields": [],
+    "name": "source_data",
+    "offset": 20,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "ro",
+    "description": "1: the last command failed (drive error or CRC error).",
+    "fields": [],
+    "name": "error",
+    "offset": 24,
+    "reset": null,
+    "size": 1
+   }
+  ],
+  "sata_irq": [
+   {
+    "access": "ro",
+    "description": "This register contains the current raw level of the event trigger. Writes to this register have no effect.",
+    "fields": [
+     {
+      "description": "Level of the ``sector2mem_dma`` event.",
+      "name": "sector2mem_dma",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "Level of the ``mem2sector_dma`` event.",
+      "name": "mem2sector_dma",
+      "offset": 1,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "status",
+    "offset": 0,
+    "reset": null,
+    "size": 2
+   },
+   {
+    "access": "rw",
+    "description": "When an event occurs, the corresponding bit will be set in this register. To clear the Event, set the corresponding bit in this register.",
+    "fields": [
+     {
+      "description": "Sector2Mem DMA terminated.",
+      "name": "sector2mem_dma",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "Mem2Sector DMA terminated.",
+      "name": "mem2sector_dma",
+      "offset": 1,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "pending",
+    "offset": 4,
+    "reset": null,
+    "size": 2
+   },
+   {
+    "access": "rw",
+    "description": "This register enables the corresponding events. Write a ``0`` to this register to disable individual events.",
+    "fields": [
+     {
+      "description": "Write a ``1`` to enable the ``sector2mem_dma`` Event.",
+      "name": "sector2mem_dma",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "Write a ``1`` to enable the ``mem2sector_dma`` Event.",
+      "name": "mem2sector_dma",
+      "offset": 1,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "enable",
+    "offset": 8,
+    "reset": 0,
+    "size": 2
+   }
+  ],
+  "sata_mem2sector": [
+   {
+    "access": "rw",
+    "description": "First sector (48-bit LBA).",
+    "fields": [],
+    "name": "sector",
+    "offset": 0,
+    "reset": 0,
+    "size": 48
+   },
+   {
+    "access": "rw",
+    "description": "Number of sectors, one ATA command per sector; must not be 0.",
+    "fields": [],
+    "name": "nsectors",
+    "offset": 8,
+    "reset": 0,
+    "size": 16
+   },
+   {
+    "access": "rw",
+    "description": "Byte address of the memory buffer.",
+    "fields": [],
+    "name": "base",
+    "offset": 12,
+    "reset": 0,
+    "size": 64
+   },
+   {
+    "access": "wo",
+    "description": "Write: start the transfer.",
+    "fields": [],
+    "name": "start",
+    "offset": 20,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: idle, transfer finished or never started.",
+    "fields": [],
+    "name": "done",
+    "offset": 24,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: a command of the transfer failed; the transfer stopped there.",
+    "fields": [],
+    "name": "error",
+    "offset": 28,
+    "reset": null,
+    "size": 1
+   }
+  ],
+  "sata_phy": [
+   {
+    "access": "rw",
+    "description": "PHY enable: 0 holds the transceiver initialization in reset, 1 lets it run and the OOB sequence start.",
+    "fields": [],
+    "name": "enable",
+    "offset": 0,
+    "reset": 1,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "PHY status.",
+    "fields": [
+     {
+      "description": "1: transceiver and controller ready, the link carries the core traffic.",
+      "name": "ready",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": [
+       [
+        "``0b0``",
+        "PHY not initialized."
+       ],
+       [
+        "``0b1``",
+        "PHY initialized and ready."
+       ]
+      ]
+     },
+     {
+      "description": "1: transceiver TX initialized.",
+      "name": "tx_ready",
+      "offset": 1,
+      "reset": 0,
+      "size": 1,
+      "values": [
+       [
+        "``0b0``",
+        "TX not initialized."
+       ],
+       [
+        "``0b1``",
+        "TX initialized and ready."
+       ]
+      ]
+     },
+     {
+      "description": "1: transceiver RX initialized.",
+      "name": "rx_ready",
+      "offset": 2,
+      "reset": 0,
+      "size": 1,
+      "values": [
+       [
+        "``0b0``",
+        "RX not initialized."
+       ],
+       [
+        "``0b1``",
+        "RX initialized and ready."
+       ]
+      ]
+     },
+     {
+      "description": "1: OOB and ALIGN handshake of the PHY controller complete.",
+      "name": "ctrl_ready",
+      "offset": 3,
+      "reset": 0,
+      "size": 1,
+      "values": [
+       [
+        "``0b0``",
+        "Ctrl/OOB not initialized."
+       ],
+       [
+        "``0b1``",
+        "Ctrl/OOB initialized and ready."
+       ]
+      ]
+     },
+     {
+      "description": "1: link up, debounced: falls after `link_down_timeout` (100 ms) without `ready`.",
+      "name": "link_up",
+      "offset": 4,
+      "reset": 0,
+      "size": 1,
+      "values": [
+       [
+        "``0b0``",
+        "Link down (debounced)."
+       ],
+       [
+        "``0b1``",
+        "Link up."
+       ]
+      ]
+     }
+    ],
+    "name": "status",
+    "offset": 4,
+    "reset": null,
+    "size": 5
+   }
+  ],
+  "sata_sector2mem": [
+   {
+    "access": "rw",
+    "description": "First sector (48-bit LBA).",
+    "fields": [],
+    "name": "sector",
+    "offset": 0,
+    "reset": 0,
+    "size": 48
+   },
+   {
+    "access": "rw",
+    "description": "Number of sectors, one ATA command per sector; must not be 0.",
+    "fields": [],
+    "name": "nsectors",
+    "offset": 8,
+    "reset": 0,
+    "size": 16
+   },
+   {
+    "access": "rw",
+    "description": "Byte address of the memory buffer.",
+    "fields": [],
+    "name": "base",
+    "offset": 12,
+    "reset": 0,
+    "size": 64
+   },
+   {
+    "access": "wo",
+    "description": "Write: start the transfer.",
+    "fields": [],
+    "name": "start",
+    "offset": 20,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: idle, transfer finished or never started.",
+    "fields": [],
+    "name": "done",
+    "offset": 24,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "1: a command of the transfer failed; the transfer stopped there.",
+    "fields": [],
+    "name": "error",
+    "offset": 28,
+    "reset": null,
+    "size": 1
+   }
+  ]
+ },
+ "config": "usp_axi_lite_dma",
+ "target": "litesata_gen"
+}

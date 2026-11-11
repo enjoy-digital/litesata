@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="250" viewBox="0 0 760 250">
+<defs>
+  <marker id="arrow-ctrl" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-ctrl-rev" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto">
+    <path d="M8,0 L0,4 L8,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-stream" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#606060"/></marker>
+  <marker id="arrow-accent" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-accent-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-stream-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#606060"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<polyline points="20,95 110,95" fill="none" stroke="#606060" stroke-width="2.0" stroke-dasharray="6,4"/>
+<polyline points="110,95 110,75 115,75 115,115 120,115 120,75 125,75 125,115 130,115 130,75 135,75 135,115 140,115 140,75 145,75 145,115 150,115 150,75 155,75 155,115 160,115 160,75 165,75 165,115 170,115 170,75 175,75 175,115 180,115 180,75 185,75 185,115 190,115 190,95" fill="none" stroke="#2eaadc" stroke-width="2.0"/>
+<polyline points="290,95 290,75 295,75 295,115 300,115 300,75 305,75 305,115 310,115 310,75 315,75 315,115 320,115 320,75 325,75 325,115 330,115 330,75 335,75 335,115 340,115 340,75 345,75 345,115 350,115 350,75 355,75 355,115 360,115 360,75 365,75 365,115 370,115 370,95" fill="none" stroke="#2eaadc" stroke-width="2.0"/>
+<polyline points="470,95 470,75 475,75 475,115 480,115 480,75 485,75 485,115 490,115 490,75 495,75 495,115 500,115 500,75 505,75 505,115 510,115 510,75 515,75 515,115 520,115 520,75 525,75 525,115 530,115 530,75 535,75 535,115 540,115 540,75 545,75 545,115 550,115 550,95" fill="none" stroke="#2eaadc" stroke-width="2.0"/>
+<polyline points="190,115 290,115" fill="none" stroke="#606060" stroke-width="2.0"/>
+<polyline points="370,115 470,115" fill="none" stroke="#606060" stroke-width="2.0"/>
+<polyline points="550,115 640,115" fill="none" stroke="#606060" stroke-width="2.0"/>
+<polyline points="640,115 640,95 740,95" fill="none" stroke="#606060" stroke-width="2.0" stroke-dasharray="6,4"/>
+<polyline points="110,125 110,215" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="2,3"/>
+<polyline points="190,125 190,215" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="2,3"/>
+<polyline points="290,125 290,215" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="2,3"/>
+<polyline points="110,150 190,150" fill="none" stroke="#5b5b5b" stroke-width="1.0" marker-end="url(#arrow-ctrl)" marker-start="url(#arrow-ctrl-rev)"/>
+<text x="150" y="157" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="150" dy="0">160 UI</tspan></text>
+<polyline points="190,150 290,150" fill="none" stroke="#5b5b5b" stroke-width="1.0" marker-end="url(#arrow-ctrl)" marker-start="url(#arrow-ctrl-rev)"/>
+<text x="240" y="157" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="240" dy="0">160 or 480 UI</tspan></text>
+<text x="65" y="47.8" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="65" dy="0">electrical</tspan><tspan x="65" dy="14.4">idle</tspan></text>
+<text x="690" y="47.8" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="690" dy="0">electrical</tspan><tspan x="690" dy="14.4">idle</tspan></text>
+<text x="150" y="55" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="150" dy="0">burst</tspan></text>
+<text x="240" y="55" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="240" dy="0">gap</tspan></text>
+<text x="420" y="55" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="420" dy="0">6 bursts, 6 gaps</tspan></text>
+<text x="150" y="200" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="150" dy="0">square wave</tspan></text>
+<text x="240" y="200" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="240" dy="0">constant word</tspan></text>
+</svg>

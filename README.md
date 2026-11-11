@@ -40,7 +40,7 @@ PHY:
   - OOB, COMWAKE, COMINIT
   - ALIGN inserter/remover and bytes alignment on K28.5
   - 8B/10B encoding/decoding in transceiver
-  - Automatic TX/RX P/N polarity detection and swap.
+  - Automatic RX P/N polarity detection and swap, TX polarity alternated on each OOB attempt.
   - Error detection and reporting
   - 16/32-bit PHY datapath
   - 1.5/3.0/6.0Gbps supported speeds (respectively 37.5/75/150MHz system clock)
@@ -89,6 +89,28 @@ LiteSATA is already used in commercial and open-source designs:
 If you want to support these features, please contact us at florent [AT]
 enjoy-digital.fr.
 
+[> Documentation
+----------------
+The **SATA Host Core & PHYs manual** is the reference of LiteSATA: a nightly
+[PDF](https://github.com/enjoy-digital/litesata/releases/download/manual-nightly/litesata_manual.pdf)
+and [HTML page](https://github.com/enjoy-digital/litesata/releases/download/manual-nightly/litesata_manual.html)
+are published on the [manual-nightly](https://github.com/enjoy-digital/litesata/releases/tag/manual-nightly)
+release. Sources in [doc/manual](doc/manual/README.md) (build: `python3 doc/manual/build.py`, outputs in
+`build/doc/`; pandoc, XeLaTeX and the fonts listed in the README of `doc/manual`):
+
+- **Understand**: [introduction](doc/manual/01_introduction.md), [SATA in a nutshell](doc/manual/02_sata_primer.md)
+  (OOB, primitives, frames, FISes, ATA commands).
+- **The core**: [architecture](doc/manual/03_core_architecture.md), [link layer](doc/manual/04_link_layer.md),
+  [transport and command layers](doc/manual/05_transport_command.md), [frontends](doc/manual/06_frontends.md).
+- **The PHYs**: [PHY architecture and OOB controller](doc/manual/07_phy_architecture.md),
+  [Xilinx transceiver PHYs](doc/manual/08_xilinx_phys.md), [Lattice ECP5 PHY](doc/manual/09_ecp5_phy.md).
+- **Use it**: [supported FPGAs and boards](doc/manual/10_boards.md), [getting started](doc/manual/11_getting_started.md),
+  [integration](doc/manual/12_integration.md), [examples](doc/manual/13_examples.md), [simulation](doc/manual/14_simulation.md),
+  [debugging](doc/manual/15_debugging.md).
+- **Appendices**: [registers](doc/manual/A_registers.md), [build options](doc/manual/B_build_options.md),
+  [glossary](doc/manual/C_glossary.md), [performance and resources](doc/manual/D_performance.md),
+  [maintaining this manual](doc/manual/E_maintenance.md) (for contributors).
+
 [> Getting started
 ------------------
 1. Install Python 3.9+ and FPGA vendor's development tools.
@@ -102,7 +124,8 @@ be generated from a YAML description:
 ```sh
 $ litesata_gen examples/artix7.yml
 ```
-See [doc/gen.md](doc/gen.md) for the flavours, YAML keys and examples.
+See the [Integration](doc/manual/12_integration.md) chapter of the manual for the flavours and
+the ports, and [Build options](doc/manual/B_build_options.md) for the YAML keys.
 
 [> Tests
 --------

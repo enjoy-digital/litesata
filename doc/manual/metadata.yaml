@@ -1,0 +1,16 @@
+---
+# Project metadata of the manual (title page, headers, document properties). The theme (colours,
+# fonts, LaTeX options) is in theme.yaml; build.py merges both and replaces @DATE@.
+title: "SATA Host Core & PHYs"
+project: "LiteSATA"
+subtitle: "Reference manual of the LiteX SATA host core, its link, transport and command layers, and its transceiver PHYs"
+author: [Enjoy-Digital]
+date: "@DATE@"
+license: "Copyright © 2015-2026 Enjoy-Digital. Licensed under the BSD-2-Clause license."
+license-short: "BSD-2-Clause"
+contact: "hello@enjoy-digital.fr"
+website: "enjoy-digital.fr"
+subject: "LiteSATA"
+lang: en-US
+header-right: "SATA Host Core \\& PHYs · BSD-2-Clause · \\href{mailto:hello@enjoy-digital.fr}{hello@enjoy-digital.fr}"
+---
