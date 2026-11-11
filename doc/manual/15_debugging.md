@@ -256,8 +256,6 @@ and qualify the ALIGN primitives on the full dword while the receive aligner set
 The behaviours below are those of the code; check them first when a symptom matches.
 
 - The command layer has no timeout ([Command failures](#dbg-commands)).
-- A READ DMA EXT with a count of 0, which ATA defines as 65536 sectors, is not handled by the
-  command layer.
 - A DMA started with `nsectors` at 0 does not end ([Register reference](#registers)).
 - Each BIST command of a run clears `errors` and `aborted`: after a run of several loops, they
   report the last command only.

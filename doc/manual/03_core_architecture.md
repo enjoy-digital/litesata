@@ -170,8 +170,8 @@ The rules of the port are:
   layers](#transport-command) lists the cases.
 - **One command at a time**: wait for the beat with `end` before sending the next command. The
   command layer does not check it, and the frontends of the repository all wait.
-- **Count**: `count` must be 1 or more. A count of 0, which ATA defines as 65536 sectors, is not
-  supported.
+- **Count**: `count` is 16 bits. A count of 0 means 65536 sectors, as in ATA: the command layer
+  sends it to the drive as is, and on a READ its dword counter wraps to that length.
 
 A 64-bit port carries two dwords per beat, the first one on `data[31:0]`. `count` counts
 512-byte sectors, so a sector takes 64 beats. The command layer has no timeout: user logic that

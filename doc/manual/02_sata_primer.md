@@ -366,8 +366,9 @@ The capacity of a drive, in sectors, is in words 100 to 103 of the IDENTIFY data
 512, it gives the capacity in bytes. In ATA, a count of 0 in an EXT command means 65536 sectors.
 
 In LiteSATA, a command carries a 48-bit `sector` and a 16-bit `count` on the user port, and the
-sector size is the constant `logical_sector_size` (512) of `litesata/common.py`. A count of 0 is
-not supported: use counts of 1 to 65535 sectors.
+sector size is the constant `logical_sector_size` (512) of `litesata/common.py`. A count of 0 goes to
+the drive as is and means 65536 sectors, as in ATA: on a READ, the dword counter of the command
+layer wraps to the same length.
 
 Where to go next: [Core architecture](#core-architecture) maps these layers onto the modules of
 the core; [PHY architecture and OOB controller](#phy-architecture) details the bring-up.

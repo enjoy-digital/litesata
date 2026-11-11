@@ -169,12 +169,13 @@ reset.
 
 | Command | Code | Protocol | Data |
 |--------------------|--------|----------------|-------------------------------------------------|
-| READ DMA EXT | `0x25` | DMA data-in | `count` sectors, 1 to 65535, 48-bit LBA |
-| WRITE DMA EXT | `0x35` | DMA data-out | `count` sectors, 1 to 65535, 48-bit LBA |
+| READ DMA EXT | `0x25` | DMA data-in | `count` sectors (0 means 65536), 48-bit LBA |
+| WRITE DMA EXT | `0x35` | DMA data-out | `count` sectors (0 means 65536), 48-bit LBA |
 | IDENTIFY DEVICE | `0xec` | PIO data-in | 512 bytes |
 
 Other ATA commands, such as FLUSH CACHE EXT, DATA SET MANAGEMENT (TRIM) and the NCQ commands, are
-not supported. A sector count of 0, which ATA defines as 65536 sectors, is not supported either.
+not supported. A sector count of 0 means 65536 sectors, as in ATA: on a READ, the dword counter of
+the command layer (`read_ndwords`) wraps to that length.
 
 ## Limits {#command-limits}
 
