@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 from migen import Instance, Signal
 
 from litesata.gen import PHYS
@@ -100,6 +102,15 @@ class TestExamples(unittest.TestCase):
     def test_all_examples_are_covered(self):
         names = sorted(p.stem for p in _examples_dir.glob("*.yml"))
         self.assertEqual(names, sorted(self.examples.keys()))
+
+    def test_examples_clk_freq(self):
+        # The core datapath is 32-bit in sys: sys_clk >= linerate/40 (37.5/75/150MHz for Gen1/2/3).
+        min_clk_freq = {"gen1": 37.5e6, "gen2": 75e6, "gen3": 150e6}
+        for name in self.examples.keys():
+            with self.subTest(example=name):
+                with open(_examples_dir / f"{name}.yml", "r", encoding="utf-8") as f:
+                    core_config = yaml.load(f, Loader=yaml.SafeLoader)
+                self.assertGreaterEqual(float(core_config["clk_freq"]), min_clk_freq[core_config["gen"]])
 
     def test_examples(self):
         for name, (primitive, native, ctrl, dma, irq) in self.examples.items():
