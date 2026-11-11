@@ -148,8 +148,8 @@ class LiteSATAStream2Sectors(LiteXModule):
         send_count = Signal(max=words_per_sector)
         crt_sec    = Signal(48)
 
-        # Converter.
-        self.conv = conv = stream.Converter(nbits_from=data_width, nbits_to=port.dw)
+        # Converter (reversed, as Mem2Sector: mirrors the up-conversion of Sectors2Stream).
+        self.conv = conv = stream.Converter(nbits_from=data_width, nbits_to=port.dw, reverse=True)
 
         # Sector buffer (one sector).
         self.buf = buf = stream.SyncFIFO([("data", port.dw)], words_per_sector)
