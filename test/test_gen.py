@@ -122,6 +122,12 @@ class TestExamples(unittest.TestCase):
                     if pad is not None:
                         self.assertIn(pad, ports)
                 self.assertEqual("irq" in ports, irq)
+                # UltraScale+: the dedicated-pin refclk (IBUFDS_GTE4) must drive GTREFCLK0, not GTGREFCLK.
+                if primitive in ["GTHE4_CHANNEL", "GTYE4_CHANNEL"]:
+                    cpllrefclksel = re.search(r"\.CPLLREFCLKSEL\s*\(([^)]*)\)", verilog).group(1)
+                    gtgrefclk     = re.search(r"\.GTGREFCLK\s*\(([^)]*)\)",     verilog).group(1)
+                    self.assertEqual(cpllrefclksel, "1'd1")
+                    self.assertEqual(gtgrefclk,     "1'd0")
 
 
 if __name__ == "__main__":
