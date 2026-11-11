@@ -105,7 +105,7 @@ class LiteSATAPHYDatapathTX(Module):
     This modules receives datas / special characters from the core and needs
     to:
     - convert 32 bits data to the transceiver data width (32 bits or 16 bits)
-    - change clock domain from "sys" to "sata_rx".
+    - change clock domain from "sys" to "sata_tx".
     """
     def __init__(self, data_width):
         self.sink   = sink   = stream.Endpoint(phy_description(32))
