@@ -725,13 +725,6 @@ class LiteSATALinkRX(Module):
         )
         # 1 clock cycle latency
         self.sync += If(data_valid, pipeline.sink.data.eq(sink.data))
-        fsm.act("EOF",
-            insert.eq(primitives["R_IP"]),
-            If(primitive_valid &
-               (primitive == primitives["WTRM"]),
-                NextState("WTRM")
-            )
-        )
         fsm.act("WTRM",
             insert.eq(primitives["R_IP"]),
             If(~crc_error,
