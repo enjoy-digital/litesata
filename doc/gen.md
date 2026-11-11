@@ -17,7 +17,7 @@ The outputs are `build/gateware/litesata_core.v`, the Vivado constraints/`.tcl` 
 | `gen`            | `gen1`, `gen2`, `gen3` (fixed link rate)                   | required     |
 | `clk_freq`       | system clock frequency (Hz)                                | required     |
 | `data_width`     | PHY datapath width, 16 or 32                               | 16           |
-| `gt_type`        | `GTH`/`GTY` override (UltraScale+ only)                    | from `phy`   |
+| `gt_type`        | `GTH`/`GTY`, fixed by `phy` (mismatch is an error)         | from `phy`   |
 | `core`           | `wishbone` or `axi-lite` control bus (CSRs at 0x00000000)  | none         |
 | `dma_data_width` | Wishbone DMA master width                                  | 32           |
 | `dma_mode`       | `read`, `write`, `read+write`                              | `read+write` |

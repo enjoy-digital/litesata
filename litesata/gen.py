@@ -30,7 +30,7 @@ YAML keys:
 - gen            : "gen1" | "gen2" | "gen3" (fixed link rate).
 - clk_freq       : System clock frequency (Hz).
 - data_width     : PHY datapath width, 16 | 32 (default: 16).
-- gt_type        : "GTH" | "GTY" override for UltraScale+ (default: from the PHY name).
+- gt_type        : "GTH" | "GTY", fixed by the PHY name (optional, a different value is rejected).
 - core           : "wishbone" | "axi-lite" control bus; omit for a native-only core.
 - dma_data_width : Wishbone DMA master data width (default: 32).
 - dma_mode       : "read" | "write" | "read+write" (default: "read+write").
@@ -300,6 +300,10 @@ def main():
             core_config["phy"], ", ".join(PHYS.keys())))
     device, gt_type, toolchain = PHYS[core_config["phy"]]
     if gt_type is not None:
+        # The GT type is fixed by the PHY name (and its device): reject a contradicting override.
+        if core_config.get("gt_type", gt_type) != gt_type:
+            raise ValueError("gt_type {} does not match {} ({})".format(
+                core_config["gt_type"], core_config["phy"], gt_type))
         core_config["gt_type"] = gt_type
     from litex.build.xilinx import XilinxPlatform
     platform = XilinxPlatform(device, io=[], toolchain=toolchain)
