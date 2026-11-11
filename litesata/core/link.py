@@ -340,6 +340,13 @@ class LiteSATAScrambler(Module):
 # Link Clock Compensation --------------------------------------------------------------------------
 
 class LiteSATACONTInserter(Module):
+    """SATA CONT Inserter
+
+    Replace repeated primitives with CONT followed by scrambled junk.
+
+    Not used in LiteSATALink: CONT is optional for a transmitter and its insertion was removed from
+    the TX pipeline to minimize the latency of the write roundtrip; only CONTRemover is used (RX).
+    """
     def __init__(self, description):
         self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
