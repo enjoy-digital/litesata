@@ -81,9 +81,8 @@ milliseconds is retrying: the drive answers part of the sequence, and the next s
 part fails.
 
 The RX polarity needs no setting: an ALIGN received inverted sets the RX polarity of the
-transceiver. The TX polarity is not detected. It is 1 on every attempt that follows a timer reset,
-including the first one, and alternates only when a link in READY is lost
-([Polarity](#phy-polarity)).
+transceiver. The TX polarity is not detected: it alternates on each attempt, 0 on the first one
+after power-up, then 1, then 0 ([Polarity](#phy-polarity)).
 
 The drive answers COMRESET only once it is powered and ready. A drive powered after the FPGA, or a
 hot-plugged drive, is found by the retries of the controller without a restart from software.
@@ -109,10 +108,10 @@ fabric](#ecp5-phy)). Its limits matter when debugging:
 - The gaps that the PHY sends are data, seen as idle by the squelch of the drive. A drive with an
   unusual squelch may not recognize them.
 - The receive gap windows of the checker are 55 ns to 175 ns for COMWAKE and 175 ns to 525 ns
-  for COMINIT, counted in system clock cycles, and a gap of 32 cycles clears the counts. COMINIT
-  detection therefore fails from about 97 to 100 MHz upward: keep the system clock below about
-  95 MHz ([OOB checker](#ecp5-oob-rx)). The bench target runs at 90 MHz, the
-  LiteX-Boards ECPIX-5 target at 75 MHz.
+  for COMINIT, counted in system clock cycles. A silence one cycle longer than the COMINIT window
+  clears the counts and the detections, so a detection stays raised for about 525 ns after the
+  last burst ([OOB checker](#ecp5-oob-rx)). The bench target runs at 90 MHz, the LiteX-Boards
+  ECPIX-5 target at 75 MHz.
 - The ECP5 controller latches an ALIGN that arrives once its own COMWAKE is sent, before the
   COMWAKE detection of the drive has ended, since some drives start their ALIGN early.
 
@@ -265,8 +264,6 @@ The behaviours below are those of the code; check them first when a symptom matc
 - The link layer does not act on an R_ERR answer to a frame it sent: it neither retries the frame
   nor fails the command, and relies on the status the drive reports afterwards.
 - The host never sends CONT, so the link carries repeated primitives as they are.
-- The generator builds UltraScale+ cores with `use_gtgrefclk=True` while it takes the reference
-  clock from the dedicated pins; set the parameter in the PHY of your own SoC instead.
 - The link events of the PHY are not wired to the interrupts of `add_sata`.
 
 ## Where to go next {#dbg-next}

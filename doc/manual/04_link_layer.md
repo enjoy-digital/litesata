@@ -153,9 +153,9 @@ or R_ERR, which lasts until the drive sends SYNC.](link_rx_fsm.svg)
 
 In COPY, the state machine passes each data dword to the descrambler one cycle late, so that it can
 mark the dword before EOF, the CRC, as the last one. It answers a HOLD of the drive with HOLDA, and
-sends HOLD itself while the receive buffer is too full. The code also declares an EOF state that no
-transition reaches. The WTRM state of the RX side lasts one cycle: the state machine answers R_OK
-or R_ERR one cycle after EOF, without waiting for the WTRM of the drive.
+sends HOLD itself while the receive buffer is too full. The WTRM state of the RX side lasts one
+cycle: the state machine answers R_OK or R_ERR one cycle after EOF, without waiting for the WTRM of
+the drive.
 
 ## Flow control {#link-hold}
 

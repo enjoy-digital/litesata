@@ -44,18 +44,15 @@ the receive clock domain crossing of the datapath overflows and the link loses d
 
 | Configuration | Generation | sys_clk | Rule (computed) |
 |---------------------------------------|-------------|------------|------------------------------|
-| `kintex7` example | Gen3 | 100 MHz | Not met: 150 MHz needed |
 | `artix7`, `artix7_wishbone_dma` | Gen2 | 100 MHz | Met |
-| `ultrascale_plus*` examples | Gen3 | 150 MHz | Met, at the limit |
+| `kintex7`, `ultrascale_plus*` examples | Gen3 | 150 MHz | Met, at the limit |
 | `acorn` target (default) | Gen1 | 100 MHz | Met |
 | `ecpix5` target | Gen2 | 90 MHz | Met |
 | `kc705`, `genesys2` targets | Gen3 | 200 MHz | Met |
 
-`add_sata` and the control/DMA flavour of the generator refuse a system clock below a rule scaled by
-the width of their bus ([Build options](#build-options)); the `acorn` target applies the rule above.
-On a 32-bit bus the scaled rule is the rule above. On a 64-bit bus, the check of `add_sata` accepts
-half of it, 75 MHz at Gen3, which the datapath does not support: keep the system clock at the rule
-above whatever the bus width. The native flavour of the generator does not check the clock.
+`add_sata`, the control/DMA flavour of the generator and the `acorn` target refuse a system clock
+below the rule above, whatever the width of the bus ([Build options](#build-options)). The native
+flavour of the generator does not check the clock.
 
 ## Frontends {#perf-frontends}
 

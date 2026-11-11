@@ -102,10 +102,9 @@ only 2 dwords in 256, and the receive FIFO holds 8 entries.
 
 Keep a margin above it; [Integration](#integration) gives the clocks of the targets.
 
-The tools do not all check this rule. The Acorn target refuses a slower clock. `add_sata` in LiteX
-and the generator documentation divide by the width of the SoC bus instead of 32, so with a 64-bit
-bus they accept half the clock of the table. The core path stays 32-bit whatever the bus width:
-follow the rule of this section.
+`add_sata` in LiteX, and so the control/DMA flavour of the generator, refuses a slower clock, as
+the Acorn target does. The native flavour of the generator does not check it. The core path stays
+32-bit whatever the bus width: follow the rule of this section.
 
 ### Pace of the link {#core-pace}
 

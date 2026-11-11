@@ -118,8 +118,8 @@ them. It runs in `sys`. The figure below shows the windows it uses.
 
 ![ECP5 OOB receive windows. A gap between 55 and 175 ns counts as a COMWAKE gap, a gap between
 175 and 525 ns as a COMINIT gap; the nominal gaps sit inside each window. Gaps outside both windows
-clear the count. A gap of 32 `sys` cycles clears it too, which caps the COMINIT window at 356 ns
-at 90 MHz.](ecp5_oob_rx.svg)
+clear the count. A silence one cycle longer than the COMINIT window, 48 `sys` cycles (533 ns) at
+90 MHz, clears the detections.](ecp5_oob_rx.svg)
 
 1. The RLOS output crosses into `sys` and is filtered: a change must hold for three `sys` cycles
    before the checker sees it.
@@ -128,27 +128,28 @@ at 90 MHz.](ecp5_oob_rx.svg)
 3. Each gap in a window increments the count of that window and clears the other. A gap outside
    both windows clears both.
 4. The fourth matching gap in a row raises `cominit_det` or `comwake_det`.
-5. A silence of 32 `sys` cycles clears both detections and both counts.
+5. A silence of the quiet interval clears both detections and both counts.
 
 Four gaps are enough to recognize a six-burst sequence. The windows are wide, around the receive
 tolerances of [Out-of-band signalling](#primer-oob), not the nominal gaps. The COMINIT bounds are
 those of the specification; the COMWAKE minimum of 55 ns is the choice of the checker, above the
 35 ns that the specification allows. The detection stays
-raised until the line has been quiet for 32 cycles, which is how the controller sees the end of a
-COMINIT.
+raised until the line has been quiet for the quiet interval, which is how the controller sees the
+end of a COMINIT.
 
 | Item | Rule | At 90 MHz |
 |-----------------|----------------------|------------------|
 | COMWAKE window | 55 to 175 ns | 5 to 15 cycles |
-| COMINIT window | 175 to 525 ns, capped by the quiet interval | 16 to 31 cycles |
-| Quiet interval | 32 cycles | 356 ns |
+| COMINIT window | 175 to 525 ns | 16 to 47 cycles |
+| Quiet interval | One cycle more than the COMINIT window, 32 cycles at least | 48 cycles, 533 ns |
 
-The quiet interval is a fixed number of cycles, not a time. It also clears the counts inside any
-gap of 32 cycles or more, so above about 61 MHz the quiet interval, not 525 ns, ends the COMINIT
-window, and a COMINIT gap of 310 to 330 ns must stay below 32 `sys` cycles. Detection fails from
-about 97 to 100 MHz upward, depending on the gap length. Keep `sys` between 75 MHz (the Gen2
-minimum of [Clocks and the system clock](#phy-clocks)) and about 95 MHz.
-The bench target runs `sys` at 90 MHz, the ECPIX-5 target of LiteX-Boards at 75 MHz.
+The quiet interval follows the `sys` frequency: `max(32, init_max + 1)`, where `init_max` is the
+upper bound of the COMINIT window in cycles. It is longer than any gap the checker classifies, so it
+never clears the counts in the middle of a COMINIT or COMWAKE gap. The 32-cycle floor applies
+below about 59 MHz only, under the Gen2 minimum of 75 MHz ([Clocks and the system
+clock](#phy-clocks)). A simulation test, `test/test_ecp5_oob_checker.py`, checks the detection of
+COMINIT (320 ns gaps) and COMWAKE (106.7 ns gaps) at 75, 90, 100, 125 and 150 MHz. The bench
+target runs `sys` at 90 MHz, the ECPIX-5 target of LiteX-Boards at 75 MHz.
 
 ## Controller overrides {#ecp5-ctrl}
 
@@ -163,8 +164,8 @@ receive aligner that settles after the ALIGN exchange has started.
 | SEND-ALIGN | Three K28.3 primitives in a row | Three qualified dwords in a row |
 
 **Bounded COMWAKE.** Once its COMWAKE ends, a drive soon sends ALIGN. If the line does not stay
-quiet for 32 cycles in between, the COMWAKE detection of the checker stays raised. The controller
-leaves AWAIT-NO-COMWAKE after 0.4 µs even if the flag is set.
+quiet for the quiet interval in between, the COMWAKE detection of the checker stays raised. The
+controller leaves AWAIT-NO-COMWAKE after 0.4 µs even if the flag is set.
 
 **Early ALIGN.** The controller latches any ALIGN, straight or inverted, that arrives after it has
 sent its COMWAKE, with its polarity. AWAIT-ALIGN moves on as soon as the latch is set, so a drive
@@ -251,8 +252,6 @@ transceiver that offers raw data, 8b/10b and a loss-of-signal output.
 
 - Gen2 and a 16-bit width only; `LiteSATAPHY` raises `NotImplementedError` for another generation
   and the PHY asserts on another width.
-- The `sys` clock must stay between 75 and about 95 MHz: COMINIT detection fails from about
-  97 MHz ([OOB checker](#ecp5-oob-rx)).
 - The gaps made of data rely on the squelch detector of the drive. The public bring-up notes report
   that some drives accept them and others do not; a drive that rejects them never gets past OOB.
 - Not available in the standalone generator.

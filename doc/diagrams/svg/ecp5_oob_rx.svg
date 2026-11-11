@@ -18,9 +18,8 @@
 <polyline points="60,136 60,144" fill="none" stroke="#5b5b5b" stroke-width="1.0"/>
 <polyline points="126,136 126,144" fill="none" stroke="#5b5b5b" stroke-width="1.0"/>
 <polyline points="270,136 270,144" fill="none" stroke="#5b5b5b" stroke-width="1.0"/>
-<polyline points="487.2,136 487.2,144" fill="none" stroke="#5b5b5b" stroke-width="1.0"/>
 <polyline points="690,136 690,144" fill="none" stroke="#5b5b5b" stroke-width="1.0"/>
-<polyline points="487.2,60 487.2,140" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="699.6,60 699.6,140" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
 <polyline points="188,40 188,60" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
 <polyline points="444,40 444,60" fill="none" stroke="#2eaadc" stroke-width="1.0"/>
 <g fill="#bfe6f5" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
@@ -28,13 +27,9 @@
 </g>
 <text x="198" y="85" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="198" dy="0">COMWAKE</tspan></text>
 <g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
-<rect x="270" y="60" width="217.2" height="50" rx="0" ry="0"/>
+<rect x="270" y="60" width="420" height="50" rx="0" ry="0"/>
 </g>
-<text x="378.6" y="85" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="378.6" dy="0">COMINIT</tspan></text>
-<g fill="#d0d0d0" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
-<rect x="487.2" y="60" width="202.8" height="50" rx="0" ry="0"/>
-</g>
-<text x="588.6" y="85" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="588.6" dy="0">cleared at 90 MHz</tspan></text>
+<text x="480" y="85" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="480" dy="0">COMINIT</tspan></text>
 <g fill="#d0d0d0" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
 <rect x="60" y="60" width="66" height="50" rx="0" ry="0"/>
 </g>
@@ -44,11 +39,10 @@
 <text x="60" y="158" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="60" dy="0">0</tspan></text>
 <text x="126" y="158" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="126" dy="0">55</tspan></text>
 <text x="270" y="158" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="270" dy="0">175</tspan></text>
-<text x="487.2" y="158" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="487.2" dy="0">356</tspan></text>
 <text x="690" y="158" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="690" dy="0">525</tspan></text>
 <text x="737" y="158" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="end" dominant-baseline="central"><tspan x="737" dy="0">ns</tspan></text>
 <text x="25" y="85" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="13" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="25" dy="0">gap</tspan></text>
-<text x="487.2" y="178" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="487.2" dy="0">quiet interval: 32 cycles, 356 ns at 90 MHz</tspan></text>
+<text x="699.6" y="178" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="end" dominant-baseline="central"><tspan x="699.6" dy="0">quiet interval: 48 cycles, 533 ns at 90 MHz</tspan></text>
 <text x="188" y="30" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="188" dy="0">nominal 106.7</tspan></text>
 <text x="444" y="30" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="444" dy="0">nominal 320</tspan></text>
 </svg>

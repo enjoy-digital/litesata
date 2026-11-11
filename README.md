@@ -40,7 +40,7 @@ PHY:
   - OOB, COMWAKE, COMINIT
   - ALIGN inserter/remover and bytes alignment on K28.5
   - 8B/10B encoding/decoding in transceiver
-  - Automatic RX P/N polarity detection and swap.
+  - Automatic RX P/N polarity detection and swap, TX polarity alternated on each OOB attempt.
   - Error detection and reporting
   - 16/32-bit PHY datapath
   - 1.5/3.0/6.0Gbps supported speeds (respectively 37.5/75/150MHz system clock)

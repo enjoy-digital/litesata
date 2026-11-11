@@ -60,7 +60,7 @@ time ([Performance and resources](#perf-measured) gives the measured figure).
 |--------------------|------------------------------------------------------------------------|
 | PHYs | Xilinx Artix-7 GTP, Kintex-7 GTX, UltraScale GTH, UltraScale+ GTH and GTY; Lattice ECP5 DCU |
 | Rates | Gen1 (1.5 Gbps), Gen2 (3 Gbps) and Gen3 (6 Gbps), fixed when the design is built; Gen2 only on ECP5 |
-| Link bring-up | COMRESET, COMINIT and COMWAKE out-of-band signalling, in the transceiver on Xilinx and in the fabric on ECP5; byte alignment on K28.5; automatic RX polarity detection |
+| Link bring-up | COMRESET, COMINIT and COMWAKE out-of-band signalling, in the transceiver on Xilinx and in the fabric on ECP5; byte alignment on K28.5; automatic RX polarity detection, TX polarity alternated on each attempt |
 | PHY datapath | 16- or 32-bit transceiver interface, 32-bit core interface, link monitor with connect and disconnect events |
 | Link layer | ALIGN insertion and removal, CONT removal, scrambling, CRC, HOLD flow control, error reporting |
 | Transport and commands | Register, DMA Activate, PIO Setup and Data FISes; READ DMA EXT, WRITE DMA EXT and IDENTIFY DEVICE; 48-bit LBA |

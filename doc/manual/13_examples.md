@@ -55,13 +55,13 @@ The examples share their structure: PHY, generation, system clock, then the cont
 ports. They differ in the points below.
 
 **Native cores.** `artix7.yml`, `kintex7.yml` and `ultrascale_plus.yml` have one native port of 32
-bits and nothing else. Their comments show where `data_width` (16 or 32) and `gt_type` go, both
-left at their defaults.
+bits and nothing else. Their comments show where `data_width` (16 or 32) goes, left at its
+default.
 
-**System clock.** The Artix-7 examples run Gen2 at 100 MHz. `kintex7.yml` runs Gen3 at 100 MHz,
-below the 150 MHz that the 32-bit datapath needs at Gen3 ([System clock](#perf-sysclk)). The native
-flavour does not check the system clock, so this example generates; raise `clk_freq` to 150 MHz
-or more before using it on a Gen3 link.
+**System clock.** The Artix-7 examples run Gen2 at 100 MHz, `kintex7.yml` and the UltraScale+
+examples Gen3 at 150 MHz, the floor of Gen3 ([System clock](#perf-sysclk)). The native flavour
+does not check the system clock; `test/test_gen.py` checks that every example meets the floor of
+its generation.
 
 **Control/DMA cores.** `artix7_wishbone_dma.yml` adds a Wishbone control bus, a 32-bit DMA bus,
 Identify, both DMAs and the interrupt, and keeps one native port beside them.
@@ -177,9 +177,9 @@ and counted in `retry`.
 `test_dma.py` reads sectors one by one into the `sram` memory region of the SoC and dumps them.
 With `--mode r+w` it also writes a counter pattern to sector 1000 and reads it back.
 
-**Limitation.** `test_dma.py` does not write `nsectors`, and a DMA started with `nsectors` at 0 does
-not end. The only bench target with DMAs, `kc705`, has no `sram` region either. Use the script as a
-starting point on a SoC that has both DMAs and an SRAM, and write `nsectors` first.
+The script writes `nsectors` to 1 before each transfer: a DMA started with `nsectors` at 0 does
+not end. The only bench target with DMAs, `kc705`, has no `sram` region: run the script on a SoC
+that has both DMAs and an SRAM.
 
 ## LiteX-Boards targets {#ex-litex-boards}
 

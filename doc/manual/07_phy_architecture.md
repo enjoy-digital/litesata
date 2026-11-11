@@ -203,13 +203,12 @@ through AWAIT-CRG-RESET. OOB bursts do not depend on polarity, and D10.2 inverte
 alternating pattern: the first dwords that the drive must decode are the ALIGN primitives of
 SEND-ALIGN.
 
-The timer reset of the state machine also clears the TX polarity register. As a result, every
-attempt that follows a timer reset, and the first attempt after power-up, runs with TX polarity 1.
-The polarity alternates only when the controller returns to RESET from READY on RX idle.
-
-In practice, every attempt that starts after power-up or after a timer reset transmits with TX
-polarity 1. A TX polarity of 0 is tried only after a link in READY is lost on RX idle. The
-controller never detects the TX polarity: it has no way to observe it.
+The TX polarity is a register outside the state machine, so the timer reset of the state machine
+does not clear it. Every attempt passes through AWAIT-CRG-RESET, whether it starts after power-up,
+after a timer reset or after a link in READY is lost on RX idle, and the attempts alternate: the
+first one after power-up runs with TX polarity 0, the next one with 1, then 0 again. With a
+swapped TX pair, the attempts with TX polarity 1 are the ones that can reach READY. The controller
+never detects the TX polarity: it has no way to observe it.
 
 ### RX idle and misalignment {#phy-idle}
 
@@ -312,8 +311,6 @@ stop, returns to RESET and runs a full OOB sequence. The BIOS `sata_init` comman
 
 - One generation, fixed at build time. A drive that supports several generations tries its rates in
   turn during the ALIGN exchange; the host answers only at its own rate. There is no rate fallback.
-- The TX polarity does not alternate across timer retries: it is 1 on each of them
-  ([Polarity](#phy-polarity)).
 - No power management: the PHY never enters or leaves the partial or slumber states.
 - The transceiver electrical idle detectors are unused; RX idle is the absence of ALIGN.
 

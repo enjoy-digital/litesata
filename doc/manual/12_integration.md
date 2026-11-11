@@ -98,11 +98,9 @@ A few things are left to the design. `add_sata` does not connect the link events
 (`connect_irq`, `disconnect_irq`) to an interrupt; the `link_up` bit of the `status` register of
 the PHY gives the same information by polling.
 
-The system clock check of `add_sata` takes the clock of a 16-bit PHY times 16 and divides it by
-the width of the bus, while the core path is 32 bits wide whatever the bus. On a 64-bit bus it
-accepts half the floor of [Generation, width and system clock](#integ-clocks), on a 16-bit bus it
-asks for twice that floor. Keep the system clock at that floor whatever the bus width. The
-control/DMA flavour of `litesata_gen` makes the same check with `dma_data_width` as the bus width.
+`add_sata` refuses a system clock below the floor of [Generation, width and system
+clock](#integ-clocks), the clock of a 32-bit PHY, whatever the width of the bus and of the PHY. The
+control/DMA flavour of `litesata_gen` goes through `add_sata` and makes the same check.
 
 ## Without add_sata: the explicit chain {#integ-explicit}
 
@@ -186,13 +184,10 @@ its own: this is how a SATA PHY and another GTP user share a quad. On ECP5, the 
 
 A SATA design needs a period constraint on the TX and RX clocks of the PHY and false paths between
 them and the system clock: the datapath crosses between these domains through asynchronous FIFOs.
-`add_sata` adds both, with the clock of a 16-bit PHY; the bench targets add them by hand.
-
-With a 32-bit PHY, `add_sata` therefore constrains the SATA clocks at twice their frequency, and
-LiteX refuses a second, different period on the same clock. Use a 16-bit PHY with `add_sata`, or
-build the explicit chain with the constraints of a 32-bit PHY, as `bench/zcu102.py` does. The
-control/DMA flavour of `litesata_gen` with `data_width: 32` has the same over-constraint. The pins
-of the transceiver need no IO constraint beyond their location, which the platform gives.
+`add_sata` adds both, with the clock that follows the width of the PHY: 75, 150 and 300 MHz at
+16 bits, half of it at 32 bits. The generator does the same in both flavours; the bench targets add
+the constraints by hand. The pins of the transceiver need no IO constraint beyond their location,
+which the platform gives.
 
 ## BIOS commands {#integ-bios}
 
@@ -224,10 +219,10 @@ sataboot [manifest]
 `2*512*count` bytes of memory at `address`.
 
 `sata_init` makes up to 16 attempts. Each one toggles the `enable` register of the PHY, waits
-100 ms, checks the `ready` bit of its `status` register, starts Identify and waits another
-100 ms. On success, it prints the model of the drive and its capacity in GB; [Step 8 of Getting
-started](#gs-bios) shows real captures. It also reads the registers of Identify, so a BIOS with
-SATA needs `with_identify=True`.
+100 ms, checks the `ready` bit of its `status` register, starts Identify and waits another 100 ms.
+On success, it prints the model of the drive, its 40 characters, and its capacity in GB; [Step 8 of
+Getting started](#gs-bios) shows real captures. Without Identify (`with_identify=False`), the BIOS
+still builds: `sata_init` then only brings the PHY up and checks `ready`.
 
 The commands rest on `liblitesata`, which a firmware of your own can call too. `sata_init(show)`
 brings the drive up; `sata_read(sector, count, buf)` and `sata_write(sector, count, buf)` run a DMA
@@ -375,9 +370,9 @@ The main keys are below; [Build and generator options](#build-options) lists the
 | `user_ports` | Name, type (`native`) and width (32 or 64) of each port | none |
 
 The PHY name selects the transceiver family, and the generator elaborates for a stand-in device of
-that family: the Verilog does not depend on the exact part. The `gt_type` key of the YAML is
-overwritten by the PHY name, so choose `GTH4SATAPHY` or `GTY4SATAPHY` to pick the UltraScale+
-transceiver.
+that family: the Verilog does not depend on the exact part. The PHY name also fixes the
+transceiver type: choose `GTH4SATAPHY` or `GTY4SATAPHY` to pick the UltraScale+ transceiver. A
+`gt_type` key that contradicts the PHY name is an error.
 
 ### Outputs and ports {#integ-standalone-ports}
 
@@ -418,16 +413,15 @@ provides:
 
 - the location of the transceiver: a `set_property LOC` on the channel, or pins of the lane;
 - the reference clock on the pins of the transceiver quad, at 150 MHz. On UltraScale+, the
-  generated core routes this `sata_clk_p`/`sata_clk_n` clock to the fabric input `GTGREFCLK`
-  (see [Known issues](#dbg-known));
+  generated core buffers this `sata_clk_p`/`sata_clk_n` clock with `IBUFDS_GTE4` and feeds it to
+  the dedicated input `GTREFCLK0`;
 - a system clock at or above the minimum of [Generation, width and system
   clock](#integ-clocks), with its reset;
 - for the control/DMA flavour, a memory behind the DMA bus and a CPU or a state machine on the
   control bus.
 
-The generator does not check the system clock of the native flavour. The example
-`examples/kintex7.yml` asks for Gen3 with a 100 MHz system clock, below the 150 MHz minimum:
-raise `clk_freq` before using it at Gen3.
+The generator does not check the system clock of the native flavour: set `clk_freq` at or above
+the floor of the generation. The examples do, and a test checks them (`test/test_gen.py`).
 
 ## Porting to a new board {#integ-porting}
 

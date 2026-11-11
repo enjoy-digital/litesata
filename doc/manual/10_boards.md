@@ -87,8 +87,9 @@ carries the lane only, so the target makes the 150 MHz reference clock with a PL
 **PCIe riser mod.** A small PCIe x1 riser board, modified with a SATA plug, connects lane 0 of a
 PCIe connector to a drive. The figure below shows which pins of the riser carry the two pairs and
 their grounds, and the pinout of the SATA plug. Get the pair order right: the PHY corrects a
-swapped P/N on the RX pair, which it detects from the received ALIGN, but it cannot detect the
-polarity of the TX pair ([Polarity](#phy-polarity)) and it cannot fix swapped TX and RX pairs.
+swapped P/N on the RX pair, which it detects from the received ALIGN. It cannot detect the
+polarity of the TX pair, only alternate it from one attempt to the next
+([Polarity](#phy-polarity)), and it cannot fix swapped TX and RX pairs.
 
 ![PCIe x1 riser to SATA adapter: the two pairs A and B on the riser, their grounds, and the pinout
 of the SATA plug (pins 2 and 3 are pair A, pins 5 and 6 are pair

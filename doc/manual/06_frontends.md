@@ -166,24 +166,23 @@ sends commands of many sectors from its own logic or uses the BIST pattern of ac
 `LiteSATASectors2Stream` reads sectors and sends their bytes on a LiteX stream;
 `LiteSATAStream2Sectors` takes the bytes of a stream and writes them to sectors. Both use the same
 registers as the DMAs, with `nsectors` 32 bits wide, and a 64-bit stream by default (`data_width`).
-They are in `litesata/frontend/stream.py`, not exported by `litesata.frontend`, and no target, test
-or example uses them.
+They are in `litesata/frontend/stream.py` and not exported by `litesata.frontend`. No target or
+example uses them; two unit tests cover them with a stub of the user port
+(`test/test_stream_multi_sector.py`, `test/test_stream_word_order.py`).
 
 Like the DMAs, they work one sector per command. `LiteSATAStream2Sectors` waits for 512 bytes of
 the stream before each write; it ignores the `last` of the stream, which must deliver exactly
 `nsectors` times 512 bytes. `LiteSATASectors2Stream` sets `last` on the final word of the final
 sector and pulses `irq` at the end.
 
-The code as it is has two limits:
+`LiteSATASectors2Stream` keeps only the data of each read in its sector buffer: the response
+beat that ends the read (`end`) is dropped, and a `failed` flag on it still sets `error`.
+A read of `nsectors` sectors therefore gives `nsectors` times 512 bytes, with `last` once at the
+end.
 
-- **Several sectors**: in `LiteSATASectors2Stream`, the response beat of a sector read enters the
-  sector buffer with the data. In a simulation with the drive model, a read of two sectors on a
-  32-bit stream gives the 128 dwords of the first sector, then one word of value 0 with `last`, and
-  ends with `done` and no error; the second sector never comes out. Reads of one sector work: run
-  one sector per start.
-- **Byte order**: on a 64-bit stream, the two classes do not order the bytes the same way. A word
-  written by `LiteSATAStream2Sectors` reads back from `LiteSATASectors2Stream` with its two 32-bit
-  halves swapped. With `data_width=32`, both put the first byte of the sector in bits 31:24.
+Both classes order the bytes the same way. A stream word is big-endian: the first byte of the
+sector is in its top bits, bits 31:24 at 32 bits and bits 63:56 at 64 bits. Words written by
+`LiteSATAStream2Sectors` read back unchanged from `LiteSATASectors2Stream`, at 32 and 64 bits.
 
 ## Striping {#fe-striping}
 

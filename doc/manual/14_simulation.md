@@ -18,7 +18,8 @@ board.
 | Link | Link layer, frames both ways | Drive model, transport loopback | Migen |
 | Command | Core with READ, WRITE, IDENTIFY, faults | Drive model | Migen |
 | Frontends | Identify, BIST, DMAs, striping, mirroring | Drive model, one per core | Migen |
-| PHY logic | Controller, link monitor, RX realignment | Python stimulus | Migen |
+| Stream frontends | Multi-sector reads, byte order both ways | User port stub | Migen |
+| PHY logic | Controller, TX polarity, ECP5 OOB checker, link monitor, RX realignment | Python stimulus | Migen |
 | Elaboration | PHY selection, generator examples, bench | None | None |
 | Hardware | Bench or LiteX-Boards target | The drive | |
 
@@ -88,20 +89,21 @@ never sends CONT ([Link layer](#link-layer)).
 The tests are Python `unittest` classes in `test/`, collected by pytest.
 
 | File | What it checks |
-|--------------------------|--------------------------------------------------------------------|
-| `test_link.py` | Frames through `LiteSATALink` and the model in transport loopback, with random HOLD |
+|------------------------------------------|----------------------------------------------------|
+| `test_link.py` | Frames through `LiteSATALink` and the model in transport loopback, with random HOLD; every state of the link TX and RX state machines reachable from reset |
 | `test_command.py` | WRITE and READ through the core, random HOLD and random valid/ready; ERR and DF on writes and reads; IDENTIFY, its failures and a busy drive |
 | `test_identify.py` | `LiteSATAIdentify`: the 128 dwords of the model, an aborted command |
 | `test_bist.py` | BIST generator then checker on one to four sectors, no error |
 | `test_dma.py` | Mem2Sector beats on 32 and 64-bit buses in both endiannesses; a Mem2Sector and Sector2Mem round trip through the model, one interrupt per transfer |
 | `test_striping.py` | BIST through `LiteSATAStriping` over two cores and two models |
-| `test_mirroring.py` | BIST on both ports of `LiteSATAMirroring` over two cores and two models |
+| `test_mirroring.py` | BIST on both ports of `LiteSATAMirroring` over two cores and two models; one write arbiter input per controller |
 | `test_phy.py` | Device selection per family, the legacy aliases, the comma settings of the GTY, RX realignment after a misplaced K character |
-| `test_phy_ctrl.py` | The ALIGN latched during COMWAKE by the ECP5 controller and not by the generic one, the link up and down events |
-| `test_gen.py` | Transceiver selected by each generator PHY name; the five examples generate with their pads |
-| `test_bench.py` | `test_init.py` resets the PHY once then polls; `acorn.py` refuses a slow system clock |
-
-The streaming frontends (`frontend/stream.py`) have no test.
+| `test_phy_ctrl.py` | The ALIGN latched during COMWAKE by the ECP5 controller and not by the generic one, the link up and down events, the TX polarity alternating 0, 1, 0, 1 on timer retries |
+| `test_ecp5_oob_checker.py` | COMINIT and COMWAKE detection of `ECP5SATAOOBChecker` at 75 to 150 MHz |
+| `test_stream_multi_sector.py` | `LiteSATASectors2Stream`: three sectors read as 384 dwords, `last` on the final one |
+| `test_stream_word_order.py` | `LiteSATAStream2Sectors` then `LiteSATASectors2Stream` give back the stream at 32 and 64 bits, port dwords in the order of the DMAs |
+| `test_gen.py` | Transceiver selected by each generator PHY name; a contradicting `gt_type` rejected; the five examples generate with their pads, a system clock at the floor of their generation and, on UltraScale+, the reference clock on `GTREFCLK0` |
+| `test_bench.py` | `test_init.py` resets the PHY once then polls; `acorn.py` refuses a slow system clock; `test_dma.py` writes `nsectors`; `test_bist.py` decodes the 40-character model |
 
 ## Running the tests {#sim-run}
 

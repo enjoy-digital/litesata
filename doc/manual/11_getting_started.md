@@ -162,9 +162,9 @@ python3 ../bench/test_bist.py -i
 ```
 
 **What you should see.** The serial number, the firmware revision and the model of the drive, as
-the drive reports them (the script decodes the model from words 27 to 45, its first 38
-characters); the capacity in GiB, from words 100 to 103; three lines `SATA Gen1` to `SATA Gen3`,
-1 for each generation the drive supports (word 76); and `48 bits LBA supported: 1`, from word 83.
+the drive reports them (the model is the 40 characters of words 27 to 46); the capacity in GiB, from
+words 100 to 103; three lines `SATA Gen1` to `SATA Gen3`, 1 for each generation the drive supports
+(word 76); and `48 bits LBA supported: 1`, from word 83.
 
 **If not.** Empty or garbled strings with a link that came up in step 5 point to the command or
 transport layer. Run the target with its LiteScope analyzer (`--with-global-analyzer` on the
@@ -215,7 +215,7 @@ litex_term /dev/ttyUSBx
 
 This target uses the SFP-to-SATA adapter at Gen2; [LiteX-Boards targets with
 SATA](#boards-litex-boards) lists the others. At the `litex>` prompt, `sata_init` resets the PHY,
-waits for the link, runs IDENTIFY DEVICE and prints the model (its first 36 characters) and the
+waits for the link, runs IDENTIFY DEVICE and prints the model (its 40 characters) and the
 capacity of the drive.
 
 **What you should see.** The capture below comes from the LiteX repository, with and without a

@@ -78,10 +78,10 @@ around a PHY created by the caller.
 | `with_bist` | `False` | BIST frontend and its registers |
 | `with_irq` | `True` | Event manager with one event per DMA |
 
-`add_sata` requires a system clock of at least the 16-bit SATA clock times 16, divided by the
-width of the main bus: 37.5 MHz, 75 MHz and 150 MHz for Gen1, Gen2 and Gen3 on a 32-bit bus. The
-DMAs master the DMA bus of the SoC when it has one, else the main bus. On a 64-bit bus this check
-is weaker than the requirement of the PHY datapath ([System clock](#perf-sysclk)).
+`add_sata` requires a system clock of at least the clock of a 32-bit PHY, half the 16-bit SATA
+clock: 37.5 MHz, 75 MHz and 150 MHz for Gen1, Gen2 and Gen3, whatever the width of the bus and of
+the PHY ([System clock](#perf-sysclk)). The DMAs master the DMA bus of the SoC when it has one,
+else the main bus.
 
 ## Generator {#opt-gen}
 
@@ -102,7 +102,7 @@ their Python values; unknown keys are ignored.
 | `gen` | required | `gen1`, `gen2` or `gen3` |
 | `clk_freq` | required | System clock frequency in Hz |
 | `data_width` | `16` | Transceiver datapath, 16 or 32 |
-| `gt_type` | from `phy` | Overridden by the PHY name: GTH for `GTH3SATAPHY`, `GTH4SATAPHY`, GTY for `GTY4SATAPHY` |
+| `gt_type` | from `phy` | Fixed by the PHY name: GTH for `GTH3SATAPHY`, `GTH4SATAPHY`, GTY for `GTY4SATAPHY`; a different value is an error. Unused with `A7SATAPHY`, `K7SATAPHY` |
 | `core` | none | `wishbone` or `axi-lite`: control/DMA flavour; none: native only |
 | `dma_data_width` | `32` | Width of the Wishbone DMA master |
 | `dma_mode` | `read+write` | `read`, `write` or `read+write`, as `mode` of `add_sata` |
@@ -125,8 +125,9 @@ are named `user_port_<name>_sink_*` and `user_port_<name>_source_*` in the gener
 
 The PHY names stand for a device of each family: `xc7a`, `xc7k`, `xcku040`, `xcau25p` and `xcvu9p`.
 The generated core does not depend on the exact device. ECP5 is not offered by the generator. The
-control/DMA flavour checks the system clock as `add_sata` does, with the DMA width as the bus
-width; the native flavour does not check it.
+control/DMA flavour goes through `add_sata` and checks the system clock as it does; the native
+flavour does not check it. Both feed the reference clock of the `sata` pins to the dedicated
+transceiver input: the generator builds the PHY with `use_gtgrefclk=False`.
 
 ## Bench targets {#opt-bench}
 

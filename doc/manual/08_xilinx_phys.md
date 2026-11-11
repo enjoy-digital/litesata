@@ -64,7 +64,8 @@ SFP and PCIe adapters and lower a Vivado design rule check to a warning for it.
 On UltraScale+, `use_gtgrefclk` decides which transceiver input takes the clock. With `True`, the
 default, the clock enters through `GTGREFCLK`, the input for a clock from the fabric. With `False`,
 it enters through `GTREFCLK0`, the input for a dedicated pin. Set it to `False` with an
-`IBUFDS_GTE4` reference; the ZCU102 target does so for its external reference clock.
+`IBUFDS_GTE4` reference; the ZCU102 target does so for its external reference clock, and the
+standalone generator for the `sata_clk_p`/`sata_clk_n` pins of its cores.
 
 On Artix-7, the GTP channel gets its clock from a quad PLL (`GTPQuadPLL` of LiteICLink). The PHY
 creates one unless the `qpll` parameter passes an existing one, to share the quad PLL with another
@@ -184,8 +185,6 @@ let it select the wrapper.
 
 - No rate fallback: the generation is fixed at build time ([Limitations](#phy-limitations)).
 - The transceiver electrical idle detectors are unused.
-- The standalone generator builds UltraScale+ cores with `use_gtgrefclk=True` while it takes the
-  reference clock from the dedicated pins ([Known issues](#dbg-known)).
 
 ## In the code {#xil-code}
 
