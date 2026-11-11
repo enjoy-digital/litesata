@@ -191,8 +191,8 @@ class LiteSATAMirroringTX(Module):
         reading = Signal()
         writing = Signal()
 
-        reads  = [stream.Endpoint(command_tx_description(dw)) for i in range(dw)]
-        writes = [stream.Endpoint(command_tx_description(dw)) for i in range(dw)]
+        reads  = [stream.Endpoint(command_tx_description(dw)) for i in range(n)]
+        writes = [stream.Endpoint(command_tx_description(dw)) for i in range(n)]
         for sink, read, write in zip(sinks, reads, writes):
             read_stall  = Signal()
             read_status = Status(read)
