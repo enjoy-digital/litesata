@@ -33,7 +33,7 @@ them as named fields. The header layouts are tables of `HeaderField` entries in
 | Register D2H | `0x34` | Received | 5 | Presented as one beat: status, errors, LBA, count |
 | DMA Activate | `0x39` | Received | 1 | Presented as one beat |
 | PIO Setup | `0x5f` | Received | 5 | Presented as one beat: status, errors, transfer count; E_Status not decoded |
-| Other types | | Received | | Dropped dword by dword |
+| Other types | | Received | | Dropped up to the last dword |
 
 ### Transmit {#transport-tx}
 
@@ -52,13 +52,9 @@ Activate or PIO Setup FIS, it stores the header dwords and presents the decoded 
 beat. For a Data FIS, it skips the type dword and passes the payload through, with `error` from
 the link layer on the last dword.
 
-Frames of other types, such as Set Device Bits or DMA Setup, are dropped. The receive side does not
-check the CRC of the control FISes: a Register D2H FIS with a wrong CRC is answered with R_ERR by
-the link layer and presented anyway, with `error` at 0.
-
-The receive side does not track frame boundaries while it drops: it tests the first byte of each
-dword, so a payload dword of a dropped FIS that starts with a known type byte would be decoded as
-a new FIS. The supported commands do not make the drive send such FISes.
+Frames of other types, such as Set Device Bits or DMA Setup, are dropped up to their last dword.
+The receive side does not check the CRC of the control FISes: a Register D2H FIS with a wrong CRC
+is answered with R_ERR by the link layer and presented anyway, with `error` at 0.
 
 ## Command layer {#command-layer}
 
