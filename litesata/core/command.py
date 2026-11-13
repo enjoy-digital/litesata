@@ -242,6 +242,9 @@ class LiteSATACommandRX(Module):
                     update_d2h.eq(1),
                     set_d2h_error.eq(status_fault),
                     NextState("PRESENT_READ_RESPONSE")
+                ).Else(
+                    # Unexpected FIS (DMA Activate, PIO Setup on a READ): drop it (one beat).
+                    transport.source.ready.eq(1)
                 )
             )
         )
