@@ -114,6 +114,9 @@ class SATATestSoC(SoCCore):
         # SoCCore ----------------------------------------------------------------------------------
         SoCCore.__init__(self, platform, sys_clk_freq, ident="LiteSATA bench on ZCU102", **kwargs)
 
+        # UARTBone ---------------------------------------------------------------------------------
+        self.add_uartbone(baudrate=kwargs.get("uart_baudrate", 115200))
+
         # SATA -------------------------------------------------------------------------------------
         # PHY
         self.sata_phy = LiteSATAPHY(
@@ -200,7 +203,6 @@ def main():
         cpu_type             = "None",
         integrated_sram_size = 0,
         no_uart              = True,
-        with_uartbone        = True,
         no_timer             = True,
     )
     args = parser.parse_args()

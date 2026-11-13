@@ -126,10 +126,6 @@ CLE-101, CLE-215 or CLE-215+ device. `ecpix5.py` builds with the open-source too
 nextpnr, Trellis), runs Gen2 only, and takes `--device` (85F or 45F) and the placement `--seed`.
 `zcu102.py` takes the usual LiteX target options plus `--gen`, `--dw` and `--refclk`.
 
-**Limitation.** `zcu102.py` does not elaborate with the LiteX of this manual: it asks for UARTBone
-with `no_uart` set, and the LiteX SoC refuses UARTBone on the default serial UART, with
-`--refclk external` as with `internal`.
-
 ## Host scripts {#ex-scripts}
 
 The host scripts open a `RemoteClient` on a running `litex_server` and use the register names of

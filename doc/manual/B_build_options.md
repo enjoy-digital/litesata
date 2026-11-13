@@ -133,7 +133,7 @@ transceiver input: the generator builds the PHY with `use_gtgrefclk=False`.
 
 Every target of `bench/` takes `--build` (run the toolchain) and `--load` (load the bitstream into
 the FPGA, not the flash). Without `--build`, it elaborates the SoC and writes `csr.csv`, except
-`zcu102`, which does not elaborate with the LiteX of this manual ([Bench targets](#ex-bench)).
+`zcu102`, which only elaborates the SoC.
 
 | Target | Options |
 |--------------------|------------------------------------------------------------------------------|
