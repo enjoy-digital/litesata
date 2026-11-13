@@ -63,6 +63,7 @@ pattern.
 | `malloc(sector, count)` | Allocates the sectors the test uses |
 | `set_reg_d2h_status` | Status of the Register D2H FIS: ERR or DF fail the command |
 | `set_pio_setup_status` | Status of the PIO Setup FIS of IDENTIFY |
+| `set_pio_setup_e_status` | E_Status of the PIO Setup FIS of IDENTIFY (status after the data) |
 | `set_busy` | Aborts the commands with a Register D2H FIS, no data |
 | `set_data_error_injection` | Corrupts the CRC of the read Data FISes |
 

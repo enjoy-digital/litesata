@@ -187,6 +187,25 @@ class LiteSATACommandRX(Module):
                 self.d2h_errors.eq(transport.source.errors)
             )
 
+        # E_Status of the last PIO Setup FIS: the Status of the device at the end of the Data FIS that
+        # follows. ERR or DF there fails the IDENTIFY.
+        pio_e_status        = Signal(8)
+        pio_e_status_fault  = Signal()
+        update_pio_e_status = Signal()
+        update_d2h_e_status = Signal()
+        self.sync += [
+            If(update_pio_e_status,
+                pio_e_status.eq(transport.source.e_status)
+            ),
+            If(update_d2h_e_status,
+                self.d2h_status.eq(pio_e_status)
+            )
+        ]
+        self.comb += pio_e_status_fault.eq(is_identify & (
+            pio_e_status[reg_d2h_status["err"]] |
+            pio_e_status[reg_d2h_status["df"]]
+        ))
+
         self.fsm = fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
         fsm.act("IDLE",
@@ -268,6 +287,7 @@ class LiteSATACommandRX(Module):
             transport.source.ready.eq(1),
             If(transport.source.valid & transport.source.last,
                 update_d2h.eq(1),
+                update_pio_e_status.eq(1),
                 If(status_fault,
                     set_d2h_error.eq(1),
                     NextState("PRESENT_READ_RESPONSE")
@@ -283,14 +303,20 @@ class LiteSATACommandRX(Module):
             source.last.eq(transport.source.last),
             source.read.eq(~is_identify),
             source.identify.eq(is_identify),
-            source.failed.eq(transport.source.error),
+            source.failed.eq(transport.source.error | (source.last & pio_e_status_fault)),
             source.end.eq(is_identify & read_done),
             source.data.eq(transport.source.data),
             transport.source.ready.eq(source.ready),
             If(source.valid & source.ready,
                 If(~read_done, NextValue(dwords_counter, dwords_counter + 1)),
                 If(source.last,
-                    If(is_identify & ~read_done,
+                    update_d2h_e_status.eq(is_identify),
+                    If(is_identify & ~read_done & pio_e_status_fault,
+                        # Partial identify data block ended with an error (E_Status): the device
+                        # sends nothing more, present a failed response.
+                        set_d2h_error.eq(1),
+                        NextState("PRESENT_READ_RESPONSE")
+                    ).Elif(is_identify & ~read_done,
                         # Partial identify data block: more DATA (and possibly
                         # PIO Setup) FISes follow for the remaining dwords.
                         NextState("WAIT_READ_DATA_OR_REG_D2H")

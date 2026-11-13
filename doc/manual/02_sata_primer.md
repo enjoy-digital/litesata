@@ -352,8 +352,8 @@ store two characters per word, the first one in the high byte.
 
 In LiteSATA, the Identify frontend stores the 128 dwords in a FIFO for the software to read. The
 command layer also accepts a drive that splits the block in several PIO Setup and Data FIS pairs.
-It checks the Status field of the PIO Setup FIS, not its ending status (E_Status), which it does
-not decode. The BIOS command `sata_init` prints the model and the capacity from these words
+It checks the Status field of the PIO Setup FIS, and its ending status (E_Status) once the Data
+FIS has arrived. The BIOS command `sata_init` prints the model and the capacity from these words
 ([Frontends](#frontends)).
 
 ## LBA and sector count {#primer-lba}

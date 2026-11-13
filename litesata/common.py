@@ -166,6 +166,7 @@ fis_pio_setup_d2h_header_fields = {
     "lba_msb":        HeaderField(2*4, 0, 24),
 
     "count":          HeaderField(3*4, 0, 16),
+    "e_status":       HeaderField(3*4, 24, 8),
 
     "transfer_count": HeaderField(4*4, 0, 16),
 }
@@ -211,6 +212,7 @@ def transport_rx_description(dw):
         ("device",          8),
         ("count",          16),
         ("transfer_count", 16),
+        ("e_status",        8),
         ("error",           1)
     ]
     payload_layout = [("data", dw)]
