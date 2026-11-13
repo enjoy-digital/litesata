@@ -236,7 +236,9 @@ class LiteSATATransportRX(Module):
             If(cmd_receive,
                 Case(counter, cmd_cases),
             )
-        self.comb += cmd_done.eq((counter == cmd_len) & link.source.ready)
+        self.comb += cmd_done.eq((counter == cmd_len) &
+                                 link.source.valid &
+                                 link.source.ready)
 
 # Transport ----------------------------------------------------------------------------------------
 

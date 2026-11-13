@@ -192,10 +192,6 @@ The command layer assumes a well-behaved drive and a stable link. These cases ar
 - **Unexpected FIS during a read**: a DMA Activate FIS, or a PIO Setup FIS on a READ DMA EXT,
   blocks the RX half: no state consumes it.
 - **Control FIS with a bad CRC**: it is taken as valid, as [Receive](#transport-rx) explains.
-- **Header dword after a gap**: the receive side of the transport layer can capture the last header
-  dword of a control FIS one cycle before it is valid, when the link delivers that dword after an
-  idle cycle; the real dword is then dropped. The last header dword is reserved in Register D2H and
-  holds the transfer count in PIO Setup, which the command layer does not use.
 
 ## In the code {#tc-code}
 
