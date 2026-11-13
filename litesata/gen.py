@@ -169,7 +169,11 @@ class _LiteSATACore(SoCMini):
             gt_type       = gt_type,
             use_gtgrefclk = False,
             with_csr      = bus_standard is not None)
-        self.comb += self.sata_phy.enable.eq(platform.request("enable"))
+        # With a control bus, the enable register of the PHY (reset 1) drives the PHY and the enable
+        # pad is not used: only drive the PHY from the pad in the native flavour (single driver).
+        enable = platform.request("enable")
+        if bus_standard is None:
+            self.comb += self.sata_phy.enable.eq(enable)
         self.comb += platform.request("ready").eq(self.sata_phy.ready)
         self.comb += platform.request("link_up").eq(self.sata_phy.link_up)
         self.comb += platform.request("connect").eq(self.sata_phy.connect_irq)
