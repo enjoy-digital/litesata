@@ -32,7 +32,7 @@ them as named fields. The header layouts are tables of `HeaderField` entries in
 | Data | `0x46` | Both | 1 | Type dword, then the payload |
 | Register D2H | `0x34` | Received | 5 | Presented as one beat: status, errors, LBA, count |
 | DMA Activate | `0x39` | Received | 1 | Presented as one beat |
-| PIO Setup | `0x5f` | Received | 5 | Presented as one beat: status, errors, transfer count; E_Status not decoded |
+| PIO Setup | `0x5f` | Received | 5 | Presented as one beat: status, errors, E_Status, transfer count |
 | Other types | | Received | | Dropped up to the last dword |
 
 ### Transmit {#transport-tx}
@@ -115,7 +115,9 @@ pairs. The RX half accepts both forms and counts 128 dwords in total.
 The RX half first waits for the PIO Setup FIS, dropping any other FIS until then. It presents the
 data with `identify` set and sets `end` on the 128th dword; no response beat follows. A PIO Setup
 FIS with ERR or DF, or a Register D2H FIS in place of the data, ends the command with a single
-response beat with `failed` set.
+response beat with `failed` set. ERR or DF in the E_Status of a PIO Setup FIS, the status of the
+drive once the data is transferred, sets `failed` on the last beat of the Data FIS that follows;
+when that FIS does not complete the 128 dwords, a response beat with `failed` set ends the command.
 
 ### Receive states {#command-rx-states}
 
@@ -126,13 +128,14 @@ response beat with `failed` set.
 | `PRESENT_WRITE_RESPONSE` | Write response beat |
 | `WAIT_READ_DATA_OR_REG_D2H` | Data FIS, PIO Setup (IDENTIFY) or Register D2H |
 | `WAIT_PIO_SETUP_D2H` | First PIO Setup of an IDENTIFY, or Register D2H |
-| `PRESENT_PIO_SETUP_D2H` | Checks the status of a PIO Setup FIS |
+| `PRESENT_PIO_SETUP_D2H` | Checks the status of a PIO Setup FIS, keeps its E_Status |
 | `PRESENT_READ_DATA` | Passes a Data FIS to the user port |
 | `PRESENT_READ_RESPONSE` | Read response beat, or failed IDENTIFY |
 | FLUSH | Drops an unexpected FIS before the PIO Setup |
 
 The RX half also keeps the last status and error fields of a Register D2H or PIO Setup FIS in
-`d2h_status` and `d2h_errors`. They are plain signals for debugging, not registers.
+`d2h_status` and `d2h_errors`. After the Data FIS of an IDENTIFY, `d2h_status` takes the E_Status
+of the PIO Setup FIS. They are plain signals for debugging, not registers.
 
 ## Failure rules {#command-failures}
 
@@ -144,6 +147,7 @@ error.
 |------------------------------------------|----------------|---------------------------------|
 | ERR or DF set in the Register D2H status | All | Response beat |
 | ERR or DF set in a PIO Setup status | IDENTIFY | Response beat |
+| ERR or DF set in a PIO Setup E_Status | IDENTIFY | Last beat of the Data FIS that follows; also a response beat when data is still missing |
 | CRC error on a Data FIS | READ, IDENTIFY | Last beat of that Data FIS; READ: also the response beat; IDENTIFY: the beat with `end` when it is the last one |
 | Fewer dwords than `count` times 128 | READ | Response beat |
 | Register D2H instead of the data | IDENTIFY | Response beat |

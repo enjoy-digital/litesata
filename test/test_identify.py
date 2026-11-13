@@ -56,6 +56,12 @@ class TestIdentify(unittest.TestCase):
             hdd.set_busy(0)
             hdd.set_reg_d2h_status(0)
 
+            # ERR in the E_Status of the PIO Setup FIS: done with error.
+            hdd.set_pio_setup_e_status(0x51)
+            error, data = yield from identify()
+            self.assertEqual(error, 1)
+            hdd.set_pio_setup_e_status(0x50)
+
             # Recovered: success again.
             error, data = yield from identify()
             self.assertEqual(error, 0)

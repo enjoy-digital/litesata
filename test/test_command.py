@@ -197,6 +197,85 @@ class TestCommand(unittest.TestCase):
         run_simulation(dut, generator())
         self.assertEqual(results, [0, 1, 1, 1, 0])
 
+    def test_identify_e_status_partial_block(self):
+        # IDENTIFY split in two PIO Setup/Data FIS pairs of 64 dwords.
+        def identify(e_status):
+            transport = Module()
+            transport.source = stream.Endpoint(transport_rx_description(32))
+            dut   = LiteSATACommandRX(transport)
+            beats = []
+
+            def pio_setup(e_status):
+                yield transport.source.type.eq(fis_types["PIO_SETUP_D2H"])
+                yield transport.source.status.eq(0x58)
+                yield transport.source.e_status.eq(e_status)
+                yield transport.source.last.eq(1)
+                yield transport.source.valid.eq(1)
+                yield
+                while not (yield transport.source.ready):
+                    yield
+                yield
+                while not (yield transport.source.ready):
+                    yield
+                yield transport.source.e_status.eq(0)
+                yield transport.source.valid.eq(0)
+                yield
+
+            def data(n):
+                yield transport.source.type.eq(fis_types["DATA"])
+                yield transport.source.valid.eq(1)
+                for i in range(n):
+                    yield transport.source.data.eq(i)
+                    yield transport.source.last.eq(i == n - 1)
+                    yield
+                    while not (yield transport.source.ready):
+                        yield
+                yield transport.source.valid.eq(0)
+                yield transport.source.last.eq(0)
+                yield
+
+            def generator():
+                yield dut.from_tx.identify.eq(1)
+                yield
+                yield dut.from_tx.identify.eq(0)
+                yield
+                yield from pio_setup(e_status)
+                yield from data(64)
+                if not e_status & 0x21:
+                    yield from pio_setup(0x50)
+                    yield from data(64)
+                for _ in range(8):
+                    yield
+
+            @passive
+            def checker():
+                yield dut.source.ready.eq(1)
+                while True:
+                    if (yield dut.source.valid):
+                        beats.append((
+                            (yield dut.source.identify),
+                            (yield dut.source.last),
+                            (yield dut.source.end),
+                            (yield dut.source.failed),
+                        ))
+                    yield
+
+            run_simulation(dut, [generator(), checker()])
+            return beats
+
+        # Success: 128 data beats, end on the last one, no failure.
+        beats = identify(e_status=0x50)
+        self.assertEqual(len(beats), 128)
+        self.assertEqual([b for b in beats if b[1]], [(1, 1, 0, 0), (1, 1, 1, 0)])
+        self.assertEqual(sum(b[3] for b in beats), 0)
+
+        # ERR in the E_Status of the first block: its last beat is failed, then the device sends
+        # nothing more and a failed response ends the command.
+        beats = identify(e_status=0x51)
+        self.assertEqual(len(beats), 65)
+        self.assertEqual(beats[63:], [(1, 1, 0, 1), (1, 1, 1, 1)])
+        self.assertEqual(sum(b[3] for b in beats), 2)
+
     def test_command(self):
         def generator(dut):
             hdd = dut.hdd
@@ -290,6 +369,16 @@ class TestCommand(unittest.TestCase):
             self.assertEqual(dut.logger.packet.failed, 1)
             self.assertEqual(len(dut.logger.packet), 1)
             hdd.set_pio_setup_status(0x58)
+
+            # ERR or DF in the E_Status of the PIO Setup FIS (status at the end of the data): the
+            # data block is presented and its last beat (end) is failed.
+            for e_status in (0x51, 0x70):
+                hdd.set_pio_setup_e_status(e_status)
+                yield from identify()
+                self.assertEqual(dut.logger.packet.failed, 1)
+                self.assertEqual(list(dut.logger.packet), hdd.identify_data)
+                self.assertEqual((yield dut.core.command.rx.d2h_status), e_status)
+            hdd.set_pio_setup_e_status(0x50)
 
             # Command aborted with a Register D2H (ERR) instead of a PIO Setup.
             hdd.set_busy(1)

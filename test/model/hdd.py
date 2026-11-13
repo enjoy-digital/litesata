@@ -50,6 +50,7 @@ class HDD(Module):
 
         self.reg_d2h_status       = 0
         self.pio_setup_status     = 0x58 # DRDY | DSC | DRQ
+        self.pio_setup_e_status   = 0x50 # DRDY | DSC
         self.data_error_injection = 0
         self.busy                 = 0
 
@@ -98,6 +99,9 @@ class HDD(Module):
     def set_pio_setup_status(self, value):
         self.pio_setup_status = value & 0xff
 
+    def set_pio_setup_e_status(self, value):
+        self.pio_setup_e_status = value & 0xff
+
     def set_data_error_injection(self, value):
         self.data_error_injection = value
 
@@ -134,6 +138,7 @@ class HDD(Module):
         pio_setup.d              = 1
         pio_setup.i              = 1
         pio_setup.status         = self.pio_setup_status
+        pio_setup.e_status       = self.pio_setup_e_status
         pio_setup.transfer_count = logical_sector_size
         packets = [pio_setup]
         if not self.pio_setup_status & ((1 << reg_d2h_status["err"]) | (1 << reg_d2h_status["df"])):
