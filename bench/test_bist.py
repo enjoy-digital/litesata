@@ -155,7 +155,7 @@ def _get_args():
     parser.add_argument("-l", "--total_length",      default=256,         help="Total transfer length (in MiB, up to HDD capacity)")
     parser.add_argument("-n", "--loops",             default=1,           help="Number of loop per transfer (improve precision on speed calculation for small transfers)")
     parser.add_argument("-r", "--random",            action="store_true", help="Use random data")
-    parser.add_argument("-c", "--continuous",        action="store_true", help="Continuous mode (Escape to exit)")
+    parser.add_argument("-c", "--continuous",        action="store_true", help="Continuous mode (Ctrl-C to exit)")
     parser.add_argument("-i", "--identify",          action="store_true", help="Only run identify")
     parser.add_argument("-t", "--software_timer",    action="store_true", help="Use software timer")
     parser.add_argument("-a", "--random_addressing", action="store_true", help="Use random addressing")
@@ -208,7 +208,7 @@ if __name__ == "__main__":
                             if not write_done:
                                 retry += 1
                     else:
-                        write_error, write_speed = 0, 0
+                        write_errors, write_speed = 0, 0
 
                     if sequence["read"]:
                         # Checker (read and check data from HDD)
