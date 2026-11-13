@@ -91,25 +91,12 @@ enjoy-digital.fr.
 
 [> Documentation
 ----------------
-The **SATA Host Core & PHYs manual** is the reference of LiteSATA: a nightly
-[PDF](https://github.com/enjoy-digital/litesata/releases/download/manual-nightly/litesata_manual.pdf)
-and [HTML page](https://github.com/enjoy-digital/litesata/releases/download/manual-nightly/litesata_manual.html)
-are published on the [manual-nightly](https://github.com/enjoy-digital/litesata/releases/tag/manual-nightly)
-release. Sources in [doc/manual](doc/manual/README.md) (build: `python3 doc/manual/build.py`, outputs in
-`build/doc/`; pandoc, XeLaTeX and the fonts listed in the README of `doc/manual`):
+The **SATA Host Core & PHYs manual** is the reference of the project, from the primers to the integration,
+the examples, the debugging and the registers:
 
-- **Understand**: [introduction](doc/manual/01_introduction.md), [SATA in a nutshell](doc/manual/02_sata_primer.md)
-  (OOB, primitives, frames, FISes, ATA commands).
-- **The core**: [architecture](doc/manual/03_core_architecture.md), [link layer](doc/manual/04_link_layer.md),
-  [transport and command layers](doc/manual/05_transport_command.md), [frontends](doc/manual/06_frontends.md).
-- **The PHYs**: [PHY architecture and OOB controller](doc/manual/07_phy_architecture.md),
-  [Xilinx transceiver PHYs](doc/manual/08_xilinx_phys.md), [Lattice ECP5 PHY](doc/manual/09_ecp5_phy.md).
-- **Use it**: [supported FPGAs and boards](doc/manual/10_boards.md), [getting started](doc/manual/11_getting_started.md),
-  [integration](doc/manual/12_integration.md), [examples](doc/manual/13_examples.md), [simulation](doc/manual/14_simulation.md),
-  [debugging](doc/manual/15_debugging.md).
-- **Appendices**: [registers](doc/manual/A_registers.md), [build options](doc/manual/B_build_options.md),
-  [glossary](doc/manual/C_glossary.md), [performance and resources](doc/manual/D_performance.md),
-  [maintaining this manual](doc/manual/E_maintenance.md) (for contributors).
+- Read it: [PDF](https://github.com/enjoy-digital/litesata/releases/download/manual-nightly/litesata_manual.pdf) or
+  [HTML](https://github.com/enjoy-digital/litesata/releases/download/manual-nightly/litesata_manual.html) (rebuilt nightly).
+- Sources and local build: [doc/manual](doc/manual/README.md).
 
 [> Getting started
 ------------------
