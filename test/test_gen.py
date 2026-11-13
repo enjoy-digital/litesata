@@ -120,6 +120,10 @@ class TestExamples(unittest.TestCase):
                 self.assertIn(primitive, verilog)
                 for pad in ["enable", "ready", "link_up", "connect", "disconnect"]:
                     self.assertIn(pad, ports)
+                # PHY enable: from the pad in the native flavour, from the register (only) with a
+                # control bus.
+                self.assertEqual(re.search(r"=\s*enable;", verilog) is not None, ctrl is None)
+                self.assertEqual(re.search(r"=\s*\w*phy_enable_storage;", verilog) is not None, ctrl is not None)
                 self.assertIn("litesata_core.v", files)
                 self.assertIn("csr.csv", files)
                 # Native port: the sink data pad must drive the crossbar (it was left unconnected).
