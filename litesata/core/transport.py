@@ -166,7 +166,11 @@ class LiteSATATransportRX(Module):
                 ).Elif(test_type_rx("DATA"),
                     NextState("RECEIVE_DATA_CMD"),
                 ).Else(
-                    link.source.ready.eq(1)
+                    # Unknown FIS: drop it up to its last dword.
+                    link.source.ready.eq(1),
+                    If(~link.source.last,
+                        NextState("DROP")
+                    )
                 )
             ).Else(
                 link.source.ready.eq(1)
@@ -175,6 +179,12 @@ class LiteSATATransportRX(Module):
         self.sync += \
             If(update_fis_type, fis_type.eq(link.source.data[:8]))
 
+        fsm.act("DROP",
+            link.source.ready.eq(1),
+            If(link.source.valid & link.source.last,
+                NextState("IDLE")
+            )
+        )
         fsm.act("RECEIVE_CTRL_CMD",
             If(test_type("REG_D2H", fis_type),
                 cmd_len.eq(fis_reg_d2h_header.length-1)
