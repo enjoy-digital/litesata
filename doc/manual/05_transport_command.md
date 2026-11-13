@@ -103,7 +103,8 @@ closes the command.](cmd_read.svg)
 
 The Register D2H FIS ends the command with the response beat. It is marked `failed` when the status
 has ERR or DF, when a Data FIS had a CRC error, or when fewer than `count` times 128 dwords
-arrived. Extra dwords beyond the count are not detected.
+arrived. Extra dwords beyond the count are not detected. A FIS that a read does not expect, a DMA
+Activate FIS or a PIO Setup FIS, is dropped.
 
 ### IDENTIFY DEVICE {#command-identify}
 
@@ -185,8 +186,6 @@ The command layer assumes a well-behaved drive and a stable link. These cases ar
   takes one more beat of the user packet and returns to IDLE; the rest of the packet is then sent
   as a new WRITE DMA EXT. User logic must drop the rest of the packet. A drive that ends the write
   without an error and without asking for the data leaves the TX half waiting for DMA Activate.
-- **Unexpected FIS during a read**: a DMA Activate FIS, or a PIO Setup FIS on a READ DMA EXT,
-  blocks the RX half: no state consumes it.
 - **Control FIS with a bad CRC**: it is taken as valid, as [Receive](#transport-rx) explains.
 
 ## In the code {#tc-code}
