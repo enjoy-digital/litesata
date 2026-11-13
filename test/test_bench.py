@@ -4,6 +4,8 @@
 # Copyright (c) 2026 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -11,6 +13,7 @@ from bench.acorn import SATATestSoC
 from bench import test_init
 from bench import test_bist
 from bench import test_dma
+from bench import zcu102
 
 
 class TestInit(unittest.TestCase):
@@ -85,6 +88,17 @@ class TestDMADriver(unittest.TestCase):
                 dma = test_dma.DMADriver(bus=bus, base=0x1000)
                 getattr(dma, mode)(10)
                 getattr(bus.regs, f"sata_{name}_nsectors").write.assert_called_once_with(1)
+
+
+class TestZCU102(unittest.TestCase):
+    def test_elaboration(self):
+        # The bench elaborates with its default options (CPU-less SoC with UARTBone), with both
+        # reference clock sources.
+        for refclk in ["external", "internal"]:
+            with self.subTest(refclk=refclk), tempfile.TemporaryDirectory() as output_dir:
+                argv = ["zcu102.py", "--refclk", refclk, "--output-dir", output_dir]
+                with mock.patch.object(sys, "argv", argv):
+                    zcu102.main()
 
 
 if __name__ == "__main__":
